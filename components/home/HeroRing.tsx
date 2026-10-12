@@ -83,18 +83,22 @@ export function HeroRing({
 
   const denom = totalIncome > 0 ? totalIncome : 1
   
-  // Shared values for animation
-  const usedRatioSV = useSharedValue(0)
+  // Shared values for animation — each arc segment gets its own ratio
+  const spentRatioSV = useSharedValue(0)
+  const savingsRatioSV = useSharedValue(0)
   const yellowRatioSV = useSharedValue(0)
   const greyRatioSV = useSharedValue(0)
   const centerPulse = useSharedValue(0)
 
   useEffect(() => {
-    const targetUsed = Math.max(0, Math.min((totalSpent + confirmedSavings) / denom, 1))
-    const targetYellow = Math.max(0, Math.min(flaggedAmount / denom, 1 - targetUsed))
-    const targetGrey = Math.max(0, Math.min(unconfirmedSavings / denom, 1 - targetUsed - targetYellow))
+    const targetSpent = Math.max(0, Math.min(totalSpent / denom, 1))
+    const targetSavings = Math.max(0, Math.min(confirmedSavings / denom, 1 - targetSpent))
+    const used = targetSpent + targetSavings
+    const targetYellow = Math.max(0, Math.min(flaggedAmount / denom, 1 - used))
+    const targetGrey = Math.max(0, Math.min(unconfirmedSavings / denom, 1 - used - targetYellow))
 
-    usedRatioSV.value = withTiming(targetUsed, { duration: 1200, easing: Easing.out(Easing.exp) })
+    spentRatioSV.value = withTiming(targetSpent, { duration: 1200, easing: Easing.out(Easing.exp) })
+    savingsRatioSV.value = withTiming(targetSavings, { duration: 1200, easing: Easing.out(Easing.exp) })
     yellowRatioSV.value = withTiming(targetYellow, { duration: 1200, easing: Easing.out(Easing.exp) })
     greyRatioSV.value = withTiming(targetGrey, { duration: 1200, easing: Easing.out(Easing.exp) })
 
@@ -105,30 +109,41 @@ export function HeroRing({
     )
   }, [totalSpent, confirmedSavings, flaggedAmount, unconfirmedSavings, denom])
 
-  // Animated props for Green arc
-  const greenProps = useAnimatedProps(() => {
-    const offset = CIRCUMFERENCE * (1 - usedRatioSV.value)
+  // Animated props for Spending arc (full green)
+  const spentProps = useAnimatedProps(() => {
+    const offset = CIRCUMFERENCE * (1 - spentRatioSV.value)
     return {
       strokeDashoffset: offset,
     }
   })
 
-  // Animated props for Yellow arc
-  const yellowProps = useAnimatedProps(() => {
-    const dash = CIRCUMFERENCE * yellowRatioSV.value
-    const gap = CIRCUMFERENCE * (1 - yellowRatioSV.value)
-    const rotation = -90 + usedRatioSV.value * 360
+  // Animated props for Confirmed Savings arc (lighter green, starts after spending)
+  const savingsProps = useAnimatedProps(() => {
+    const dash = CIRCUMFERENCE * savingsRatioSV.value
+    const gap = CIRCUMFERENCE * (1 - savingsRatioSV.value)
+    const rotation = -90 + spentRatioSV.value * 360
     return {
       strokeDasharray: `${dash} ${gap}`,
       rotation: rotation,
     }
   })
 
-  // Animated props for Grey arc
+  // Animated props for Yellow arc (flagged, starts after spending + savings)
+  const yellowProps = useAnimatedProps(() => {
+    const dash = CIRCUMFERENCE * yellowRatioSV.value
+    const gap = CIRCUMFERENCE * (1 - yellowRatioSV.value)
+    const rotation = -90 + (spentRatioSV.value + savingsRatioSV.value) * 360
+    return {
+      strokeDasharray: `${dash} ${gap}`,
+      rotation: rotation,
+    }
+  })
+
+  // Animated props for Grey arc (unconfirmed savings, starts after spending + savings + flagged)
   const greyProps = useAnimatedProps(() => {
     const dash = CIRCUMFERENCE * greyRatioSV.value
     const gap = CIRCUMFERENCE * (1 - greyRatioSV.value)
-    const rotation = -90 + (usedRatioSV.value + yellowRatioSV.value) * 360
+    const rotation = -90 + (spentRatioSV.value + savingsRatioSV.value + yellowRatioSV.value) * 360
     return {
       strokeDasharray: `${dash} ${gap}`,
       rotation: rotation,
@@ -169,6 +184,10 @@ export function HeroRing({
           <LinearGradient id="greenGrad" x1="0%" y1="0%" x2="100%" y2="100%">
             <Stop offset="0%" stopColor={colors.green} stopOpacity="0.8" />
             <Stop offset="100%" stopColor={colors.green} stopOpacity="1" />
+          </LinearGradient>
+          <LinearGradient id="savingsGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <Stop offset="0%" stopColor={colors.green} stopOpacity="0.35" />
+            <Stop offset="100%" stopColor={colors.green} stopOpacity="0.5" />
           </LinearGradient>
           <LinearGradient id="yellowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
             <Stop offset="0%" stopColor={colors.amber} stopOpacity="0.8" />
@@ -213,11 +232,11 @@ export function HeroRing({
             strokeWidth={STROKE}
             fill="none"
             strokeLinecap="round"
-            animatedProps={greenProps} // Reuse green props for full ring animation
+            animatedProps={spentProps}
           />
         ) : (
           <>
-            {/* Grey dashed — unconfirmed savings */}
+            {/* Grey — unconfirmed savings (pending confirmation) */}
             <AnimatedCircle
               cx={cx}
               cy={cy}
@@ -244,7 +263,20 @@ export function HeroRing({
               animatedProps={yellowProps}
             />
 
-            {/* Green arc — money allocated */}
+            {/* Confirmed savings arc — lighter green */}
+            <AnimatedCircle
+              cx={cx}
+              cy={cy}
+              r={RADIUS}
+              stroke="url(#savingsGrad)"
+              strokeWidth={STROKE}
+              fill="none"
+              strokeLinecap="round"
+              origin={`${cx}, ${cy}`}
+              animatedProps={savingsProps}
+            />
+
+            {/* Spending arc — full green */}
             <AnimatedCircle
               cx={cx}
               cy={cy}
@@ -256,7 +288,7 @@ export function HeroRing({
               strokeLinecap="round"
               rotation={-90}
               origin={`${cx}, ${cy}`}
-              animatedProps={greenProps}
+              animatedProps={spentProps}
             />
           </>
         )}
@@ -279,6 +311,32 @@ export function HeroRing({
       <Text style={styles.weekly}>
         ≈ NPR {formatNPR(Math.round(weeklyRate))}/week
       </Text>
+
+      {/* Ring legend */}
+      <View style={styles.legend}>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: colors.green }]} />
+          <Text style={styles.legendText}>Spent</Text>
+        </View>
+        {confirmedSavings > 0 && (
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: colors.green, opacity: 0.4 }]} />
+            <Text style={styles.legendText}>Saved</Text>
+          </View>
+        )}
+        {unconfirmedSavings > 0 && (
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: colors.textMuted, opacity: 0.4 }]} />
+            <Text style={styles.legendText}>Pending</Text>
+          </View>
+        )}
+        {flaggedAmount > 0 && (
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: colors.amber }]} />
+            <Text style={styles.legendText}>Uncategorized</Text>
+          </View>
+        )}
+      </View>
     </Animated.View>
   )
 }
@@ -360,5 +418,26 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: 'Inter_600SemiBold',
     color: colors.textPrimary,
+  },
+  legend: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginTop: 8,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendText: {
+    fontSize: 11,
+    fontFamily: 'Inter_400Regular',
+    color: colors.textMuted,
   },
 })

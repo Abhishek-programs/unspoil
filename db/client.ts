@@ -30,5 +30,17 @@ export async function runMigrations() {
     }
   }
 
-  await migrate(db, migrations)
+  try {
+    await migrate(db, migrations)
+    console.log('✅ DB migrations applied successfully')
+  } catch (error) {
+    console.error('❌ Migration failed, attempting Hard Reset:', error)
+    // If migration fails, it's likely a schema conflict. Nuke everything and retry.
+    for (const table of [...APP_TABLES, '__drizzle_migrations']) {
+      sqlite.execSync(`DROP TABLE IF EXISTS "${table}"`)
+    }
+    // Re-run migration from scratch
+    await migrate(db, migrations)
+    console.log('✅ DB recovered after Hard Reset')
+  }
 }

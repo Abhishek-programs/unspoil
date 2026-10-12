@@ -23,7 +23,7 @@ export default function RootLayout() {
   const [dbReady, setDbReady] = useState(false)
   const { loadPlaybook, isOnboarded, isLoaded: playbookLoaded } = usePlaybookStore()
   const { loadBuckets } = useBucketsStore()
-  const { loadTransactions, ensureSalaryTransaction } = useTransactionsStore()
+  const { loadTransactions } = useTransactionsStore()
   const { loadGoals } = useGoalsStore()
 
   useEffect(() => {
@@ -42,9 +42,7 @@ export default function RootLayout() {
     const { monthStartDay, monthlyIncome } = usePlaybookStore.getState()
     const { start, end } = getMonthRange(monthStartDay)
     loadBuckets()
-    loadTransactions(start, end).then(() => {
-      ensureSalaryTransaction(monthStartDay, monthlyIncome)
-    })
+    loadTransactions(start, end)
     loadGoals()
   }, [playbookLoaded])
 

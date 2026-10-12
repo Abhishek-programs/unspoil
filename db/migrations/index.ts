@@ -68,8 +68,11 @@ CREATE TABLE \`transactions\` (
 
 const m0001 = `ALTER TABLE \`transactions\` ADD COLUMN \`type\` text DEFAULT 'expense' NOT NULL;`
 const m0002 = `ALTER TABLE \`playbook\` ADD COLUMN \`user_name\` text;`
+const m0003 = `ALTER TABLE \`buckets\` ADD COLUMN \`show_on_home\` integer DEFAULT true NOT NULL;
+--> statement-breakpoint
+ALTER TABLE \`playbook\` ADD COLUMN \`last_checklist_month\` text;`
 
 export const migrations = {
   journal,
-  migrations: { m0000, m0001, m0002 },
+  migrations: { m0000, m0001, m0002, m0003 },
 }

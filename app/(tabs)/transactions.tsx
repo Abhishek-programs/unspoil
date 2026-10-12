@@ -12,6 +12,7 @@ import { colors } from '@/constants/colors'
 import { formatNPR, formatNPRShort, formatDate } from '@/lib/format'
 import { useTransactionsStore, INCOME_BUCKET_ID } from '@/store/transactions'
 import { useBucketsStore } from '@/store/buckets'
+import { useGoalsStore } from '@/store/goals'
 import { TransactionRow } from '@/components/transactions/TransactionRow'
 import { TransactionDetailSheet } from '@/components/transactions/TransactionDetailSheet'
 import { ChartsView } from '@/components/transactions/ChartsView'
@@ -24,6 +25,7 @@ export default function TransactionsScreen() {
   const { buckets, getSpendingBuckets, getSavingsBuckets } = useBucketsStore()
 
   const [viewMode, setViewMode] = useState<'list' | 'chart'>('list')
+  const [chartPeriod, setChartPeriod] = useState<'month' | 'year'>('month')
   const [activeFilter, setActiveFilter] = useState<FilterKey>('all')
   const [selectedTxn, setSelectedTxn] = useState<Transaction | null>(null)
   const [detailVisible, setDetailVisible] = useState(false)
@@ -93,6 +95,39 @@ export default function TransactionsScreen() {
     })).filter(d => d.value > 0)
   }, [transactions, spendingBuckets])
 
+  const savingsInfo = useMemo(() => {
+    return savingsBuckets.map(b => {
+      const confirmed = transactions.some(
+        t => t.bucketId === b.id && !t.isFlagged && !t.isRecurringDraft
+      )
+      return {
+        label: b.name,
+        value: transactions
+          .filter(t => t.bucketId === b.id && !t.isFlagged && !t.isRecurringDraft)
+          .reduce((s, t) => s + t.amount, 0),
+        target: b.monthlyAmount,
+        color: b.color,
+        confirmed,
+      }
+    })
+  }, [transactions, savingsBuckets])
+
+  const { goals } = useGoalsStore()
+  const goalsInfo = useMemo(() => {
+    return goals.map(g => {
+      const current = transactions
+        .filter(t => g.linkedBucketIds.includes(t.bucketId))
+        .reduce((sum, t) => sum + t.amount, 0)
+      
+      return {
+        name: g.name,
+        current: g.startBalance + current,
+        target: g.targetAmount,
+        projectedDate: 'Phase 3 goal',
+      }
+    })
+  }, [goals, transactions])
+
   const openDetail = useCallback((txn: Transaction) => {
     setSelectedTxn(txn)
     setDetailVisible(true)
@@ -107,7 +142,20 @@ export default function TransactionsScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Ledger</Text>
+        <View>
+          <Text style={styles.headerTitle}>Ledger</Text>
+          {viewMode === 'chart' && (
+            <View style={styles.periodToggle}>
+              <TouchableOpacity onPress={() => setChartPeriod('month')}>
+                <Text style={[styles.periodText, chartPeriod === 'month' && styles.periodTextActive]}>Month</Text>
+              </TouchableOpacity>
+              <Text style={styles.periodSep}>•</Text>
+              <TouchableOpacity onPress={() => setChartPeriod('year')}>
+                <Text style={[styles.periodText, chartPeriod === 'year' && styles.periodTextActive]}>Year</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
         <TouchableOpacity
           onPress={() => setViewMode(v => v === 'list' ? 'chart' : 'list')}
           hitSlop={12}
@@ -201,8 +249,15 @@ export default function TransactionsScreen() {
           stickySectionHeadersEnabled={false}
         />
       ) : (
-        <ScrollView contentInsetAdjustmentBehavior="automatic">
-          <ChartsView spendingByBucket={spendingByBucket} />
+        <ScrollView 
+          contentContainerStyle={{ paddingBottom: 40 }}
+          showsVerticalScrollIndicator={false}
+        >
+          <ChartsView 
+            spendingByBucket={spendingByBucket} 
+            savingsByBucket={savingsInfo}
+            goals={goalsInfo}
+          />
         </ScrollView>
       )}
 
@@ -296,6 +351,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter_700Bold',
     fontVariant: ['tabular-nums'],
+  },
+  periodToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  periodText: {
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+    color: colors.textMuted,
+  },
+  periodTextActive: {
+    color: colors.green,
+  },
+  periodSep: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginHorizontal: 6,
   },
   listContent: {
     paddingBottom: 40,

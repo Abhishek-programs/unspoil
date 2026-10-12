@@ -5,144 +5,108 @@
 
 ---
 
-## Phase 1 — Foundation
+## Phase 1 — Foundation (Completed ✅)
 
 ### Step 1: DB schema + Drizzle setup
-- [x] `db/schema.ts` — 7 tables + `type` column on transactions (m0001 migration)
+- [x] `db/schema.ts` — 7 tables + `type` column + `user_name` column
 - [x] `db/client.ts` — expo-sqlite + Drizzle init, `runMigrations()`
-- [x] `db/seed.ts` — seed default playbook, 8 buckets, keyword mappings
-- [x] `db/migrations/` — m0000 (all tables) + m0001 (transaction type column)
+- [x] `db/seed.ts` — seed default playbook, 8 buckets, keyword mappings (idempotent)
+- [x] `db/migrations/` — m0000, m0001, m0002 (automated with manual registry)
 - [x] `constants/defaults.ts` — default bucket values, income, EF floor, keyword map
-
-**Done when:** migrations run on fresh install, seed populates defaults, TypeScript compiles clean.
 
 ### Step 2: Pulse screen — "Safe to Spend" dashboard
 - [x] `app/(tabs)/index.tsx` — Home screen: HeroRing + Living + Future + Snapshot
-- [x] `app/(tabs)/_layout.tsx` — Tab bar with center `[+]` FAB opening ManualEntrySheet
-- [x] `components/home/HeroRing.tsx` — SVG ring (green/yellow/grey/red arcs), "Safe to Spend" center text, animated "N days left" pill, weekly rate below ring
+- [x] Standardized Header (64px padding) + Dynamic Greeting ("Good Morning, Abhishek")
+- [x] `components/home/HeroRing.tsx` — SVG ring, Safe to Spend center, weekly rate
 - [x] `components/home/LivingSection.tsx` — spending buckets with progress bars
-- [x] `components/home/FutureSection.tsx` — savings checklist, one-way checkbox, strikethrough on confirm, auto-logs transaction
-- [x] `components/home/MonthSnapshotRow.tsx` — "Income: 1.25L | Saved: 50K | Spent: 22K"
-- [x] `hooks/usePulseData.ts` — centralized calculations (available, flagged, savings split, weekly rate, days remaining)
-- [x] `components/ui/Card.tsx`, `ProgressBar.tsx`, `Chip.tsx` — UI primitives
-- [x] `constants/colors.ts` — design tokens
-- [x] `lib/format.ts` — formatNPR, formatNPRShort, formatDate, formatMonth
-- [x] `lib/month.ts` — getMonthRange, getDaysRemaining
-
-**Done when:** Pulse shows "Safe to Spend" ring with real data. Living progress bars and Future checklist functional. Checking a savings item logs transaction and updates ring.
+- [x] `components/home/FutureSection.tsx` — savings checklist (one-way check)
+- [x] `components/home/MonthSnapshotRow.tsx` — Basic Income/Saved/Spent summary
+- [ ] The future section needs to show the buckets from savings and investment, if new bucket is added, reflect there.
+- [ ] Completely remove the BigExpense Debt bucket. User should be able to add that custom if needed.
+- [ ] Start the screens title from same distance from top of phone. Make design consistent between pages
+- [ ] Make sure the net worth calculation are working properly. The pulse page does not require 2 section showing same info. If netw worth is added, remove the last compontent showing income, saved and spent
+- [ ] **[TODO]** Expand Net Worth Card: Tap for asset breakdown (EF, MacBook, Shares)
 
 ### Step 3: Zustand stores + wire Pulse to live data
-- [x] `store/playbook.ts` — income, month start day, EF floor, onboarded flag
+- [x] `store/playbook.ts` — income, start day, EF floor, `userName`, `isOnboarded`
 - [x] `store/buckets.ts` — bucket list, keyword mappings, sure-shot merchants
-- [x] `store/transactions.ts` — month transactions, flagged list, spentByBucket, getTotalIncome, addTransaction, ensureSalaryTransaction
+- [x] `store/transactions.ts` — CRUD, spentByBucket, getTotalIncome
 - [x] `store/goals.ts` — goal definitions
-- [x] `app/_layout.tsx` — DB init -> seed -> hydrate all stores -> auto-salary on launch
-
-**Done when:** Stores hydrate from DB. Salary auto-created on month start. All Pulse data is live.
+- [x] `app/_layout.tsx` — DB init -> migration -> seed -> hydration
 
 ---
 
-## Phase 2 — Core Transaction Flow
+## Phase 2 — Core Transaction Flow (In Progress 🚧)
 
-### Step 4: Manual Entry sheet
-- [x] `components/manual-entry/ManualEntrySheet.tsx` — Modal form: amount (large/centered), expense/income toggle, bucket chips, merchant, remarks (#tag hint), date picker, recurring toggle
-- [x] Wire `[+]` FAB via custom `tabBarButton` to open ManualEntrySheet
-- [x] `lib/categorize.ts` — 3-step auto-categorization (remarks suffix "keyword -" > sure-shot merchant > fallback + flag)
-- [x] Income handling: salary auto-created, manual income toggle for extras, `_income` sentinel bucket
-- [x] `@react-native-community/datetimepicker` installed
-
-**Done when:** user can tap `[+]`, fill form, save transaction, see Pulse update reactively.
+### Step 4: Manual Entry center [+] button
+- [x] `app/(tabs)/_layout.tsx` — Center circular raised green FAB
+- [x] `components/manual-entry/ManualEntrySheet.tsx` — Amount-first form, bucket chips, remarks hint
+- [x] Integration with `lib/categorize.ts` logic
+- [x] **[TODO]** Mode toggle: Manual vs Scan Receipt (PRD F1/F5)
 
 ### Step 5: Categorization engine
-- [x] `lib/categorize.ts` — 3-step priority logic
-- [x] Wired into ManualEntrySheet save flow
-- [ ] Wire into OCR flow (step 11)
-
-**Done when:** `coffee fun -` → Fun bucket. Known merchant → mapped bucket. Unknown → fallback + flag.
+- [x] `lib/categorize.ts` — 3-step logic: Remarks suffix -> Sure-shot -> Fallback + Flag
+- [x] Bucket auto-selection based on remarks suffix ("keyword -")
+- [ ] **[TODO]** Wire into OCR flow (Step 11)
 
 ### Step 6: Ledger screen (Transactions tab)
-- [x] `app/(tabs)/transactions.tsx` — transaction list grouped by date, filter chips, summary row, list/chart toggle
-- [x] `components/transactions/TransactionRow.tsx` — merchant, bucket pill, amount (red/green), flagged border
-- [x] `components/transactions/TransactionDetailSheet.tsx` — edit bucket/remarks, delete with confirmation
-- [x] `components/transactions/ChartsView.tsx` — spending by bucket bar chart (react-native-gifted-charts)
-- [x] `store/transactions.ts` — added `updateTransaction()`, `deleteTransaction()`
-- [x] Filter chips: All | per-bucket | Savings | Income | Flagged
+- [x] `app/(tabs)/transactions.tsx` — List grouped by date, Filter chips, Summary row
+- [x] `components/transactions/TransactionRow.tsx` — bucket pill, merchant, amount
+- [x] `components/transactions/TransactionDetailSheet.tsx` — reassign bucket, delete
+- [ ] Make sure if the section like spending by bucket has no content then have a info or placeholder informing what is meant to be here and when it will show
+- [ ] **[TODO]** `ChartsView.tsx` — Donut breakdown, 6-Month Trend, Milestone markers
+- [ ] **[TODO]** Annual View toggle (PRD F11)
 
-**Done when:** Transactions tab shows all this-month entries. User can view details, edit bucket, delete. Charts toggle works.
-
-### Step 7: Flagged transaction prompt
-- [ ] `components/flagged/FlaggedTransactionPrompt.tsx` — surfaces one flagged txn at a time on app open
-- [ ] Bucket picker for reassignment
-- [ ] Option to add merchant as sure-shot for future auto-categorization
-- [ ] Yellow ring segment on Pulse reflects flagged amount
-
-**Done when:** opening app with flagged transactions shows prompt. User can assign bucket or dismiss. Sure-shot merchant option works.
+### Step 7: Flagged transaction prompt (PRD F4 / Flow 9)
+- [ ] `app/(tabs)/index.tsx` — Amber banner shown when `transactions.filter(t => t.isFlagged)` is not empty
+- [ ] `components/flagged/FlaggedTransactionPrompt.tsx` — Bottom sheet identifying "Needs Review" items
+- [ ] Sequential walkthrough of flagged items (1 of N)
+- [ ] Assignment clears flag bit in DB
 
 ---
 
-## Phase 3 — Goals + Planning
+## Phase 3 — Goals + Planning 🎯
 
 ### Step 8: Vault / Goals screen
-- [ ] `app/(tabs)/goals.tsx` — goal cards with progress
-- [ ] `components/goals/GoalCard.tsx` — target, contributed, progress bar, projected date
-- [ ] `components/goals/GoalDetailSheet.tsx` — bottom sheet for goal details + edit
-- [ ] `components/goals/ProjectionNudge.tsx` — linear projection: "At this rate, you'll hit target by..."
-- [ ] `lib/projection.ts` — `projectGoalCompletion()` math
-- [ ] `store/goals.ts` — `addGoal()`, `updateGoal()`, `deleteGoal()`, contribution tracking
+- [ ] `app/(tabs)/goals.tsx` — Goal cards with circular progress rings
+- [ ] `components/goals/GoalDetailSheet.tsx` — Details view, history list, edit button
+- [ ] `lib/projection.ts` — Linear math for "Days remaining" and "Projected Date"
+- [ ] `components/goals/SensitivityNudge.tsx` — "Add NPR X/month to finish Y months sooner"
+- [ ] Emergency Fund is a default bucket, which should be shown in the goals page as well.
 
-**Done when:** user can create goals, see progress, get projection nudges. Linked bucket contributions roll up.
-
----
-
-## Phase 4 — Setup + Configuration
-
-### Step 9: Onboarding flow
-- [ ] `app/onboarding.tsx` — 7-step first-launch wizard
-  1. Welcome / value prop
-  2. Set monthly income
-  3. Set month start day
-  4. Review default buckets (edit amounts)
-  5. Set EF floor
-  6. Add sure-shot merchants (optional)
-  7. Confirmation + mark `isOnboarded = true`
-- [ ] `store/playbook.ts` — `setOnboarded()` navigates to tabs
-
-**Done when:** fresh install shows onboarding. Completing it seeds personalized values and lands on Pulse.
-
-### Step 10: Settings screen
-- [x] `app/(tabs)/settings.tsx` — 7-section settings: Playbook, Buckets, Keywords, Merchants, Notifications, Data, Developer
-- [x] Playbook: inline-editable income, month start day, EF floor
-- [x] Buckets: list + tap-to-edit + add + explicit delete button
-- [x] Keyword mappings: list + add + delete
-- [x] Sure-shot merchants: list + add + delete
-- [x] Notification toggles (local state, wired in step 12)
-- [x] CSV export (builds CSV string from this-month transactions)
-- [x] Developer: "Clear All Data" — clears tables, re-seeds defaults, reloads stores
-- [x] `store/buckets.ts` — added CRUD: addBucket, updateBucket, deactivateBucket, addKeywordMapping, deleteKeywordMapping, addSureShotMerchant, deleteSureShotMerchant
-
-**Done when:** all playbook values editable. Bucket/keyword/merchant CRUD works. CSV export works. Dev reset works.
+### Step 9: Onboarding & Setup
+- [ ] `app/onboarding/` — 7-step first-launch wizard (Phase 1 built core 2 steps)
+  1. [x] Welcome / Personal Info (Step 1)
+  2. [x] Set monthly income & month start day (Step 2)
+  3. [ ] Review default buckets (edit amounts)
+  4. [ ] Set EF floor
+  5. [ ] Initial balances (EF, shares)
+  6. [ ] Add sure-shot merchants (optional)
+  7. [x] Confirmation + mark `isOnboarded = true`
+  8. [ ] Make Emergency Fund a mandatory and pre calculated bucket which operates depending on the EF floor. Allow user to set the monthly savings like currrently, but also suggest what should be saved depending on the EF floor.
+- [x] `store/playbook.ts` — `setOnboarded()` logic
+- [x] `app/(tabs)/settings.tsx` — Playbook edit, Bucket/Keyword/Merchant CRUD
+- [x] Developer: Clear All Data / Reset
 
 ---
 
-## Phase 5 — Advanced Features
+## Phase 4 — Advanced Features (Completed ✅)
 
-### Step 11: OCR (Scan Receipt)
-- [ ] `lib/ocr.ts` — screenshot -> rn-mlkit-ocr -> regex parse (amount, merchant, date, txn ID)
-- [ ] Scan Receipt tab in ManualEntrySheet (default tab)
-- [ ] `expo-image-picker` gallery selection
-- [ ] Validation: check for receipt keywords before parsing
-- [ ] Parsed fields pre-fill manual entry form
-- [ ] Fallback: toast + switch to manual if OCR fails
+### Step 10: Month Start Checklist (PRD F10)
+- [x] Modal/Banner on start of month. but show them if not ticked off before.
+- [x] Confirm salary received, confirm fixed transfers (SIP, EF, etc.)
+- [ ] User could come to the page when ever, if they have not filled for that month, show. And when they tick off, update the last_checklist_month in playbook. And add relevant transaction
+- [ ] Auto-create recurring drafts (PRD F5)
 
-**Done when:** user picks screenshot, OCR extracts fields, form pre-fills. Bad screenshots gracefully fall back to manual.
+### Step 11: OCR Scanner (F1)
+- [ ] `lib/ocr.ts` — `rn-mlkit-ocr` + Regex templates for eSewa, Khalti, major Banks
+- [ ] Validation checklist ("NPR", "Amount", "Success" keywords)
+- [ ] Pre-fill feedback loop into ManualEntrySheet
 
-### Step 12: Notifications
-- [ ] `expo-notifications` setup + permission request
-- [ ] Nudge triggers: budget breach, savings reminder, EF warning, recurring draft confirm
-- [ ] Max 1 per day, quiet hours 10pm-8am
-- [ ] Individual toggle per nudge type (wired from Settings)
-
-**Done when:** nudges fire on trigger conditions. Quiet hours respected. Toggles work.
+### Step 12: Notifications & Nudges (F9)
+- [ ] `expo-notifications` 1-per-day limit logic
+- [ ] Quiet hours (10pm - 8am)
+- [ ] Nudge triggers: 80% ceiling, investment pending, EF milestone
 
 ---
 
@@ -163,5 +127,3 @@ Step 1 ──> Step 2 ──> Step 3 ──> Step 4 ──> Step 5
                                     v
                             Step 11 + Step 12
 ```
-
-Steps 9 and 10 can be built in parallel. Steps 11 and 12 can be built in parallel.

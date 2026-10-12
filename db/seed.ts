@@ -17,6 +17,7 @@ export async function seedDefaults() {
     icon: b.icon,
     sortOrder: i,
     isActive: true,
+    showOnHome: true,
   }))
   await db.insert(buckets).values(bucketInserts).onConflictDoNothing()
 

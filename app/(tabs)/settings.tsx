@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Alert,
   StyleSheet,
   Pressable,
+  Animated,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
@@ -47,25 +48,36 @@ function EditableRow({
   value,
   onSave,
   prefix,
+  suffix,
   keyboardType = 'numeric',
+  onSaved,
 }: {
   label: string
   value: number
   onSave: (v: number) => void
   prefix?: string
+  suffix?: string
   keyboardType?: 'numeric' | 'number-pad'
+  onSaved?: () => void
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
+  const [justSaved, setJustSaved] = useState(false)
 
   const startEdit = () => {
+    if (editing) return
     setDraft(String(value))
     setEditing(true)
   }
 
   const save = () => {
     const num = parseInt(draft, 10)
-    if (!isNaN(num) && num >= 0) onSave(num)
+    if (!isNaN(num) && num >= 0 && num !== value) {
+      onSave(num)
+      setJustSaved(true)
+      onSaved?.()
+      setTimeout(() => setJustSaved(false), 2000)
+    }
     setEditing(false)
   }
 
@@ -73,21 +85,94 @@ function EditableRow({
     <TouchableOpacity onPress={startEdit} style={styles.editableRow} activeOpacity={0.6}>
       <Text style={styles.editableLabel}>{label}</Text>
       {editing ? (
-        <TextInput
-          style={styles.editableInput}
-          value={draft}
-          onChangeText={setDraft}
-          keyboardType={keyboardType}
-          onBlur={save}
-          onSubmitEditing={save}
-          autoFocus
-          selectTextOnFocus
-        />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <TouchableOpacity onPress={save} hitSlop={12}>
+            <Text style={{ color: colors.green, fontSize: 14, fontFamily: 'Inter_600SemiBold' }}>Save</Text>
+          </TouchableOpacity>
+          <TextInput
+            style={styles.editableInput}
+            value={draft}
+            onChangeText={setDraft}
+            keyboardType={keyboardType}
+            onSubmitEditing={save}
+            autoFocus
+            selectTextOnFocus
+          />
+        </View>
       ) : (
-        <Text style={styles.editableValue}>
-          {prefix}
-          {prefix ? formatNPR(value) : String(value)}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          {justSaved && <Text style={{ color: colors.green, fontSize: 12, fontFamily: 'Inter_600SemiBold' }}>Saved ✓</Text>}
+          <Text style={styles.editableValue}>
+            {prefix}
+            {prefix ? formatNPR(value) : String(value)}
+            {suffix}
+          </Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  )
+}
+
+function EditableStringRow({
+  label,
+  value,
+  onSave,
+  placeholder,
+  onSaved,
+}: {
+  label: string
+  value: string
+  onSave: (v: string) => void
+  placeholder?: string
+  onSaved?: () => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [justSaved, setJustSaved] = useState(false)
+
+  const startEdit = () => {
+    if (editing) return
+    setDraft(value)
+    setEditing(true)
+  }
+
+  const save = () => {
+    const trimmed = draft.trim()
+    if (trimmed && trimmed !== value) {
+      onSave(trimmed)
+      setJustSaved(true)
+      onSaved?.()
+      setTimeout(() => setJustSaved(false), 2000)
+    }
+    setEditing(false)
+  }
+
+  return (
+    <TouchableOpacity onPress={startEdit} style={styles.editableRow} activeOpacity={0.6}>
+      <Text style={styles.editableLabel}>{label}</Text>
+      {editing ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <TouchableOpacity onPress={save} hitSlop={12}>
+            <Text style={{ color: colors.green, fontSize: 14, fontFamily: 'Inter_600SemiBold' }}>Save</Text>
+          </TouchableOpacity>
+          <TextInput
+            style={[styles.editableInput, { textAlign: 'right' }]}
+            value={draft}
+            onChangeText={setDraft}
+            onSubmitEditing={save}
+            placeholder={placeholder}
+            autoCapitalize="words"
+            autoFocus
+            returnKeyType="done"
+          />
+        </View>
+      ) : (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          {justSaved && <Text style={{ color: colors.green, fontSize: 12, fontFamily: 'Inter_600SemiBold' }}>Saved ✓</Text>}
+          <Text style={styles.editableValue}>
+            {value || placeholder}
+          </Text>
+        </View>
       )}
     </TouchableOpacity>
   )
@@ -139,26 +224,43 @@ function BucketPicker({
   )
 }
 
+function useSavedFeedback() {
+  const opacity = useRef(new Animated.Value(0)).current
+  const show = () => {
+    opacity.setValue(1)
+    Animated.timing(opacity, {
+      toValue: 0,
+      duration: 1500,
+      delay: 400,
+      useNativeDriver: true,
+    }).start()
+  }
+  return { opacity, show }
+}
+
 export default function SettingsScreen() {
   const pb = usePlaybookStore()
   const bs = useBucketsStore()
   const txnStore = useTransactionsStore()
   const goalsStore = useGoalsStore()
+  const saved = useSavedFeedback()
 
   const activeBuckets = bs.buckets.filter(b => b.isActive)
+  const livingBuckets = activeBuckets.filter(b => b.type === 'spending')
+  const futureBuckets = activeBuckets.filter(b => b.type === 'savings' || b.type === 'investment')
 
   // Bucket inline editor state
   const [expandedBucketId, setExpandedBucketId] = useState<string | null>(null)
-  const [bucketDraft, setBucketDraft] = useState({ name: '', monthlyAmount: '', type: 'spending' as Bucket['type'] })
+  const [bucketDraft, setBucketDraft] = useState({ name: '', monthlyAmount: '', type: 'spending' as Bucket['type'], showOnHome: true })
 
   // Add bucket state
   const [addingBucket, setAddingBucket] = useState(false)
-  const [newBucket, setNewBucket] = useState({ name: '', monthlyAmount: '', type: 'spending' as Bucket['type'] })
+  const [newBucket, setNewBucket] = useState({ name: '', monthlyAmount: '', type: 'spending' as Bucket['type'], showOnHome: true })
 
-  // Keyword add state
-  const [addingKeyword, setAddingKeyword] = useState(false)
+  // Keyword mapping state
+  const [addingMapping, setAddingMapping] = useState(false)
   const [newKeyword, setNewKeyword] = useState('')
-  const [newKeywordBucketId, setNewKeywordBucketId] = useState(activeBuckets[0]?.id ?? '')
+  const [newMappingBucketId, setNewMappingBucketId] = useState(activeBuckets[0]?.id ?? '')
 
   // Merchant add state
   const [addingMerchant, setAddingMerchant] = useState(false)
@@ -179,13 +281,18 @@ export default function SettingsScreen() {
       return
     }
     setExpandedBucketId(b.id)
-    setBucketDraft({ name: b.name, monthlyAmount: String(b.monthlyAmount), type: b.type })
+    setBucketDraft({ name: b.name, monthlyAmount: String(b.monthlyAmount), type: b.type, showOnHome: b.showOnHome })
   }
 
   const saveBucketEdit = async (id: string) => {
     const amt = parseInt(bucketDraft.monthlyAmount, 10)
     if (!bucketDraft.name.trim() || isNaN(amt) || amt < 0) return
-    await bs.updateBucket(id, { name: bucketDraft.name.trim(), monthlyAmount: amt, type: bucketDraft.type })
+    await bs.updateBucket(id, { 
+      name: bucketDraft.name.trim(), 
+      monthlyAmount: amt, 
+      type: bucketDraft.type,
+      showOnHome: bucketDraft.showOnHome 
+    })
     setExpandedBucketId(null)
   }
 
@@ -207,16 +314,17 @@ export default function SettingsScreen() {
       icon: '💰',
       sortOrder: bs.buckets.length,
       isActive: true,
+      showOnHome: newBucket.showOnHome,
     })
-    setNewBucket({ name: '', monthlyAmount: '', type: 'spending' })
+    setNewBucket({ name: '', monthlyAmount: '', type: 'spending', showOnHome: true })
     setAddingBucket(false)
   }
 
-  const handleAddKeyword = async () => {
-    if (!newKeyword.trim() || !newKeywordBucketId) return
-    await bs.addKeywordMapping(newKeyword.trim().toLowerCase(), newKeywordBucketId)
+  const handleAddMapping = async () => {
+    if (!newKeyword.trim() || !newMappingBucketId) return
+    await bs.addKeywordMapping(newKeyword.trim().toLowerCase(), newMappingBucketId)
     setNewKeyword('')
-    setAddingKeyword(false)
+    setAddingMapping(false)
   }
 
   const handleAddMerchant = async () => {
@@ -272,42 +380,43 @@ export default function SettingsScreen() {
 
   return (
     <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Settings</Text>
+        <Animated.Text style={[styles.headerSaved, { opacity: saved.opacity }]}>
+          Saved
+        </Animated.Text>
+      </View>
+
       <ScrollView 
         style={{ flex: 1 }} 
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 100 }}
       >
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Settings</Text>
-        </View>
 
         {/* Section 1: Playbook */}
         <SectionHeader title="Playbook" description="Core financial parameters" />
         <Card>
-          <TouchableOpacity onPress={() => {/* handled by EditableRow logic if I lived there, but I'll add a simple text input for name */}} style={styles.editableRow} activeOpacity={0.6}>
-            <Text style={styles.editableLabel}>Display name</Text>
-            <TextInput
-              style={styles.editableInput}
-              value={pb.userName || ''}
-              onChangeText={v => pb.updatePlaybook({ userName: v })}
-              placeholder="Your name"
-              autoCapitalize="words"
-            />
-          </TouchableOpacity>
+          <EditableStringRow
+            label="Display name"
+            value={pb.userName || ''}
+            onSave={v => pb.updatePlaybook({ userName: v })}
+            onSaved={saved.show}
+            placeholder="Your name"
+          />
           <View style={styles.divider} />
           <EditableRow
             label="Monthly income"
             value={pb.monthlyIncome}
             prefix="NPR "
             onSave={v => pb.updatePlaybook({ monthlyIncome: v })}
+            onSaved={saved.show}
           />
           <View style={styles.divider} />
           <EditableRow
             label="Month start day"
             value={pb.monthStartDay}
-            onSave={v => {
-              if (v >= 1 && v <= 28) pb.updatePlaybook({ monthStartDay: v })
-            }}
-            keyboardType="number-pad"
+            suffix=" of Month"
+            onSave={v => pb.updatePlaybook({ monthStartDay: Math.max(1, Math.min(28, v)) })}
+            onSaved={saved.show}
           />
           <View style={styles.divider} />
           <EditableRow
@@ -315,13 +424,15 @@ export default function SettingsScreen() {
             value={pb.efFloor}
             prefix="NPR "
             onSave={v => pb.updatePlaybook({ efFloor: v })}
+            onSaved={saved.show}
           />
         </Card>
 
-        {/* Section 2: Buckets */}
-        <SectionHeader title="Buckets" description="Spending, savings, and investment categories" />
+        <SectionHeader title="Buckets" description="Categorize and manage your financial buckets" />
+        
+        <Text style={styles.subGroupTitle}>Living (Spending)</Text>
         <Card>
-          {activeBuckets.map((b, i) => (
+          {livingBuckets.map((b, i) => (
             <View key={b.id}>
               {i > 0 && <View style={styles.divider} />}
               <View style={styles.bucketRow}>
@@ -332,7 +443,10 @@ export default function SettingsScreen() {
                 >
                   <Text style={{ fontSize: 18, marginRight: 8 }}>{b.icon}</Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.bucketName}>{b.name}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={styles.bucketName}>{b.name}</Text>
+                      {!b.showOnHome && <Ionicons name="eye-off" size={14} color={colors.textMuted} />}
+                    </View>
                     <Text style={styles.bucketAmount}>NPR {formatNPR(b.monthlyAmount)}/mo</Text>
                   </View>
                   <TypeBadge type={b.type} />
@@ -380,6 +494,15 @@ export default function SettingsScreen() {
                       </Pressable>
                     ))}
                   </View>
+                  <View style={[styles.toggleRow, { marginTop: 12 }]}>
+                    <Text style={styles.editableLabel}>Show on Home Screen</Text>
+                    <Switch
+                      value={bucketDraft.showOnHome}
+                      onValueChange={v => setBucketDraft(d => ({ ...d, showOnHome: v }))}
+                      trackColor={{ false: colors.border, true: colors.greenFill }}
+                      thumbColor={bucketDraft.showOnHome ? colors.green : '#f4f3f4'}
+                    />
+                  </View>
                   <View style={styles.editorActions}>
                     <TouchableOpacity onPress={() => setExpandedBucketId(null)}>
                       <Text style={{ color: colors.textMuted, fontSize: 14 }}>Cancel</Text>
@@ -392,9 +515,102 @@ export default function SettingsScreen() {
               )}
             </View>
           ))}
+          {livingBuckets.length === 0 && (
+            <Text style={styles.emptyText}>No spending buckets yet.</Text>
+          )}
+        </Card>
 
-          <View style={styles.divider} />
+        <Text style={[styles.subGroupTitle, { marginTop: 20 }]}>Future (Savings & Investments)</Text>
+        <Card>
+          {futureBuckets.map((b, i) => (
+            <View key={b.id}>
+              {i > 0 && <View style={styles.divider} />}
+              <View style={styles.bucketRow}>
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
+                  onPress={() => expandBucket(b)}
+                  activeOpacity={0.6}
+                >
+                  <Text style={{ fontSize: 18, marginRight: 8 }}>{b.icon}</Text>
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={styles.bucketName}>{b.name}</Text>
+                      {!b.showOnHome && <Ionicons name="eye-off" size={14} color={colors.textMuted} />}
+                    </View>
+                    <Text style={styles.bucketAmount}>NPR {formatNPR(b.monthlyAmount)}/mo</Text>
+                  </View>
+                  <TypeBadge type={b.type} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => confirmDeactivate(b)} hitSlop={8} style={{ marginLeft: 12 }}>
+                  <Ionicons name="close-circle" size={20} color={colors.textMuted} />
+                </TouchableOpacity>
+              </View>
 
+              {expandedBucketId === b.id && (
+                <View style={styles.bucketEditor}>
+                  <TextInput
+                    style={styles.input}
+                    value={bucketDraft.name}
+                    onChangeText={v => setBucketDraft(d => ({ ...d, name: v }))}
+                    placeholder="Name"
+                    placeholderTextColor={colors.textMuted}
+                  />
+                  <TextInput
+                    style={[styles.input, { marginTop: 8 }]}
+                    value={bucketDraft.monthlyAmount}
+                    onChangeText={v => setBucketDraft(d => ({ ...d, monthlyAmount: v }))}
+                    keyboardType="numeric"
+                    placeholder="Monthly amount"
+                    placeholderTextColor={colors.textMuted}
+                  />
+                  <View style={styles.typeRow}>
+                    {BUCKET_TYPES.map(t => (
+                      <Pressable
+                        key={t}
+                        onPress={() => setBucketDraft(d => ({ ...d, type: t }))}
+                        style={[
+                          styles.typeChip,
+                          bucketDraft.type === t && { backgroundColor: colors.green },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.typeChipText,
+                            bucketDraft.type === t && { color: '#fff' },
+                          ]}
+                        >
+                          {t}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <View style={[styles.toggleRow, { marginTop: 12 }]}>
+                    <Text style={styles.editableLabel}>Show on Home Screen</Text>
+                    <Switch
+                      value={bucketDraft.showOnHome}
+                      onValueChange={v => setBucketDraft(d => ({ ...d, showOnHome: v }))}
+                      trackColor={{ false: colors.border, true: colors.greenFill }}
+                      thumbColor={bucketDraft.showOnHome ? colors.green : '#f4f3f4'}
+                    />
+                  </View>
+                  <View style={styles.editorActions}>
+                    <TouchableOpacity onPress={() => setExpandedBucketId(null)}>
+                      <Text style={{ color: colors.textMuted, fontSize: 14 }}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => saveBucketEdit(b.id)}>
+                      <Text style={{ color: colors.green, fontSize: 14, fontFamily: 'Inter_600SemiBold' }}>Save</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+            </View>
+          ))}
+          {futureBuckets.length === 0 && (
+            <Text style={styles.emptyText}>No savings or investment buckets yet.</Text>
+          )}
+        </Card>
+
+        <Card style={{ marginTop: 16 }}>
           {addingBucket ? (
             <View style={styles.bucketEditor}>
               <TextInput
@@ -431,6 +647,15 @@ export default function SettingsScreen() {
                   </Pressable>
                 ))}
               </View>
+              <View style={[styles.toggleRow, { marginTop: 12 }]}>
+                <Text style={styles.editableLabel}>Show on Home Screen</Text>
+                <Switch
+                  value={newBucket.showOnHome}
+                  onValueChange={v => setNewBucket(d => ({ ...d, showOnHome: v }))}
+                  trackColor={{ false: colors.border, true: colors.greenFill }}
+                  thumbColor={newBucket.showOnHome ? colors.green : '#f4f3f4'}
+                />
+              </View>
               <View style={styles.editorActions}>
                 <TouchableOpacity onPress={() => setAddingBucket(false)}>
                   <Text style={{ color: colors.textMuted, fontSize: 14 }}>Cancel</Text>
@@ -448,14 +673,14 @@ export default function SettingsScreen() {
         </Card>
 
         {/* Section 3: Keyword Mappings */}
-        <SectionHeader title="Keyword Mappings" description='End remarks with "keyword -" to auto-categorize (e.g. "lunch core -")' />
+        <SectionHeader title="Keyword Mappings" description='End remarks with "keyword -" to auto-categorize' />
         <Card>
           {bs.keywordMappings.map((km, i) => (
             <View key={km.id}>
               {i > 0 && <View style={styles.divider} />}
               <View style={styles.mappingRow}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.mappingKeyword}>{km.keyword} -</Text>
+                  <Text style={styles.mappingKeyword}>{km.keyword}</Text>
                   <Text style={styles.mappingBucket}>{getBucketName(km.bucketId)}</Text>
                 </View>
                 <TouchableOpacity onPress={() => bs.deleteKeywordMapping(km.id)} hitSlop={8}>
@@ -467,13 +692,13 @@ export default function SettingsScreen() {
 
           {bs.keywordMappings.length > 0 && <View style={styles.divider} />}
 
-          {addingKeyword ? (
+          {addingMapping ? (
             <View style={{ paddingTop: 4 }}>
               <TextInput
                 style={styles.input}
                 value={newKeyword}
                 onChangeText={setNewKeyword}
-                placeholder="Keyword (e.g. core)"
+                placeholder="Keyword (exact match)"
                 placeholderTextColor={colors.textMuted}
                 autoFocus
                 autoCapitalize="none"
@@ -481,20 +706,20 @@ export default function SettingsScreen() {
               <Text style={[styles.editableLabel, { marginTop: 8, marginBottom: 4 }]}>Bucket:</Text>
               <BucketPicker
                 activeBuckets={activeBuckets}
-                selectedId={newKeywordBucketId}
-                onSelect={setNewKeywordBucketId}
+                selectedId={newMappingBucketId}
+                onSelect={setNewMappingBucketId}
               />
               <View style={styles.editorActions}>
-                <TouchableOpacity onPress={() => setAddingKeyword(false)}>
+                <TouchableOpacity onPress={() => setAddingMapping(false)}>
                   <Text style={{ color: colors.textMuted, fontSize: 14 }}>Cancel</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={handleAddKeyword}>
+                <TouchableOpacity onPress={handleAddMapping}>
                   <Text style={{ color: colors.green, fontSize: 14, fontFamily: 'Inter_600SemiBold' }}>Add</Text>
                 </TouchableOpacity>
               </View>
             </View>
           ) : (
-            <TouchableOpacity onPress={() => { setAddingKeyword(true); setNewKeywordBucketId(activeBuckets[0]?.id ?? '') }} style={{ paddingVertical: 8 }}>
+            <TouchableOpacity onPress={() => { setAddingMapping(true); setNewMappingBucketId(activeBuckets[0]?.id ?? '') }} style={{ paddingVertical: 8 }}>
               <Text style={{ color: colors.green, fontSize: 14, fontFamily: 'Inter_600SemiBold' }}>+ Add keyword</Text>
             </TouchableOpacity>
           )}
@@ -602,8 +827,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.pageBg,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
     paddingTop: 64,
     paddingBottom: 12,
+    paddingHorizontal: 16,
+  },
+  headerSaved: {
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+    color: colors.green,
   },
   headerTitle: {
     fontSize: 22,
@@ -626,6 +860,23 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     color: colors.textMuted,
     marginTop: 2,
+    marginBottom: 12,
+  },
+  subGroupTitle: {
+    fontSize: 12,
+    fontFamily: 'Inter_700Bold',
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 8,
+    marginLeft: 4,
+  },
+  emptyText: {
+    paddingVertical: 16,
+    color: colors.textMuted,
+    fontFamily: 'Inter_400Regular',
+    fontSize: 14,
+    textAlign: 'center',
   },
   divider: {
     height: 1,
@@ -654,12 +905,26 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_500Medium',
     color: colors.textPrimary,
     borderBottomWidth: 1,
-    borderBottomColor: colors.green,
+    borderBottomColor: colors.border,
     paddingVertical: 2,
     paddingHorizontal: 4,
     minWidth: 80,
     textAlign: 'right',
     fontVariant: ['tabular-nums'],
+  },
+  nameInput: {
+    fontSize: 15,
+    fontFamily: 'Inter_500Medium',
+    color: colors.textPrimary,
+    paddingVertical: 2,
+    paddingHorizontal: 4,
+    minWidth: 80,
+    textAlign: 'right',
+  },
+  savedLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+    color: colors.green,
   },
   bucketRow: {
     flexDirection: 'row',

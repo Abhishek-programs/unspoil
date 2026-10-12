@@ -10,6 +10,7 @@ interface PlaybookState {
   fallbackBucketId: string | null
   efFloor: number
   isOnboarded: boolean
+  lastChecklistMonth: string | null
   isLoaded: boolean
   loadPlaybook: () => Promise<void>
   updatePlaybook: (patch: Partial<Omit<PlaybookState, 'isLoaded' | 'loadPlaybook' | 'updatePlaybook'>>) => Promise<void>
@@ -23,6 +24,7 @@ export const usePlaybookStore = create<PlaybookState>((set, get) => ({
   fallbackBucketId: null,
   efFloor: 150000,
   isOnboarded: false,
+  lastChecklistMonth: null,
   isLoaded: false,
 
   loadPlaybook: async () => {
@@ -36,6 +38,7 @@ export const usePlaybookStore = create<PlaybookState>((set, get) => ({
         fallbackBucketId: row.fallbackBucketId ?? null,
         efFloor: row.efFloor,
         isOnboarded: row.isOnboarded,
+        lastChecklistMonth: row.lastChecklistMonth ?? null,
         isLoaded: true,
       })
     } else {
@@ -55,6 +58,7 @@ export const usePlaybookStore = create<PlaybookState>((set, get) => ({
         fallbackBucketId: state.fallbackBucketId,
         efFloor: state.efFloor,
         isOnboarded: state.isOnboarded,
+        lastChecklistMonth: state.lastChecklistMonth,
       }).where(eq(playbook.id, rows[0].id))
     } else {
       // Create record if not exists (should already happen in seedDefaults, but good to have)
@@ -65,6 +69,7 @@ export const usePlaybookStore = create<PlaybookState>((set, get) => ({
         fallbackBucketId: state.fallbackBucketId,
         efFloor: state.efFloor,
         isOnboarded: state.isOnboarded,
+        lastChecklistMonth: state.lastChecklistMonth,
       })
     }
   },

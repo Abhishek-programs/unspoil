@@ -8,6 +8,7 @@ export const playbook = sqliteTable('playbook', {
   fallbackBucketId: text('fallback_bucket_id'),
   efFloor: real('ef_floor').notNull().default(150000),
   isOnboarded: integer('is_onboarded', { mode: 'boolean' }).notNull().default(false),
+  lastChecklistMonth: text('last_checklist_month'), // format YYYY-MM
 })
 
 export const buckets = sqliteTable('buckets', {
@@ -19,6 +20,7 @@ export const buckets = sqliteTable('buckets', {
   icon: text('icon').notNull().default('💰'),
   sortOrder: integer('sort_order').notNull().default(0),
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  showOnHome: integer('show_on_home', { mode: 'boolean' }).notNull().default(true),
 })
 
 export const keywordMappings = sqliteTable('keyword_mappings', {

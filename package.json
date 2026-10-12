@@ -13,6 +13,7 @@
     "@expo/vector-icons": "^15.1.1",
     "@react-native-community/datetimepicker": "8.4.4",
     "babel-preset-expo": "54.0.10",
+    "date-fns": "^4.1.0",
     "drizzle-orm": "^0.45.2",
     "expo": "~54.0.33",
     "expo-constants": "~18.0.13",

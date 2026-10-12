@@ -12,6 +12,7 @@ export interface Bucket {
   icon: string
   sortOrder: number
   isActive: boolean
+  showOnHome: boolean
 }
 
 export interface KeywordMapping {

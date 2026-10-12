@@ -30,7 +30,10 @@ No tests in V1. No testing libraries. No error boundaries beyond what screen spe
 ```
 app/
   _layout.tsx              # Root layout: font load, DB init, Zustand hydration
-  onboarding.tsx           # First-launch 7-step flow, then never shown again
+  onboarding/              # First-launch 2-step flow
+    _layout.tsx            # Stack for onboarding
+    index.tsx              # Step 1: Name
+    money.tsx              # Step 2: Income & Start Day
   (tabs)/
     _layout.tsx            # Tab bar with center Add button
     index.tsx              # Home / Dashboard
@@ -105,7 +108,9 @@ export const colors = {
 
 - Typeface: Inter. All NPR amounts: `fontVariant: ['tabular-nums']`.
 - Light theme only in V1. No dark mode.
-- No drop shadows, no gradients, no looping animations. Charts may animate on first render only.
+- Standardized Header: `paddingTop: 64`, `fontSize: 22`, `Inter_700Bold`.
+- Continuous Curves: Use `borderCurve: 'continuous'` (iOS-style smooth corners).
+- No drop shadows, no gradients (except HeroRing).
 
 ---
 
@@ -237,7 +242,7 @@ export function projectGoalCompletion(opts: {
 - Goals tab + goal detail + projections
 - Insights screen (monthly; annual is stretch goal)
 - Settings / Playbook (buckets, keywords, goals, notifications)
-- Onboarding (7 steps)
+- Onboarding (2 steps)
 - Month Start checklist
 - Passive nudge notifications
 - CSV export

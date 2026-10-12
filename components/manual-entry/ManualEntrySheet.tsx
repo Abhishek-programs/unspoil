@@ -14,9 +14,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import DateTimePicker from '@react-native-community/datetimepicker'
+import * as ImagePicker from 'expo-image-picker'
 import { colors } from '@/constants/colors'
 import { formatNPR, formatDate } from '@/lib/format'
 import { categorize } from '@/lib/categorize'
+import { processReceiptImage } from '@/lib/ocr'
 import { useBucketsStore, type Bucket } from '@/store/buckets'
 import { usePlaybookStore } from '@/store/playbook'
 import { useTransactionsStore, INCOME_BUCKET_ID } from '@/store/transactions'
@@ -37,7 +39,7 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
   const savingsBuckets = getSavingsBuckets()
   const allBuckets = [...spendingBuckets, ...savingsBuckets]
 
-  // Form state
+  const [mode, setMode] = useState<'manual' | 'scan'>('scan')
   const [amount, setAmount] = useState('')
   const [isIncome, setIsIncome] = useState(false)
   const [selectedBucketId, setSelectedBucketId] = useState<string | null>(null)
@@ -47,10 +49,12 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [isRecurring, setIsRecurring] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [scanning, setScanning] = useState(false)
 
   // Reset form when sheet opens
   useEffect(() => {
     if (visible) {
+      setMode('scan')
       setAmount('')
       setIsIncome(false)
       setSelectedBucketId(null)
@@ -60,7 +64,6 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
       setShowDatePicker(false)
       setIsRecurring(false)
       setSaving(false)
-      setTimeout(() => amountRef.current?.focus(), 300)
     }
   }, [visible])
 
@@ -142,6 +145,100 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
           >
+            {/* Mode Toggle */}
+            <View style={styles.modeToggle}>
+              <TouchableOpacity
+                style={[styles.modeButton, mode === 'scan' && styles.modeButtonActive]}
+                onPress={() => {
+                  setMode('scan')
+                  Keyboard.dismiss()
+                }}
+              >
+                <Ionicons
+                  name="scan"
+                  size={18}
+                  color={mode === 'scan' ? colors.green : colors.textMuted}
+                />
+                <Text style={[styles.modeButtonText, mode === 'scan' && styles.modeButtonTextActive]}>
+                  Scan Receipt
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modeButton, mode === 'manual' && styles.modeButtonActive]}
+                onPress={() => {
+                  setMode('manual')
+                  setTimeout(() => amountRef.current?.focus(), 100)
+                }}
+              >
+                <Ionicons
+                  name="create-outline"
+                  size={18}
+                  color={mode === 'manual' ? colors.green : colors.textMuted}
+                />
+                <Text style={[styles.modeButtonText, mode === 'manual' && styles.modeButtonTextActive]}>
+                  Manual Entry
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {mode === 'scan' && (
+              <View style={styles.scanContainer}>
+                <TouchableOpacity 
+                  style={styles.scanPicker}
+                  onPress={async () => {
+                    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+                    if (status !== 'granted') {
+                      alert('Sorry, we need camera roll permissions to make this work!')
+                      return
+                    }
+
+                    const result = await ImagePicker.launchImageLibraryAsync({
+                      mediaTypes: ['images'],
+                      allowsEditing: true,
+                      quality: 0.8,
+                    })
+
+                    if (!result.canceled && result.assets[0]) {
+                      setScanning(true)
+                      try {
+                        const ocr = await processReceiptImage(result.assets[0].uri)
+                        if (ocr.amount) setAmount(ocr.amount.toString())
+                        if (ocr.merchant) setMerchant(ocr.merchant)
+                        if (ocr.remarks) setRemarks(ocr.remarks)
+                        // Auto-switch to manual mode to review
+                        setMode('manual')
+                      } catch (e) {
+                        alert('Could not scan receipt. Please try manual entry.')
+                      } finally {
+                        setScanning(false)
+                      }
+                    }
+                  }}
+                  disabled={scanning}
+                >
+                  <View style={styles.scanIconBg}>
+                    {scanning ? (
+                      <Ionicons name="refresh" size={32} color={colors.green} />
+                    ) : (
+                      <Ionicons name="image-outline" size={32} color={colors.green} />
+                    )}
+                  </View>
+                  <Text style={styles.scanTitle}>
+                    {scanning ? 'Analyzing...' : 'Pick a receipt screenshot'}
+                  </Text>
+                  <Text style={styles.scanSub}>
+                    {scanning ? 'Extracting merchant & amount' : 'eSewa, Khalti, or Bank receipts'}
+                  </Text>
+                </TouchableOpacity>
+                
+                <View style={styles.scanDivider}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>OR FILL BELOW</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+              </View>
+            )}
+
             {/* Amount */}
             <View style={styles.amountContainer}>
               <Text style={[styles.currencyLabel, isIncome && { color: colors.green }]}>NPR</Text>
@@ -322,7 +419,94 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 32,
+    paddingBottom: 40,
+  },
+  modeToggle: {
+    flexDirection: 'row',
+    backgroundColor: '#00000008',
+    borderRadius: 14,
+    padding: 4,
+    marginBottom: 24,
+  },
+  modeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 10,
+    gap: 8,
+  },
+  modeButtonActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  modeButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: colors.textMuted,
+  },
+  modeButtonTextActive: {
+    color: colors.textPrimary,
+  },
+  scanContainer: {
+    marginBottom: 24,
+  },
+  scanPicker: {
+    backgroundColor: '#16A34A08',
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: '#16A34A33',
+    borderRadius: 20,
+    padding: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderCurve: 'continuous',
+  },
+  scanIconBg: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+  },
+  scanTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter_700Bold',
+    color: colors.textPrimary,
+    marginBottom: 4,
+  },
+  scanSub: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: colors.textSecond,
+  },
+  scanDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 24,
+    gap: 12,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.divider,
+  },
+  dividerText: {
+    fontSize: 10,
+    fontFamily: 'Inter_700Bold',
+    color: colors.textMuted,
+    letterSpacing: 1,
   },
   amountContainer: {
     alignItems: 'center',
