@@ -1,4 +1,4 @@
-import * as Notifications from 'expo-notifications'
+import Constants, { ExecutionEnvironment } from 'expo-constants'
 import { Platform } from 'react-native'
 
 export type NudgeType =
@@ -24,10 +24,19 @@ const DEFAULT_TOGGLES: NudgeToggles = {
   recurringDraft: true,
 }
 
-// In-memory state — persisted via Settings UI calling back to the store
+const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient
+
+// expo-notifications remote APIs were removed from Expo Go (SDK 53+).
+// Load only in a real native / development build.
+type NotificationsModule = typeof import('expo-notifications')
+let Notifications: NotificationsModule | null = null
+if (!isExpoGo) {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  Notifications = require('expo-notifications') as NotificationsModule
+}
+
 let nudgeToggles: NudgeToggles = { ...DEFAULT_TOGGLES }
 let lastNotificationDate: string | null = null
-// Track one-time milestones so they never repeat
 let firedMilestones: Set<string> = new Set()
 
 export function setNudgeToggles(toggles: NudgeToggles) {
@@ -54,7 +63,7 @@ export function hasMilestoneFired(key: string): boolean {
  * Request notification permissions. Call once after onboarding.
  */
 export async function requestPermissions(): Promise<boolean> {
-  if (Platform.OS === 'web') return false
+  if (Platform.OS === 'web' || !Notifications) return false
 
   const { status: existing } = await Notifications.getPermissionsAsync()
   if (existing === 'granted') return true
@@ -67,14 +76,14 @@ export async function requestPermissions(): Promise<boolean> {
  * Configure notification channel for Android
  */
 export async function setupNotificationChannel() {
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('spendsense_nudges', {
-      name: 'SpendSense Nudges',
-      importance: Notifications.AndroidImportance.DEFAULT,
-      vibrationPattern: [0, 250],
-      lightColor: '#16A34A',
-    })
-  }
+  if (Platform.OS !== 'android' || !Notifications) return
+
+  await Notifications.setNotificationChannelAsync('spendsense_nudges', {
+    name: 'SpendSense Nudges',
+    importance: Notifications.AndroidImportance.DEFAULT,
+    vibrationPattern: [0, 250],
+    lightColor: '#16A34A',
+  })
 }
 
 function isQuietHours(): boolean {
@@ -99,20 +108,22 @@ export async function scheduleNudge(
   title: string,
   body: string,
 ): Promise<boolean> {
-  // Check toggle
+  if (!Notifications) return false
+
   const toggleKey = mapTypeToToggle(type)
   if (toggleKey && !nudgeToggles[toggleKey]) return false
 
-  // 1-per-day cap
   if (hasNotifiedToday()) return false
 
-  // Quiet hours: schedule for 8am next day
-  let trigger: Notifications.NotificationTriggerInput = null
+  let trigger: import('expo-notifications').NotificationTriggerInput = null
   if (isQuietHours()) {
     const tomorrow8am = new Date()
     tomorrow8am.setDate(tomorrow8am.getDate() + (tomorrow8am.getHours() >= 22 ? 1 : 0))
     tomorrow8am.setHours(8, 0, 0, 0)
-    trigger = { type: Notifications.SchedulableTriggerInputTypes.DATE, date: tomorrow8am }
+    trigger = {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: tomorrow8am,
+    }
   }
 
   await Notifications.scheduleNotificationAsync({
@@ -141,7 +152,7 @@ function mapTypeToToggle(type: NudgeType): keyof NudgeToggles | null {
     case 'efMilestone':
       return 'efFloorWarning'
     case 'flaggedPending':
-      return null // always fires if conditions met
+      return null
     default:
       return null
   }
@@ -159,11 +170,10 @@ export async function checkAndScheduleAll(params: {
   flaggedCount: number
   flaggedAgeDays: number
 }): Promise<void> {
-  if (hasNotifiedToday()) return
+  if (!Notifications || hasNotifiedToday()) return
 
   const { spentByBucket, unconfirmedSavings, efBalance, efFloor, flaggedCount, flaggedAgeDays } = params
 
-  // Priority 1: Budget exceeded (100%)
   for (const [, b] of Object.entries(spentByBucket)) {
     if (b.limit > 0 && b.spent >= b.limit) {
       const sent = await scheduleNudge(
@@ -175,7 +185,6 @@ export async function checkAndScheduleAll(params: {
     }
   }
 
-  // Priority 2: Budget breach (80%)
   for (const [, b] of Object.entries(spentByBucket)) {
     if (b.limit > 0 && b.spent >= b.limit * 0.8 && b.spent < b.limit) {
       const remaining = b.limit - b.spent
@@ -188,7 +197,6 @@ export async function checkAndScheduleAll(params: {
     }
   }
 
-  // Priority 3: EF milestones (one-time)
   if (efFloor > 0) {
     if (efBalance >= efFloor && !hasMilestoneFired('ef_stage2')) {
       markMilestoneFired('ef_stage2')
@@ -210,7 +218,6 @@ export async function checkAndScheduleAll(params: {
     }
   }
 
-  // Priority 4: Savings unconfirmed 3+ days after month start
   for (const s of unconfirmedSavings) {
     if (s.daysSinceMonthStart >= 3) {
       const sent = await scheduleNudge(
@@ -222,7 +229,6 @@ export async function checkAndScheduleAll(params: {
     }
   }
 
-  // Priority 5: Flagged transactions sitting 3+ days
   if (flaggedCount > 0 && flaggedAgeDays >= 3) {
     const sent = await scheduleNudge(
       'flaggedPending',
@@ -234,5 +240,6 @@ export async function checkAndScheduleAll(params: {
 }
 
 export async function cancelAllNudges(): Promise<void> {
+  if (!Notifications) return
   await Notifications.cancelAllScheduledNotificationsAsync()
 }

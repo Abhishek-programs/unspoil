@@ -1,40 +1,50 @@
-// 3-step auto-categorization (priority order):
-// 1. Remarks suffix — remark ends with "keyword -" → mapped bucket. Always wins.
-// 2. Sure-shot merchant — unambiguous merchant → mapped bucket.
+// Auto-categorization (priority order):
+// 1. Keyword word match — keyword appears in description, remarks, or merchant text.
+// 2. Sure-shot merchant — exact merchant name → mapped bucket.
 // 3. Fallback — fallback bucket, mark as flagged.
 
+function buildCorpus(
+  description: string | null,
+  remarks: string | null,
+  merchant: string | null,
+): string {
+  return [description, remarks, merchant]
+    .filter(t => t && !t.startsWith('__'))
+    .join(' ')
+    .toLowerCase()
+}
+
 export function categorize(opts: {
+  description?: string | null
   remarks: string | null
   merchant: string | null
   keywords: { keyword: string; bucketId: string }[]
   sureShotMerchants: { merchantName: string; bucketId: string }[]
   fallbackBucketId: string
 }): { bucketId: string; isFlagged: boolean } {
-  const { remarks, merchant, keywords, sureShotMerchants, fallbackBucketId } = opts
+  const { description = null, remarks, merchant, keywords, sureShotMerchants, fallbackBucketId } =
+    opts
 
-  // Step 1: Remarks suffix — "keyword -" at end of remarks (e.g. "lunch core -")
-  if (remarks) {
-    const match = remarks.trim().match(/(\S+)\s*-\s*$/)
-    if (match) {
-      const tag = match[1].toLowerCase()
-      const mapping = keywords.find(k => k.keyword.toLowerCase() === tag)
-      if (mapping) {
+  const corpus = buildCorpus(description, remarks, merchant)
+
+  if (corpus) {
+    for (const mapping of keywords) {
+      const kw = mapping.keyword.toLowerCase().trim()
+      if (kw && corpus.includes(kw)) {
         return { bucketId: mapping.bucketId, isFlagged: false }
       }
     }
   }
 
-  // Step 2: Sure-shot merchant match (case-insensitive)
   if (merchant) {
     const merchantLower = merchant.toLowerCase().trim()
     const sureShot = sureShotMerchants.find(
-      m => m.merchantName.toLowerCase().trim() === merchantLower
+      m => m.merchantName.toLowerCase().trim() === merchantLower,
     )
     if (sureShot) {
       return { bucketId: sureShot.bucketId, isFlagged: false }
     }
   }
 
-  // Step 3: Fallback — flag for user review
   return { bucketId: fallbackBucketId, isFlagged: true }
 }

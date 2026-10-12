@@ -16,8 +16,14 @@ interface PlaybookState {
   monthStartDay: number
   fallbackBucketId: string | null
   efFloor: number
+  efStartBalance: number
   isOnboarded: boolean
   lastChecklistMonth: string | null
+  lastBalanceRolloverMonth: string | null
+  userAge: number | null
+  carriedForwardBalance: number
+  lastSurplusRolloverMonth: string | null
+  lastPersonalRebalancePromptMonth: string | null
   nudgeToggles: NudgeToggles
   lastNotificationDate: string | null
   isLoaded: boolean
@@ -32,8 +38,14 @@ export const usePlaybookStore = create<PlaybookState>((set, get) => ({
   monthStartDay: 1,
   fallbackBucketId: null,
   efFloor: 300000,
+  efStartBalance: 0,
   isOnboarded: false,
   lastChecklistMonth: null,
+  lastBalanceRolloverMonth: null,
+  userAge: null,
+  carriedForwardBalance: 0,
+  lastSurplusRolloverMonth: null,
+  lastPersonalRebalancePromptMonth: null,
   nudgeToggles: {
     budgetBreach: true,
     savingsReminder: true,
@@ -53,8 +65,14 @@ export const usePlaybookStore = create<PlaybookState>((set, get) => ({
         monthStartDay: row.monthStartDay,
         fallbackBucketId: row.fallbackBucketId ?? null,
         efFloor: row.efFloor,
+        efStartBalance: row.efStartBalance ?? 0,
         isOnboarded: row.isOnboarded,
         lastChecklistMonth: row.lastChecklistMonth ?? null,
+        lastBalanceRolloverMonth: row.lastBalanceRolloverMonth ?? null,
+        userAge: row.userAge ?? null,
+        carriedForwardBalance: row.carriedForwardBalance ?? 0,
+        lastSurplusRolloverMonth: row.lastSurplusRolloverMonth ?? null,
+        lastPersonalRebalancePromptMonth: row.lastPersonalRebalancePromptMonth ?? null,
         isLoaded: true,
       })
     } else {
@@ -73,8 +91,14 @@ export const usePlaybookStore = create<PlaybookState>((set, get) => ({
         monthStartDay: state.monthStartDay,
         fallbackBucketId: state.fallbackBucketId,
         efFloor: state.efFloor,
+        efStartBalance: state.efStartBalance,
         isOnboarded: state.isOnboarded,
         lastChecklistMonth: state.lastChecklistMonth,
+        lastBalanceRolloverMonth: state.lastBalanceRolloverMonth,
+        userAge: state.userAge,
+        carriedForwardBalance: state.carriedForwardBalance,
+        lastSurplusRolloverMonth: state.lastSurplusRolloverMonth,
+        lastPersonalRebalancePromptMonth: state.lastPersonalRebalancePromptMonth,
       }).where(eq(playbook.id, rows[0].id))
     } else {
       // Create record if not exists (should already happen in seedDefaults, but good to have)
@@ -84,8 +108,14 @@ export const usePlaybookStore = create<PlaybookState>((set, get) => ({
         monthStartDay: state.monthStartDay,
         fallbackBucketId: state.fallbackBucketId,
         efFloor: state.efFloor,
+        efStartBalance: state.efStartBalance,
         isOnboarded: state.isOnboarded,
         lastChecklistMonth: state.lastChecklistMonth,
+        lastBalanceRolloverMonth: state.lastBalanceRolloverMonth,
+        userAge: state.userAge,
+        carriedForwardBalance: state.carriedForwardBalance,
+        lastSurplusRolloverMonth: state.lastSurplusRolloverMonth,
+        lastPersonalRebalancePromptMonth: state.lastPersonalRebalancePromptMonth,
       })
     }
   },

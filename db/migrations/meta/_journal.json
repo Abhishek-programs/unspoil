@@ -29,6 +29,55 @@
       "when": 1775587843289,
       "tag": "0003_calm_micromacro",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1775587843289,
+      "tag": "0004_food_bucket_ef_balance",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1775687843289,
+      "tag": "0005_goal_payment_mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1775787843289,
+      "tag": "0006_personal_bucket_balances",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1775887843289,
+      "tag": "0007_home_finance_ux",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1775987843289,
+      "tag": "0008_transaction_description",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1776087843289,
+      "tag": "0009_lend_borrow",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1776187843289,
+      "tag": "0010_funded_from_bucket",
+      "breakpoints": true
     }
   ]
 }

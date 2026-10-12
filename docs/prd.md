@@ -1,8 +1,8 @@
 # SpendSense — Product Requirements Document
-**Version:** 1.1
+**Version:** 1.2
 **Platform:** Android (first)
 **Status:** Active development
-**Last Updated:** 2026-04-06
+**Last Updated:** 2026-06-08
 
 ---
 
@@ -22,7 +22,8 @@ SpendSense is a personal finance tracking app for Android built with React Nativ
 - **Manual entry** — for cash payments or any receipt the OCR can't parse; accessible via the center "+" button in the nav bar
 - **Playbook layer** — user's financial plan (buckets, floors, goals) is loaded into the app and all spending is mapped against it
 - **Passive informing** — no blocking, no hard stops; just honest, timely nudges
-- **Bubble overlay (V2)** and **share intent capture (V2)** — deferred to V2
+- **Bubble overlay (V2)** — draggable scan bubble over banking apps; silent capture + save via MediaProjection + on-device OCR
+- **Share intent capture** — deferred
 
 ### 1.4 Target User (V1)
 Single professional, Nepal, NPR-based income, uses digital payments almost exclusively (eSewa, Khalti, bank transfer apps), has a structured personal finance plan with defined buckets and goals.
@@ -40,9 +41,8 @@ Single professional, Nepal, NPR-based income, uses digital payments almost exclu
 - Confirm monthly investment transfers via manual confirmation or receipt scan
 
 ### 2.2 Non-Goals (V1)
-- Floating bubble overlay (SYSTEM_ALERT_WINDOW) — V2
-- Share intent / share-sheet capture — V2
-- SMS or email thread reading — V2
+- Share intent / share-sheet capture — deferred
+- SMS or email thread reading — deferred
 - Dark mode — V2
 - SIP/share portfolio tracking (NAV, returns, holdings) — V2
 - "Ask the Plan" conversational feature — V2
@@ -50,6 +50,8 @@ Single professional, Nepal, NPR-based income, uses digital payments almost exclu
 - Multi-user or shared budgets
 - iOS support — V3
 - Cloud backup / sync — V3
+
+> **Note:** Floating bubble overlay is implemented in V2 (dev client required). Gallery OCR remains the primary V1 capture path for Expo Go / first-time users.
 
 ---
 
@@ -66,8 +68,9 @@ The playbook is pre-loaded with recommended default values. Every field is edita
 
 ### 3.2 Buckets
 Two types:
-- **Spending buckets** — Core Living, Dates, Fun (have monthly limits)
-- **Savings/investment buckets** — EF, SIPs, Shares, BigExpense (have monthly contribution targets)
+- **Spending buckets** — Core Living, Food, Dates, Fun (have monthly limits)
+- **Savings/investment buckets** — EF, SIPs, Shares (have monthly contribution targets)
+- **Goal-linked buckets** — created per goal at onboarding: either one bucket (pay in full) or two (Pay upfront + EMI reserve)
 
 ### 3.3 Transaction
 A single financial event. Has:
@@ -77,7 +80,7 @@ A single financial event. Has:
 - Source app (eSewa, Khalti, etc.)
 - Bucket assignment
 - Remarks / notes (optional)
-- Entry type: Auto (shared) / Manual
+- Entry type: Manual / OCR / Bubble (overlay)
 
 ### 3.4 Floors
 Hard minimums the user has defined. App warns when approaching — never blocks.
@@ -96,9 +99,10 @@ User opens SpendSense after completing a digital payment, taps "Scan Receipt", p
 
 **OCR Engine**
 - `rn-mlkit-ocr` — Google ML Kit Text Recognition, fully on-device, no internet required
-- Extracted fields: amount, merchant/recipient, date, transaction ID
+- Per-app templates in `lib/ocr-templates/` (eSewa, Khalti, NMB, Global IME) extend shared regex patterns
+- Extracted fields: amount, merchant/recipient, remarks, transaction ID
 - Receipt validation: OCR output checked for receipt keywords ("NPR", "amount", "transaction", "success") — if not found, user is notified "this doesn't look like a receipt" and dropped into manual entry
-- Fallback: if on-device OCR fails or confidence is low, user may optionally send to own server for higher-accuracy OCR (requires internet, opt-in)
+- Requires **EAS dev client** build (not Expo Go)
 
 **Permission Required**
 - Gallery read access via `expo-image-picker` — standard, prompted on first use
@@ -117,17 +121,27 @@ Gallery pick → pre-filled entry form in under 3 seconds.
 
 ---
 
-### F2 — Floating Bubble Capture *(V2 — deferred from V1)*
+### F2 — Floating Bubble Capture *(V2 — shipped in codebase)*
 
 **Description**
-A floating overlay bubble on whitelisted apps. User taps it on any receipt screen; SpendSense captures a screenshot via `MediaProjection`, runs on-device OCR, and saves — entirely in the background. User never leaves their payment app.
+A floating overlay bubble on Android. User taps it on a receipt screen in a whitelisted app; SpendSense captures a screenshot via `MediaProjection`, runs on-device OCR in a **Headless JS worker** (`rn-mlkit-ocr` + shared `processReceiptImage`), categorizes, and saves — user never leaves their payment app.
 
-**Permissions Required (V2)**
+**Permissions Required**
 - `SYSTEM_ALERT_WINDOW` (Draw over other apps)
+- `PACKAGE_USAGE_STATS` (App usage access — whitelist visibility)
 - `MediaProjection` (Screen capture)
-- Both opt-in, explained during V2 onboarding
+- All opt-in via Settings → Scan Bubble
 
-**Deferred because:** Requires `SYSTEM_ALERT_WINDOW` + `MediaProjection` permissions and a foreground service — significantly more complex than screenshot upload. V1 uses gallery picker instead.
+**UX Flow**
+1. Enable bubble in Settings after granting all three permissions
+2. Pay in banking app → receipt on screen (bubble visible only on whitelisted apps)
+3. Tap green floating bubble (draggable, snaps to edge; long-press → stop)
+4. Silent capture → headless OCR → save → toast: `NPR 500 saved` or `… needs review`
+5. Transaction appears in Ledger with source badge **Bubble**
+
+**Implementation** *(see [overlay-v2.md](./overlay-v2.md) for current architecture)*
+- Native Kotlin in `native/android/screenshotbubble/` via `plugins/withSpendSenseOverlay.js`
+- TypeScript: `lib/overlay.ts`, `lib/overlay-headless.ts`, `index.js` (headless task)
 
 ---
 
@@ -204,60 +218,61 @@ For cash payments, informal splits, or any expense that screenshot OCR cannot pa
 
 ---
 
-### F6 — Bucket Dashboard (Home Screen)
+### F6 — Pulse Check (Home Screen)
 
 **Description**
-The primary screen. Shows the full financial picture for the current month at a glance.
+The primary screen. Shows safe-to-spend, bucket health, investment checklist, EF progress, and net worth for the current month.
 
 **Layout**
 
-**Header**
-- Current month and year
-- Days remaining in month
+**HeroRing (dual safe-to-spend)**
+- Center: **actualSafeToSpend** — what you can spend after committed savings
+- Outer arc: lifestyle budget consumed
+- Inner arc: planned savings set aside (SIP, Shares, goal reserves)
+- Floating pill: **safeBeforeInvestments** (*before savings*)
+
+**Metric pills**
+- Weekly spend rate vs plan
+- Status pill (on track / caution / over)
 
 **Lifestyle Section** (spending buckets)
-- Each bucket shown as a row: name, amount spent, monthly limit, progress bar
-- Color coding: green (under 70%), amber (70–90%), red (90%+)
-- Tapping any bucket opens filtered transaction list for that bucket
+- Progress bars with color coding: green (under 70%), amber (70–90%), red (90%+)
 
-**Savings Section** (savings/investment buckets)
-- Each bucket shown as a row: name, contribution sent this month (yes/no), target amount
-- Confirmed via receipt scan or manual confirmation
-- Tapping opens detail
+**Future Section** (month checklist)
+- SIP confirm (one tap)
+- Shares confirm (amount sheet)
+- Goal transfers grouped by payment mode: pay in full → one row; upfront + EMI → Pay upfront + EMI reserve rows
 
-**Uncategorized Badge**
-- If any transactions are uncategorized, a visible badge/card appears at the top prompting review
+**EF Goal Card + Net Worth Card**
+- EF progress toward target with start balance from onboarding
+- Net worth from EF + goal start balances + manual assets
 
-**Month Health Indicator**
-- Simple pass/fail summary at the bottom of the home screen:
-  - Lifestyle within budget? ✅ / ⚠️
-  - All investment transfers confirmed? ✅ / ⚠️
-  - EF growing on schedule? ✅ / ⚠️
+**Uncategorized / flagged**
+- Banner when flagged transactions need review
 
 ---
 
 ### F7 — Goal Trackers
 
 **Description**
-Two persistent goal cards always visible — one for EF, one for MacBook (or any user-defined goal).
+Persistent goal cards for EF and user-defined goals (e.g. MacBook).
 
 **Emergency Fund Card**
-- Current EF balance (manually updated or inferred from contributions)
-- Progress bar: 0 → 1,50,000 (Stage 1) then 1,50,000 → 3,00,000 (Stage 2)
-- Stage 1 and Stage 2 clearly labeled
-- Projected date to hit Min EF at current contribution rate
-- Alert if contribution not confirmed this month
+- Current EF balance (from onboarding start balance + contributions)
+- Progress bar toward target
+- Projected date at current contribution rate
 
-**MacBook / Big Expense Goal Card**
-- Total contributed to date (equity + debt combined)
-- Monthly contribution (24,000)
-- Projected months remaining
-- Equity vs debt split shown
+**User-defined goals**
+- Payment mode at setup:
+  - **Pay in full** — one savings bucket, monthly reserve until target date
+  - **Pay upfront + EMI reserve** — two buckets: lump sum target + monthly EMI reserve until loan paid off
+- Plain language in UI: "Pay upfront", "EMI reserve" — never Equity/Debt
+- Projected completion from `computeGoalPlan` (linear math, labeled as estimate)
+- Goals can be paused; buckets linked via `linked_goal_id`
 
 **General Goal Structure**
-- Goals are editable — target amount, name, monthly contribution
-- New goals can be added (e.g. car down payment, trip)
-- Each goal linked to one or two buckets
+- Goals editable — target, date, payment mode, monthly pace
+- New goals via Goals tab or onboarding multi-goal flow
 
 ---
 
@@ -266,23 +281,18 @@ Two persistent goal cards always visible — one for EF, one for MacBook (or any
 **Description**
 One-time setup during onboarding, fully editable at any time.
 
-**Onboarding Flow**
-1. Welcome + explanation of how the app works
-2. Set monthly income
-3. Review pre-loaded bucket defaults (user's playbook values pre-filled)
-4. Edit any bucket amount, name, or limit
-5. Add/remove buckets
-6. Set keyword list for auto-categorization
-7. Review floors (Min EF, etc.)
-8. Done — home screen shown
+**Onboarding Flow (6 steps)**
+1. **Welcome** — name + how the app works
+2. **Money** — monthly income
+3. **Foundations** — Core Living amount, EF target, current EF balance
+4. **Goals** — named goals, target + date, payment mode (pay in full / upfront + EMI / not sure), savings pace slider
+5. **Bucket Builder** — lifestyle meter, locked savings buckets, per-goal bucket blocks (Food included)
+6. **Balances** — SIP + Shares cumulative start balances only (EF captured in Foundations)
 
 **Settings (always accessible)**
-- Edit any bucket
-- Edit income
-- Edit floors
-- Edit keyword list
-- Manage supported apps / parsing templates
-- Manage recurring manual entries
+- Edit any bucket, income, floors, keywords
+- Scan Bubble — overlay + app usage + screen capture permissions + enable toggle (Android, dev client)
+- Dev mock-data inject (`__DEV__`)
 - Data export (CSV)
 
 **Default Values (pre-loaded)**
@@ -290,13 +300,14 @@ One-time setup during onboarding, fully editable at any time.
 | Bucket | Type | Default (NPR) |
 |---|---|---|
 | Core Living | Spending | 50,000 |
+| Food | Spending | (from playbook) |
 | Dates | Spending | 10,000 |
 | Fun | Spending | 5,000 |
 | Emergency Fund | Savings | 15,000/month |
 | SIPs | Investment | 6,000/month |
 | Direct Shares | Investment | 15,000/month |
-| BigExpense Equity | Savings | 14,000/month |
-| BigExpense Debt | Savings | 10,000/month |
+
+Big purchase goals create buckets dynamically (`pay_in_full` → 1 bucket; `upfront_emi` → Pay upfront + EMI reserve). Not in default seed.
 
 ---
 
@@ -333,8 +344,8 @@ A lightweight monthly ritual. Surfaces on the 1st of each month (or when user op
 - [ ] EF transfer done? (confirm or scan receipt)
 - [ ] SIP transfer done?
 - [ ] Shares transfer done?
-- [ ] BigExpense Equity transfer done?
-- [ ] BigExpense Debt transfer done?
+- [ ] MacBook / goal Pay upfront transfer done?
+- [ ] MacBook / goal EMI reserve transfer done?
 - [ ] Any last month transactions still uncategorized?
 
 Each item is tappable — tapping opens the relevant screen or share intent.
@@ -373,10 +384,10 @@ Financial performance against the playbook, viewable monthly or annually.
 A simple, read-only snapshot of the user's total financial picture. Income builds lifestyle; net worth builds freedom. This section makes that number visible and watch it grow over time.
 
 **Assets (manually entered or inferred)**
-- Emergency Fund balance (inferred from contributions + manual setup value)
-- BigExpense Equity + Debt bucket totals (inferred from contributions)
+- Emergency Fund balance (onboarding start + contributions)
+- Goal bucket totals (Pay upfront / EMI reserve contributions)
 - Existing share portfolio (manually entered once, updatable)
-- Any other assets user adds manually (e.g. savings account balance)
+- Any other assets user adds manually
 
 **Liabilities**
 - Any loans or debts user adds manually
@@ -408,19 +419,16 @@ For each savings goal, the app shows a simple projection of when the goal will b
 - Projected completion date at current rate
 - Sensitivity nudge: "Adding NPR X/month would reach your goal Y months earlier"
 
-**Example (MacBook Goal)**
+**Example (MacBook Goal — upfront + EMI)**
 ```
 MacBook Goal 🎯
-Contributed:      NPR 96,000
-Monthly:          NPR 24,000
-Target:           NPR 3,40,000
-On track:         ✅ ~10 months away
-Increase by 2,000/month → saves 1 month
+Pay upfront:      NPR 80,000 target
+EMI reserve:      NPR 12,000/month × 12 months
+On track:         ✅ ~8 months away
 ```
 
 **Rules**
-- Projections are simple linear math — no interest or return assumptions for debt portion, conservative flat estimate for equity portion
-- Clearly labeled as estimates, not financial advice
+- Projections are simple linear math — clearly labeled as estimates, not financial advice
 - Available for all user-defined goals, not just MacBook
 
 ---
@@ -428,11 +436,11 @@ Increase by 2,000/month → saves 1 month
 ## 5. Screens & Navigation
 
 ### 5.1 Bottom Navigation (5 slots)
-1. **Home** — Bucket Dashboard
-2. **Transactions** — Full list, filterable
+1. **Pulse Check (Home)** — Safe-to-spend, buckets, checklist
+2. **Ledger (Transactions)** — Full list + Charts toggle
 3. **[+]** — Center button (not a tab); opens Manual Entry / Scan Receipt bottom sheet
-4. **Goals** — Goal cards and projections
-5. **Settings** — Playbook, keywords, preferences
+4. **The Vault (Goals)** — Goal cards and projections
+5. **Settings** — Playbook, keywords, Scan Bubble, preferences
 
 ### 5.2 Screen List
 | Screen | Access |
@@ -457,11 +465,17 @@ Increase by 2,000/month → saves 1 month
 
 ### 6.1 Screenshot OCR Capture
 - `expo-image-picker` — gallery access to select a screenshot
-- `rn-mlkit-ocr` — Google ML Kit Text Recognition, on-device, no internet required
-- Receipt validation: check OCR output for keywords ("NPR", "amount", "transaction", "success") before processing
-- Fallback: if on-device OCR fails, optionally POST image to own server for higher-accuracy OCR
-- Regex templates applied to extracted text to parse: amount, merchant, date, transaction ID
-- App requires **EAS Build + expo-dev-client** (managed workflow, no ejection) — `rn-mlkit-ocr` is a native module not included in Expo Go
+- `rn-mlkit-ocr` — Google ML Kit Text Recognition, on-device
+- `lib/ocr-templates/` — per-app regex extensions (eSewa, Khalti, NMB, Global IME)
+- Shared `parseOcrText` used by gallery OCR and bubble overlay
+- App requires **EAS Build + expo-dev-client** — native modules not in Expo Go
+
+### 6.1b Bubble Overlay (V2)
+- Kotlin foreground service (`ScreenshotBubbleService`) + `BubbleOverlayView` + `ScreenCaptureHelper`
+- Usage-stats whitelist — bubble hidden on non-target apps
+- Headless JS OCR (`ScreenshotHeadlessTaskService` → `lib/overlay-headless.ts`) — same `processReceiptImage` as gallery OCR
+- Config plugin: `plugins/withSpendSenseOverlay.js` copies `native/android/screenshotbubble/` on prebuild
+- Full spec: [overlay-v2.md](./overlay-v2.md)
 
 ### 6.2 Data Storage
 - All data stored **on-device only** — no server, no cloud sync (V1)
@@ -488,7 +502,7 @@ Increase by 2,000/month → saves 1 month
 
 ### 6.5 Permissions Required
 - Gallery read access (`expo-image-picker`) — prompted on first "Scan Receipt" use
-- `SYSTEM_ALERT_WINDOW` and `MediaProjection` — **V2 only** (bubble overlay, not in V1)
+- `SYSTEM_ALERT_WINDOW` + `MediaProjection` — bubble overlay (Settings → Scan Bubble, dev client only)
 
 ---
 
@@ -496,15 +510,16 @@ Increase by 2,000/month → saves 1 month
 
 | Feature | Version |
 |---|---|
-| Floating bubble overlay (SYSTEM_ALERT_WINDOW) | V2 |
-| Share intent / share-sheet capture | V2 |
-| SMS / email thread reading | V2 |
+| Share intent / share-sheet capture | V2+ |
+| SMS / email thread reading | V2+ |
 | Dark mode | V2 |
 | "Ask the Plan" conversational feature | V2 |
 | SIP / share portfolio tracking (NAV, returns) | V2 |
 | iOS version | V3 |
 | Cloud backup / sync | V3 |
 | Multi-currency | V3 |
+
+Bubble overlay is **shipped in codebase**; requires dev client build + on-device testing.
 
 ---
 

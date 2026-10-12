@@ -1,6 +1,8 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import { colors } from '@/constants/colors'
 import { formatNPR, formatDate } from '@/lib/format'
+import { transactionSubtitle, transactionTitle } from '@/lib/transaction-label'
+import { useBucketsStore } from '@/store/buckets'
 import type { Transaction } from '@/store/transactions'
 
 interface TransactionRowProps {
@@ -11,7 +13,13 @@ interface TransactionRowProps {
 }
 
 export function TransactionRow({ transaction, bucketName, bucketColor, onPress }: TransactionRowProps) {
+  const buckets = useBucketsStore(s => s.buckets)
   const isIncome = transaction.type === 'income'
+  const title = transactionTitle(transaction)
+  const subtitle = transactionSubtitle(transaction)
+  const fundedFromName = transaction.fundedFromBucketId
+    ? buckets.find(b => b.id === transaction.fundedFromBucketId)?.name
+    : null
 
   return (
     <TouchableOpacity
@@ -20,9 +28,18 @@ export function TransactionRow({ transaction, bucketName, bucketColor, onPress }
       activeOpacity={0.7}
     >
       <View style={styles.left}>
-        <Text style={styles.merchant} numberOfLines={1}>
-          {transaction.merchant || 'Unknown'}
+        <Text style={styles.title} numberOfLines={1}>
+          {title}
         </Text>
+        {fundedFromName ? (
+          <Text style={styles.subtitle} numberOfLines={1}>
+            from {fundedFromName}
+          </Text>
+        ) : subtitle ? (
+          <Text style={styles.subtitle} numberOfLines={1}>
+            {subtitle}
+          </Text>
+        ) : null}
         <Text style={styles.date}>{formatDate(transaction.date)}</Text>
       </View>
 
@@ -32,11 +49,6 @@ export function TransactionRow({ transaction, bucketName, bucketColor, onPress }
             {bucketName}
           </Text>
         </View>
-        {transaction.source === 'ocr' && (
-          <View style={styles.ocrBadge}>
-            <Text style={styles.ocrBadgeText}>OCR</Text>
-          </View>
-        )}
       </View>
 
       <Text style={[styles.amount, { color: isIncome ? colors.green : colors.red }]}>
@@ -52,22 +64,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.surface,
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: colors.divider,
   },
   flaggedRow: {
-    borderLeftWidth: 3,
+    borderLeftWidth: 4,
     borderLeftColor: colors.amber,
+    backgroundColor: '#F59E0B12',
   },
   left: {
     flex: 1,
     marginRight: 8,
   },
-  merchant: {
+  title: {
     fontSize: 15,
     fontFamily: 'Inter_700Bold',
     color: colors.textPrimary,
+  },
+  subtitle: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: colors.textMuted,
+    marginTop: 2,
   },
   date: {
     fontSize: 12,
@@ -90,17 +109,6 @@ const styles = StyleSheet.create({
   bucketPillText: {
     fontSize: 11,
     fontFamily: 'Inter_500Medium',
-  },
-  ocrBadge: {
-    backgroundColor: colors.divider,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  ocrBadgeText: {
-    fontSize: 9,
-    fontFamily: 'Inter_600SemiBold',
-    color: colors.textMuted,
   },
   amount: {
     fontSize: 15,

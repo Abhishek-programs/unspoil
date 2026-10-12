@@ -8,6 +8,7 @@ import {
   StyleSheet,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors } from '@/constants/colors'
 import { formatNPR, formatNPRShort, formatDate } from '@/lib/format'
 import { useTransactionsStore, INCOME_BUCKET_ID } from '@/store/transactions'
@@ -15,14 +16,19 @@ import { useBucketsStore } from '@/store/buckets'
 import { useGoalsStore } from '@/store/goals'
 import { TransactionRow } from '@/components/transactions/TransactionRow'
 import { TransactionDetailSheet } from '@/components/transactions/TransactionDetailSheet'
+import { LendingRow } from '@/components/transactions/LendingRow'
 import { ChartsView } from '@/components/transactions/ChartsView'
 import type { Transaction } from '@/store/transactions'
+import { useLendingStore } from '@/store/lending'
+import { router } from 'expo-router'
 
-type FilterKey = 'all' | 'income' | 'flagged' | string
+type FilterKey = 'all' | 'income' | 'flagged' | 'lending' | string
 
 export default function TransactionsScreen() {
+  const insets = useSafeAreaInsets()
   const { transactions } = useTransactionsStore()
   const { buckets, getSpendingBuckets, getSavingsBuckets } = useBucketsStore()
+  const { entries: lendingEntries, contacts, allEntries } = useLendingStore()
 
   const [viewMode, setViewMode] = useState<'list' | 'chart'>('list')
   const [chartPeriod, setChartPeriod] = useState<'month' | 'year'>('month')
@@ -49,10 +55,41 @@ export default function TransactionsScreen() {
     ...spendingBuckets.map(b => ({ key: b.id, label: b.name })),
     { key: 'savings', label: 'Savings' },
     { key: 'income', label: 'Income' },
+    { key: 'lending', label: 'Lending' },
     { key: 'flagged', label: 'Flagged' },
   ], [spendingBuckets])
 
+  const isLendingFilter = activeFilter === 'lending'
+
+  const contactMap = useMemo(() => {
+    const m = new Map<string, string>()
+    contacts.forEach(c => m.set(c.id, c.name))
+    return m
+  }, [contacts])
+
+  const lendingSections = useMemo(() => {
+    const source = isLendingFilter ? allEntries : lendingEntries
+    const sorted = [...source].sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+    )
+    const groups: Record<string, typeof sorted> = {}
+    sorted.forEach(e => {
+      const key = formatDate(e.date)
+      if (!groups[key]) groups[key] = []
+      groups[key].push(e)
+    })
+    return Object.entries(groups).map(([title, data]) => ({ title, data }))
+  }, [allEntries, lendingEntries, isLendingFilter])
+
+  const lendingSummary = useMemo(() => {
+    const source = isLendingFilter ? allEntries : lendingEntries
+    const lent = source.filter(e => e.type === 'lend').reduce((s, e) => s + e.amount, 0)
+    const borrowed = source.filter(e => e.type === 'borrow').reduce((s, e) => s + e.amount, 0)
+    return { lent, borrowed }
+  }, [allEntries, lendingEntries, isLendingFilter])
+
   const filtered = useMemo(() => {
+    if (activeFilter === 'lending') return []
     if (activeFilter === 'all') return transactions
     if (activeFilter === 'income') return transactions.filter(t => t.type === 'income')
     if (activeFilter === 'flagged') return transactions.filter(t => t.isFlagged)
@@ -142,7 +179,7 @@ export default function TransactionsScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <View>
           <Text style={styles.headerTitle}>Ledger</Text>
           {viewMode === 'chart' && (
@@ -197,6 +234,7 @@ export default function TransactionsScreen() {
       </View>
 
       {/* Summary row */}
+      {!isLendingFilter ? (
       <View style={styles.summaryRow}>
         <View style={styles.summaryItem}>
           <Text style={[styles.summaryValue, { color: colors.green }]}>{formatNPRShort(totalIncome)}</Text>
@@ -215,9 +253,50 @@ export default function TransactionsScreen() {
           <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Net</Text>
         </View>
       </View>
+      ) : (
+      <View style={styles.summaryRow}>
+        <View style={styles.summaryItem}>
+          <Text style={[styles.summaryValue, { color: colors.purple }]}>{formatNPRShort(lendingSummary.lent)}</Text>
+          <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Lent</Text>
+        </View>
+        <View style={styles.summaryDivider} />
+        <View style={styles.summaryItem}>
+          <Text style={[styles.summaryValue, { color: colors.amber }]}>{formatNPRShort(lendingSummary.borrowed)}</Text>
+          <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Borrowed</Text>
+        </View>
+      </View>
+      )}
 
       {/* Content */}
-      {viewMode === 'list' ? (
+      {(viewMode === 'list' || isLendingFilter) ? (
+        isLendingFilter ? (
+        <SectionList
+          sections={lendingSections}
+          keyExtractor={item => item.id}
+          renderSectionHeader={({ section }) => (
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionHeaderText}>{section.title}</Text>
+            </View>
+          )}
+          renderItem={({ item }) => (
+            <LendingRow
+              entry={item}
+              personName={contactMap.get(item.contactId) ?? 'Unknown'}
+              onPress={() => router.push(`/lending/${item.contactId}`)}
+            />
+          )}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Text style={styles.emptyText}>No lend/borrow entries yet</Text>
+            </View>
+          }
+          contentContainerStyle={[
+            styles.listContent,
+            lendingSections.length === 0 && { flex: 1 },
+          ]}
+          stickySectionHeadersEnabled={false}
+        />
+        ) : (
         <SectionList
           sections={sections}
           keyExtractor={item => item.id}
@@ -249,6 +328,7 @@ export default function TransactionsScreen() {
           ]}
           stickySectionHeadersEnabled={false}
         />
+        )
       ) : (
         <ScrollView 
           contentContainerStyle={{ paddingBottom: 40 }}
@@ -377,13 +457,15 @@ const styles = StyleSheet.create({
   },
   sectionHeader: {
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingTop: 16,
+    paddingBottom: 8,
     backgroundColor: colors.pageBg,
   },
   sectionHeaderText: {
     fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
-    color: colors.textMuted,
+    color: colors.textSecond,
+    letterSpacing: 0.2,
   },
   empty: {
     flex: 1,

@@ -7,12 +7,13 @@ Personal finance app for Android. React Native + Expo. NPR, Nepal-focused. **No 
 | Priority | File | Use for |
 |---|---|---|
 | 1 | **This file** | Stack, rules, repo map, agent workflow |
-| 2 | `docs/screen-flows.md` | Screen behavior and UX specs |
-| 3 | `BUILD_ORDER.md` | What's done vs next |
-| 4 | `docs/prd.md` | Product intent (may be stale) |
-| 5 | `docs/overlay-v2.md` | V2 bubble overlay — only when building overlay |
+| 2 | `docs/core-function.md` | Mental model, money flows, month logic |
+| 3 | `docs/design-and-features.md` | Finalized UI, screens, formulas |
+| 4 | `docs/screen-flows.md` | Screen behavior and UX specs (historical where stale) |
+| 5 | `BUILD_ORDER.md` | What's done vs next |
+| 6 | `docs/prd.md` | Product intent (historical where stale) |
 
-If docs conflict: **AGENTS.md → screen-flows → BUILD_ORDER → prd**.
+If docs conflict: **AGENTS.md → core-function / design-and-features → screen-flows → BUILD_ORDER → prd**.
 
 ---
 
@@ -24,9 +25,9 @@ cp .env.example .env   # optional — app runs without it today
 npx expo start
 ```
 
-Copy `.env.example` → `.env`. See `.env.example` for EAS/OCR vars when needed.
+Copy `.env.example` → `.env`. See `.env.example` for EAS vars when needed.
 
-**Native modules (OCR, overlay):** need a dev client, not Expo Go. See `.claude/skills/expo-dev-client` after running `npx skills experimental_install`.
+**Recommended:** a development build (`npx expo run:android`) so local notifications work fully. Expo Go works for basic UI but warns on `expo-notifications`.
 
 ---
 
@@ -41,7 +42,6 @@ Copy `.env.example` → `.env`. See `.env.example` for EAS/OCR vars when needed.
 | State | Zustand (`store/`) |
 | Database | expo-sqlite + Drizzle (`db/`) |
 | Charts | react-native-gifted-charts |
-| OCR (target) | `rn-mlkit-ocr` on-device — `lib/ocr.ts` is still mocked |
 | Fonts | Inter via `@expo-google-fonts/inter` |
 
 No tests in V1. No drive-by refactors.
@@ -53,23 +53,26 @@ No tests in V1. No drive-by refactors.
 ```
 app/
   _layout.tsx           DB init, font load, store hydration, nudges
-  onboarding/           5-step first-launch wizard
+  onboarding/           6-step first-launch wizard
   (tabs)/               Home, Transactions, Goals, Settings + center [+]
+  lending/              Person list + per-contact ledger
 
 components/
   ui/                   Card, Chip, ProgressBar
-  home/                 HeroRing, LivingSection, FutureSection, NetWorthCard, …
-  transactions/         TransactionRow, ChartsView, detail sheet
+  home/                 HeroRing, LivingSection, FutureSection, NetWorthCard, LentBorrowRow, …
+  transactions/         TransactionRow, ChartsView, LendingRow, detail sheet
   goals/                GoalCard, AddGoalSheet, GoalDetailSheet
+  lending/              LendBorrowForm, PersonPicker, SettleUpSheet
   manual-entry/         ManualEntrySheet (center [+] button)
   flagged/              FlaggedTransactionPrompt
 
-store/                  Zustand — playbook, buckets, transactions, goals
+store/                  Zustand — playbook, buckets, transactions, goals, lending
 db/                     schema.ts, client.ts, migrations/, seed.ts
-lib/                    format, categorize, projection, ocr, notifications, month, chart-data
-constants/              colors.ts (design tokens), defaults.ts (playbook defaults)
+lib/                    format, categorize, projection, goals/, …
+constants/              colors.ts, defaults.ts
+components/onboarding/  OnboardingBack (subtle chevron)
 hooks/                  usePulseData.ts
-docs/                   screen-flows, prd, overlay-v2 prompt, mockup
+docs/                   screen-flows, prd, mockup (historical where stale)
 .claude/skills/         Agent skills (see below)
 ```
 
@@ -83,7 +86,7 @@ Entry point: `expo-router/entry` (`package.json` `"main"`).
 Home  |  Transactions  |  [+]  |  Goals  |  Settings
 ```
 
-- `[+]` opens `ManualEntrySheet` — **not a tab**, no route change.
+- `[+]` opens `ManualEntrySheet` — **not a tab**, no route change. Manual entry only (expense / income / lend-borrow).
 - Transaction/goal details: bottom sheets inside their tab.
 - Design tokens: `constants/colors.ts`. Light theme only. Inter. NPR amounts use tabular nums.
 
@@ -93,29 +96,33 @@ Home  |  Transactions  |  [+]  |  Goals  |  Settings
 
 **Auto-categorization** (`lib/categorize.ts`) — strict priority:
 
-1. Remarks suffix `keyword -` → bucket (case-insensitive)
-2. Sure-shot merchant list (Settings)
+1. Keyword appears in description, remarks, or merchant text → mapped bucket
+2. Sure-shot merchant list (Settings)  
 3. Fallback bucket + `is_flagged = true`
 
 Never auto-memorize ambiguous merchants.
 
 **Month boundaries:** user `month_start_day` from playbook — not calendar month (`lib/month.ts`).
 
-**EF target:** `EF_MULTIPLIER` × Core Living bucket — never from income (`constants/defaults.ts`).
+**Safe to spend:** unlocks only after salary is confirmed this month (`__salary__` income txn). Ring and safe-to-spend exclude carried-forward balance (`hooks/usePulseData.ts`).
+
+**EF target:** `EF_MULTIPLIER` × Core Living monthly amount (`constants/defaults.ts`, onboarding Foundations).
+
+**Onboarding order:** Foundations → Bucket Builder (includes **Saving towards goal** pool) → Goals (split that pool) → Balances.
 
 **Spending buckets:** green &lt;80%, amber 80–99%, red ≥100%.
 
 **Nudges:** max 1/day, quiet 10pm–8am (`lib/notifications.ts`).
 
-**V2 overlay:** additive only — do not change `lib/categorize.ts`, `store/`, or `db/schema.ts`. See `docs/overlay-v2.md`.
+**Funded-from savings:** When logging a contribution to a savings/investment bucket, optional `fundedFromBucketId` uses that Living/Personal ceiling or fund; destination still gets `__savings_confirm__`. See `docs/superpowers/specs/2026-07-26-living-ceilings-funded-from-design.md`.
 
 ---
 
 ## V1 scope (short)
 
-**In:** manual entry, screenshot OCR flow, auto-categorize, home dashboard, transactions + charts, goals, settings/playbook, 5-step onboarding, month checklist, nudges, CSV export.
+**In:** manual entry, auto-categorize, home dashboard (Your money + Hero ring + Living/Future), lent & borrowed, transactions + charts, goals/Vault, settings/playbook, 6-step onboarding, month checklist, nudges, CSV export.
 
-**Out:** bubble overlay, share intent, SMS/email, dark mode, AI chat, iOS, cloud sync.
+**Out:** OCR / receipt scan, share intent, bubble overlay, SMS/email, dark mode, AI chat, iOS, cloud sync.
 
 ---
 
@@ -140,7 +147,6 @@ Cursor and Claude both discover skills under `.claude/skills/` and `.agents/skil
 | NativeWind / Tailwind | `expo-tailwind-setup` |
 | Dev client builds | `expo-dev-client` |
 | EAS / Play Store | `expo-deployment` |
-| Native modules (overlay) | `expo-module` |
 | SDK upgrades | `upgrading-expo` |
 
 ### Coding style

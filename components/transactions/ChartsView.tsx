@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native'
+import Animated, { FadeIn } from 'react-native-reanimated'
 import { BarChart } from 'react-native-gifted-charts'
 import { colors } from '@/constants/colors'
 import { Ionicons } from '@expo/vector-icons'
@@ -74,7 +75,7 @@ export function ChartsView({
   const trendBarData = trendData.map(m => ({
     value: m.total,
     label: m.month,
-    frontColor: m.isCurrent ? colors.green : colors.green + '40',
+    frontColor: m.isCurrent ? colors.green : colors.green + '30',
     topLabelComponent: () =>
       m.total > 0 ? (
         <Text style={styles.barTopLabel}>{formatNPRShort(m.total)}</Text>
@@ -85,8 +86,8 @@ export function ChartsView({
     <View style={styles.container}>
       {/* Spending by Bucket */}
       {spendingByBucket.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.title}>Spending by Bucket</Text>
+        <Animated.View style={styles.section} entering={FadeIn.duration(300)}>
+          <Text style={styles.title}>Spending by bucket</Text>
           <View style={styles.chartCard}>
             {spendingByBucket.map(item => {
               const ratio = item.limit > 0 ? Math.min(item.value / item.limit, 1) : 0
@@ -111,13 +112,13 @@ export function ChartsView({
               )
             })}
           </View>
-        </View>
+        </Animated.View>
       )}
 
       {/* Trend Chart */}
-      <View style={styles.section}>
+      <Animated.View style={styles.section} entering={FadeIn.duration(300)}>
         <Text style={styles.title}>
-          {period === 'year' ? '12-Month Spending Trend' : '6-Month Spending Trend'}
+          {period === 'year' ? '12-month spending trend' : '6-month spending trend'}
         </Text>
         {loading ? (
           <View style={styles.loadingBox}>
@@ -135,7 +136,7 @@ export function ChartsView({
             </View>
           </View>
         ) : (
-          <View style={styles.chartCard}>
+          <View style={[styles.chartCard, styles.trendCard]}>
             <BarChart
               data={trendBarData}
               barWidth={period === 'year' ? 18 : 28}
@@ -149,17 +150,19 @@ export function ChartsView({
               rulesColor={colors.divider}
               xAxisLabelTextStyle={styles.xLabel}
               hideYAxisText
+              overflowTop={18}
+              labelsExtraHeight={16}
               isAnimated
               animationDuration={400}
             />
           </View>
         )}
-      </View>
+      </Animated.View>
 
       {/* Savings Grid */}
       {savingsByBucket.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.title}>Savings & Investments</Text>
+        <Animated.View style={styles.section} entering={FadeIn.duration(300)}>
+          <Text style={styles.title}>Savings & investments</Text>
           <View style={styles.savingsGrid}>
             {savingsByBucket.map(item => (
               <View key={item.label} style={styles.savingsCard}>
@@ -191,13 +194,13 @@ export function ChartsView({
               </View>
             ))}
           </View>
-        </View>
+        </Animated.View>
       )}
 
       {/* Goal Projections */}
       {goals.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.title}>Goal Projections</Text>
+        <Animated.View style={styles.section} entering={FadeIn.duration(300)}>
+          <Text style={styles.title}>Goal projections</Text>
           {goals.map(goal => (
             <View key={goal.name} style={styles.goalLine}>
               <View style={styles.goalHeader}>
@@ -222,7 +225,7 @@ export function ChartsView({
               </View>
             </View>
           ))}
-        </View>
+        </Animated.View>
       )}
     </View>
   )
@@ -236,20 +239,21 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   title: {
-    fontSize: 14,
-    fontFamily: 'Inter_700Bold',
+    fontSize: 15,
+    fontFamily: 'Inter_600SemiBold',
     color: colors.textPrimary,
     marginBottom: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
   chartCard: {
     backgroundColor: colors.surface,
-    borderRadius: 20,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: colors.border,
     padding: 20,
     borderCurve: 'continuous',
+  },
+  trendCard: {
+    paddingTop: 28,
   },
   // Horizontal bar chart styles
   hBarRow: {
@@ -280,14 +284,14 @@ const styles = StyleSheet.create({
   },
   hBarFill: {
     height: '100%',
-    borderRadius: 5,
+    borderRadius: 6,
   },
   // Trend / bar chart
   barTopLabel: {
-    fontSize: 9,
+    fontSize: 10,
     fontFamily: 'Inter_500Medium',
     color: colors.textSecond,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   xLabel: {
     fontSize: 10,
@@ -298,7 +302,7 @@ const styles = StyleSheet.create({
   },
   loadingBox: {
     backgroundColor: colors.surface,
-    borderRadius: 20,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: colors.border,
     padding: 40,

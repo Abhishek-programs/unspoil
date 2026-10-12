@@ -1,6 +1,6 @@
 # Build Order
 
-What’s shipped and what’s next. For stack and rules see [AGENTS.md](./AGENTS.md). For screen specs see [docs/screen-flows.md](./docs/screen-flows.md).
+What's shipped and what's next. For stack and rules see [AGENTS.md](./AGENTS.md). For behavior and UI see [docs/core-function.md](./docs/core-function.md) and [docs/design-and-features.md](./docs/design-and-features.md).
 
 ---
 
@@ -9,45 +9,30 @@ What’s shipped and what’s next. For stack and rules see [AGENTS.md](./AGENTS
 | Area | Status |
 |---|---|
 | DB + Drizzle + seed + migrations | Done |
-| Zustand stores + root hydration | Done |
-| Home (HeroRing, Living, Future, NetWorth) | Done |
-| Manual entry + center [+] FAB | Done |
-| Categorization (3-step) + flagged prompt | Done |
-| Transactions list, detail sheet, charts | Done |
-| Goals + EF pseudo-goal + projections | Done |
-| 5-step onboarding | Done |
+| Zustand stores + root hydration + month rollover / surplus carry-forward | Done |
+| 6-step onboarding (Foundations → Bucket Builder → Goals → Balances) | Done |
+| Home — Your money → ring → lent/borrow → Living → Future | Done |
+| Lent & borrowed — contacts, person ledger, settle up | Done |
+| Salary-gated safe to spend | Done |
+| Personal accumulating fund + cap prompts | Done |
+| Goals / Vault | Done |
 | Month start checklist | Done |
-| Notifications + settings toggles | Done |
+| **Manual entry only** (expense / income / lend-borrow) via center [+] | Done |
+| Transactions ledger + charts + detail sheet | Done |
+| Settings — playbook, buckets, keywords, notifications, CSV export | Done |
+
+**Removed from scope (for now):** OCR / gallery scan, share-to-app, scan bubble overlay.
 
 ---
 
-## Next (V1)
+## Next
 
-### OCR scanner — Step 11
-
-- [ ] Replace mock in `lib/ocr.ts` with real parsing (`parseOcrText()` — eSewa, Khalti, NMB, Global IME)
-- [ ] Wire `expo-image-picker` → OCR → pre-fill `ManualEntrySheet`
-- [ ] Run through `lib/categorize.ts` on save
-- [ ] Add `rn-mlkit-ocr` + dev client build when ready
-
-### Polish
-
-- [ ] Net worth card: tap for asset breakdown (EF, MacBook, shares)
-- [ ] Auto-create recurring drafts on month start (PRD F5)
+- [ ] Use the app daily — log expenses via [+]
+- [ ] Optional polish (fonts, recurring auto-drafts) when needed
+- [ ] Capture / OCR later if manual entry gets tedious
 
 ---
 
-## V2 — Bubble overlay (Android)
+## Deferred / out of scope
 
-Full implementation prompt: [docs/overlay-v2.md](./docs/overlay-v2.md)
-
-1. Bubble UI + foreground service
-2. Screen capture (MediaProjection)
-3. ML Kit OCR pipeline
-4. Categorize + save via existing stores (additive only)
-
----
-
-## Exploratory (no timeline)
-
-AI insights layer in `ai/` — tap-triggered only, no chat. Needs 3+ months of real data first.
+- Share intent, SMS/email ingest, dark mode, AI chat, iOS, cloud sync

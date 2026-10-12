@@ -10,10 +10,23 @@ interface GoalCardProps {
   target: number
   monthly: number
   color: string
+  paused?: boolean
+  archived?: boolean
+  suggestedTarget?: number | null
   onPress: () => void
 }
 
-export function GoalCard({ name, current, target, monthly, color, onPress }: GoalCardProps) {
+export function GoalCard({
+  name,
+  current,
+  target,
+  monthly,
+  color,
+  paused,
+  archived,
+  suggestedTarget,
+  onPress,
+}: GoalCardProps) {
   const percent = Math.min((current / target) * 100, 100)
   const { projectedDate, nudge } = projectGoal({ current, target, monthly })
 
@@ -24,7 +37,7 @@ export function GoalCard({ name, current, target, monthly, color, onPress }: Goa
 
   return (
     <TouchableOpacity 
-      style={styles.container} 
+      style={[styles.container, paused && styles.containerPaused]} 
       activeOpacity={0.8}
       onPress={onPress}
     >
@@ -44,17 +57,34 @@ export function GoalCard({ name, current, target, monthly, color, onPress }: Goa
 
         <View style={styles.info}>
           <View style={styles.header}>
-            <Text style={styles.name}>{name}</Text>
-            <Text style={styles.date}>{projectedDate}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+              <Text style={[styles.name, paused && styles.namePaused]}>{name}</Text>
+              {archived && (
+                <View style={styles.archivedBadge}>
+                  <Text style={styles.archivedBadgeText}>Archived</Text>
+                </View>
+              )}
+              {paused && !archived && (
+                <View style={styles.pausedBadge}>
+                  <Text style={styles.pausedBadgeText}>Paused</Text>
+                </View>
+              )}
+            </View>
+            {!paused && <Text style={styles.date}>{projectedDate}</Text>}
           </View>
           
           <View style={styles.meta}>
             <Text style={styles.progressText}>
-              {formatNPRShort(current)} of {formatNPRShort(target)}
+              {formatNPRShort(current)} of {formatNPRShort(suggestedTarget ?? target)}
             </Text>
-            <Text style={styles.monthlyText}>
-              {formatNPRShort(monthly)}/mo
-            </Text>
+            {!archived && (
+              <Text style={styles.monthlyText}>{formatNPRShort(monthly)}/mo</Text>
+            )}
+            {suggestedTarget != null && !archived && (
+              <Text style={styles.suggestedText}>
+                Suggested target: {formatNPRShort(suggestedTarget)}
+              </Text>
+            )}
           </View>
         </View>
       </View>
@@ -80,10 +110,13 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderCurve: 'continuous',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  containerPaused: {
+    opacity: 0.65,
   },
   content: {
     flexDirection: 'row',
@@ -115,6 +148,33 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_700Bold',
     color: colors.textPrimary,
   },
+  namePaused: {
+    color: colors.textMuted,
+  },
+  pausedBadge: {
+    backgroundColor: colors.border,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  pausedBadgeText: {
+    fontSize: 10,
+    fontFamily: 'Inter_600SemiBold',
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+  },
+  archivedBadge: {
+    backgroundColor: colors.divider,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  archivedBadgeText: {
+    fontSize: 10,
+    fontFamily: 'Inter_600SemiBold',
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+  },
   date: {
     fontSize: 12,
     fontFamily: 'Inter_600SemiBold',
@@ -134,6 +194,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter_600SemiBold',
     color: colors.textMuted,
+  },
+  suggestedText: {
+    fontSize: 11,
+    fontFamily: 'Inter_500Medium',
+    color: colors.textMuted,
+    marginTop: 4,
   },
   nudge: {
     marginTop: 16,

@@ -1,6 +1,7 @@
 import '../global.css'
 import { useEffect, useState } from 'react'
 import { Stack, router } from 'expo-router'
+import { StatusBar, setStatusBarStyle } from 'expo-status-bar'
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter'
 import * as SplashScreen from 'expo-splash-screen'
 import { runMigrations } from '@/db/client'
@@ -9,6 +10,7 @@ import { usePlaybookStore } from '@/store/playbook'
 import { useBucketsStore } from '@/store/buckets'
 import { useTransactionsStore } from '@/store/transactions'
 import { useGoalsStore } from '@/store/goals'
+import { useLendingStore } from '@/store/lending'
 import { getMonthRange, getDaysRemaining } from '@/lib/month'
 import {
   requestPermissions,
@@ -17,6 +19,8 @@ import {
   setNudgeToggles,
   setLastNotificationDate,
 } from '@/lib/notifications'
+import { runMonthRollover } from '@/lib/bucket-balance'
+import { runSurplusRollover } from '@/lib/month-surplus'
 
 SplashScreen.preventAutoHideAsync()
 
@@ -32,6 +36,11 @@ export default function RootLayout() {
   const { loadBuckets } = useBucketsStore()
   const { loadTransactions } = useTransactionsStore()
   const { loadGoals } = useGoalsStore()
+  const { loadContacts, loadEntries, loadAllEntries } = useLendingStore()
+
+  useEffect(() => {
+    setStatusBarStyle('dark', true)
+  }, [])
 
   useEffect(() => {
     runMigrations()
@@ -46,12 +55,32 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (!playbookLoaded) return
-    const { monthStartDay } = usePlaybookStore.getState()
-    const { start, end } = getMonthRange(monthStartDay)
-    loadBuckets()
+    const pb = usePlaybookStore.getState()
+    const { start, end } = getMonthRange(pb.monthStartDay)
+    loadBuckets().then(() => {
+      if (isOnboarded) {
+        runMonthRollover(pb.monthStartDay, pb.lastBalanceRolloverMonth).then(async monthKey => {
+          if (monthKey !== pb.lastBalanceRolloverMonth) {
+            await pb.updatePlaybook({ lastBalanceRolloverMonth: monthKey })
+            await useBucketsStore.getState().loadBuckets()
+          }
+          const surplusKey = await runSurplusRollover(
+            pb.monthStartDay,
+            pb.lastSurplusRolloverMonth,
+          )
+          if (surplusKey !== pb.lastSurplusRolloverMonth) {
+            await pb.updatePlaybook({ lastSurplusRolloverMonth: surplusKey })
+            await usePlaybookStore.getState().loadPlaybook()
+          }
+        })
+      }
+    })
     loadTransactions(start, end)
     loadGoals()
-  }, [playbookLoaded])
+    loadContacts()
+    loadAllEntries()
+    loadEntries(start, end)
+  }, [playbookLoaded, isOnboarded])
 
   // Notification setup — runs once after onboarding
   useEffect(() => {
@@ -77,6 +106,7 @@ export default function RootLayout() {
 
     const spentByBucket: Record<string, { spent: number; limit: number; name: string }> = {}
     spendingBuckets.forEach(b => {
+      if (b.accumulates) return
       spentByBucket[b.id] = {
         spent: ts.getSpentByBucket(b.id),
         limit: b.monthlyAmount,
@@ -127,13 +157,18 @@ export default function RootLayout() {
     return () => clearTimeout(t)
   }, [])
 
-  if (!fontsLoaded && !fontError) return null
-  if (!dbReady) return null
+  const ready = (fontsLoaded || fontError) && dbReady
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
-    </Stack>
+    <>
+      <StatusBar style="dark" />
+      {ready && (
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="lending" options={{ headerShown: false }} />
+          <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
+        </Stack>
+      )}
+    </>
   )
 }

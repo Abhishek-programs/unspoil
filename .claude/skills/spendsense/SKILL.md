@@ -9,17 +9,17 @@ Read **[AGENTS.md](../../../AGENTS.md)** before making changes. It is the single
 
 ## Quick pointers
 
-- **Screens:** `docs/screen-flows.md`
+- **Logic:** `docs/core-function.md`
+- **UI / features:** `docs/design-and-features.md`
 - **Next tasks:** `BUILD_ORDER.md`
-- **V2 overlay:** `docs/overlay-v2.md` — never modify `lib/categorize.ts`, `store/`, or `db/schema.ts`
 
 ## Hard rules (summary)
 
 - NPR via `lib/format.ts`. Colors in `constants/colors.ts`. Light theme only.
-- Categorization: remarks suffix → sure-shot merchant → fallback + flag.
-- EF target = Core Living × multiplier — not income.
-- `[+]` opens `ManualEntrySheet` — not a tab.
-- `lib/ocr.ts` is mocked — replace, don't extend long-term.
+- Categorization: keyword word match (description / remarks / merchant) → sure-shot merchant → fallback + flag.
+- EF target = Core Living × `EF_MULTIPLIER` — not income.
+- Safe to spend unlocks after salary confirmed this month (`__salary__` txn).
+- `[+]` opens `ManualEntrySheet` — not a tab. Manual entry only (no OCR / share).
 - No tests, no drive-by refactors, no extra scope.
 
 ## Other skills

@@ -43,9 +43,9 @@ Nav bar uses glassmorphism — white/translucent background, blurred, floated ab
 5. Insights — Monthly / Annual
 6. Goal Detail
 7. Settings / Playbook
-8. Onboarding (flow, 7 steps)
+8. Onboarding (flow, 6 steps)
 9. Flagged Transaction Prompt (on next open)
-10. Bubble Capture *(V2 — not in V1)*
+10. Bubble Capture *(V2 — Kotlin `screenshotbubble` module shipped; headless JS OCR; dev client test pending)*
 11. Share Receive *(V2 — not in V1)*
 
 ---
@@ -68,10 +68,23 @@ Nav bar uses glassmorphism — white/translucent background, blurred, floated ab
 
 ### Net Worth Card
 - Label: "Net worth"
-- Large number: total net worth (NPR)
+- Large number: total net worth (NPR) — EF start balance + goal startBalance + contributions
+- Empty state: "Your plan is live — net worth builds from here" when no data yet
 - Sub-label: "+X,XXX this month" in green
 - Three mini pills below: Assets | Liabilities | Savings rate
-- Tap to expand → shows asset breakdown (EF, BigExpense, Shares portfolio)
+- Tap to expand → asset breakdown (EF, goals, SIP/Shares)
+
+### EF Goal Card (compact)
+- Emergency Fund progress bar vs `playbook.efFloor`
+- Current = `efStartBalance` + savings confirmations
+
+### Hero Ring — Dual Safe to Spend
+- **Center:** `actualSafeToSpend` — label "SAFE TO SPEND"
+- **Green arc:** actual discretionary after savings plan
+- **Teal arc:** planned savings set-aside wedge
+- **Floating pill:** `safeBeforeInvestments` with "pool · before savings"
+- Weekly rate below ring
+- Metric pills: Invested | Saved | Spent
 
 ### Lifestyle Section
 - Section header: "Lifestyle · [Month]" + "See all" link
@@ -262,7 +275,8 @@ Nav bar uses glassmorphism — white/translucent background, blurred, floated ab
 - Goal name + target amount (header)
 - Large circular progress ring (contributed / target)
 - Stats row: Contributed | Monthly | Target | Projected date
-- Equity vs debt split bar (if goal has two buckets e.g. MacBook)
+- Monthly split (Pay upfront / EMI reserve) when `payment_mode = upfront_emi`
+- Paused badge when goal disabled
 - Sensitivity nudge card (same logic as Insights)
 - Recent contributions list (date + amount, last 6 entries)
 - Edit goal button (opens inline edit for name, target, date, monthly amount)
@@ -302,57 +316,27 @@ Grouped sections on `#F7F8FA` background. Each section has an uppercase tertiary
 
 ---
 
-## 8. Onboarding Flow (7 Steps, First Launch Only)
+## 8. Onboarding Flow (6 Steps, First Launch Only)
 
-**Step 1 — Welcome**
-- App name + one line: "Your financial plan, tracked automatically"
-- "Get started" button
+**Step 1 — Welcome:** Name capture → Money
 
-**Step 2 — Set Income**
-- Heading: "What's your monthly take-home pay?"
-- Large monospace input with "NPR" label left, pre-filled 1,25,000
-- Note below: "This helps us build your financial plan"
-- App auto-generates suggested bucket breakdown on confirm
-- Progress dots at top, step 2 active
+**Step 2 — Money:** Monthly take-home + month start day
 
-**Step 3 — Review Lifestyle Buckets**
-- Heading: "Your lifestyle budget"
-- Auto-generated split shown as editable cards:
-  - Core Living: 50,000 — with left border accent
-  - Dates & Outing: 10,000
-  - Fun: 5,000
-- Bento grid for smaller categories
-- Running total shown vs income
-- Add bucket button below
+**Step 3 — Foundations:** Core Living monthly, EF target (6× auto-suggest), current EF balance → `playbook.efStartBalance`
 
-**Step 4 — Review Savings Buckets**
-- Auto-generated savings allocation shown as editable cards
-- Same structure as Step 3
+**Step 4 — Goals:** Big purchase goals with payment mode:
+- Save up and pay in full (default) → one bucket per goal
+- Pay part upfront, rest in EMI → Pay upfront + EMI reserve buckets from day 1
+- Not sure yet → pay in full
+- Savings pace slider with **Apply new pace** (updates monthly + target date)
+- **Add another big purchase** (enable/disable per goal)
+- Back chevron on all steps after Welcome
 
-**Step 5 — Set Goals**
-- Heading: "What are you saving for?"
-- Goal rows with: Name, Target Amount (NPR), Target Date fields
-- Auto-calculates required monthly contribution per goal, shown in a sidebar or below each row
-- Add another goal button (dashed border)
-- Savings analysis panel showing total monthly required
-- Skippable
+**Step 5 — Bucket Builder:** Sticky income meter + back chevron in header. Goal groups (name + total/mo, sub-rows for Pay upfront / EMI reserve). EF/SIP/Shares flat. Fixed footer Next + keyboard-safe scroll. No goal name field here.
 
-**Step 6 — Starting Balances**
-- "How much is in your emergency fund today?" (default: 0)
-- "What is your current share portfolio value?" (default: NPR 3,50,000)
+**Step 6 — Starting Balances:** Cumulative SIP + Shares invested to date only (EF collected in Foundations). Skip allowed.
 
-**Step 7 — Remarks Prefixes**
-- Heading: "Auto-categorize with prefixes"
-- Example card showing: "Fun - coffee" → Fun bucket
-- List of default mappings: CORE, FUN, DATE, EF — each as a round pill
-- Add custom prefix link
-- "Almost Done" button
-- Skippable
-
-**Confirmation Screen**
-- "Your plan is live" heading
-- Summary stats: monthly flow, savings rate, days to first goal
-- "Go to Dashboard" button
+**Finish:** `setOnboarded()` → Home tab
 
 ---
 
@@ -396,11 +380,11 @@ Max 1 notification per day. Quiet hours 10pm–8am. All types individually toggl
 
 ---
 
-## V2 Screens (Not in V1)
+## V2 Screens
 
-### 10. Bubble Capture *(V2)*
+### 10. Bubble Capture *(V2 — shipped; device test pending)*
 
-Floating overlay on whitelisted apps. Requires `SYSTEM_ALERT_WINDOW` + `MediaProjection` permissions. User taps bubble → screenshot captured via MediaProjection → on-device OCR → categorization → notification. User never leaves payment app. Deferred because of native permission complexity.
+Floating overlay on **whitelisted apps only** (eSewa, Khalti, Chrome, …). Requires `SYSTEM_ALERT_WINDOW` + `PACKAGE_USAGE_STATS` + `MediaProjection`. User taps bubble → screenshot (bubble hidden) → Headless JS OCR via `rn-mlkit-ocr` → categorization → save. See [overlay-v2.md](./overlay-v2.md).
 
 ### 11. Share Receive *(V2)*
 

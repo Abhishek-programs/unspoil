@@ -1,27 +1,39 @@
 import { useState } from 'react'
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native'
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors } from '@/constants/colors'
 import { usePlaybookStore } from '@/store/playbook'
 
 export default function OnboardingInfoScreen() {
   const [name, setName] = useState('')
   const { updatePlaybook } = usePlaybookStore()
+  const insets = useSafeAreaInsets()
 
   const handleNext = async () => {
     if (!name.trim()) return
+    Keyboard.dismiss()
     await updatePlaybook({ userName: name.trim() })
     router.push('/onboarding/money')
   }
 
   return (
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    <KeyboardAvoidingView
       style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <View style={styles.content}>
+      <View style={[styles.content, { paddingTop: Math.max(insets.top, 24) + 56 }]}>
         <Animated.View entering={FadeInDown.duration(800).delay(200)}>
           <View style={styles.iconContainer}>
             <Ionicons name="sparkles" size={32} color={colors.green} />
@@ -39,22 +51,25 @@ export default function OnboardingInfoScreen() {
             onChangeText={setName}
             autoFocus
             autoCapitalize="words"
+            returnKeyType="done"
+            onSubmitEditing={handleNext}
           />
         </Animated.View>
-
-        <View style={styles.spacer} />
-
-        <Animated.View entering={FadeInRight.duration(600).delay(600)}>
-          <TouchableOpacity 
-            style={[styles.button, !name.trim() && styles.buttonDisabled]} 
-            onPress={handleNext}
-            disabled={!name.trim()}
-          >
-            <Text style={styles.buttonText}>Next</Text>
-            <Ionicons name="arrow-forward" size={20} color="#fff" />
-          </TouchableOpacity>
-        </Animated.View>
       </View>
+
+      <Animated.View
+        entering={FadeInRight.duration(600).delay(600)}
+        style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 24) }]}
+      >
+        <TouchableOpacity
+          style={[styles.button, !name.trim() && styles.buttonDisabled]}
+          onPress={handleNext}
+          disabled={!name.trim()}
+        >
+          <Text style={styles.buttonText}>Next</Text>
+          <Ionicons name="arrow-forward" size={20} color="#fff" />
+        </TouchableOpacity>
+      </Animated.View>
     </KeyboardAvoidingView>
   )
 }
@@ -67,8 +82,6 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 32,
-    paddingTop: 100,
-    paddingBottom: 60,
   },
   iconContainer: {
     width: 64,
@@ -103,8 +116,10 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.green,
     paddingVertical: 12,
   },
-  spacer: {
-    flex: 1,
+  footer: {
+    paddingHorizontal: 32,
+    paddingTop: 12,
+    backgroundColor: colors.pageBg,
   },
   button: {
     backgroundColor: colors.green,

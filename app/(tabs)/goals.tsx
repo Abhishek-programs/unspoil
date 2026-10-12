@@ -1,5 +1,7 @@
 import { useState, useMemo } from 'react'
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native'
+import Animated, { FadeInDown } from 'react-native-reanimated'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { colors } from '@/constants/colors'
 import { useGoalsStore, type Goal } from '@/store/goals'
@@ -10,15 +12,17 @@ import { GoalCard } from '@/components/goals/GoalCard'
 import { GoalDetailSheet } from '@/components/goals/GoalDetailSheet'
 import { AddGoalSheet } from '@/components/goals/AddGoalSheet'
 import { formatNPR } from '@/lib/format'
-import { EF_BUCKET_ID } from '@/constants/defaults'
+import { EF_BUCKET_ID, SIP_BUCKET_ID } from '@/constants/defaults'
+import { suggestSipTarget } from '@/lib/sip-target'
 
 const EF_PSEUDO_ID = '__ef_goal__'
 
 export default function GoalsScreen() {
+  const insets = useSafeAreaInsets()
   const { goals } = useGoalsStore()
   const { transactions } = useTransactionsStore()
   const { buckets } = useBucketsStore()
-  const { efFloor } = usePlaybookStore()
+  const { efFloor, efStartBalance, userAge, monthlyIncome } = usePlaybookStore()
 
   const [selectedGoal, setSelectedGoal] = useState<(Goal & { current: number; color: string }) | null>(null)
   const [detailVisible, setDetailVisible] = useState(false)
@@ -44,9 +48,15 @@ export default function GoalsScreen() {
         monthlyContribution: efBucket.monthlyAmount,
         targetDate: null,
         linkedBucketIds: [efBucket.id],
-        startBalance: 0,
+        startBalance: efStartBalance,
         createdAt: '',
-        current: efContributed,
+        paymentMode: 'pay_in_full' as const,
+        upfrontAmount: null,
+        emiTenureMonths: null,
+        isEnabled: true,
+        completedAt: null,
+        freedMonthlyAmount: null,
+        current: efStartBalance + efContributed,
         color: '#3B82F6',
         isEF: true,
       })
@@ -54,6 +64,7 @@ export default function GoalsScreen() {
 
     // User-created goals: only count __savings_confirm__ transactions as contributions
     goals.forEach(goal => {
+      if (goal.completedAt) return
       const contributed = transactions
         .filter(t =>
           goal.linkedBucketIds.includes(t.bucketId) &&
@@ -71,11 +82,34 @@ export default function GoalsScreen() {
     })
 
     return result
-  }, [goals, transactions, buckets, efBucket, efFloor])
+  }, [goals, transactions, buckets, efBucket, efFloor, efStartBalance])
+
+  const completedGoals = useMemo(() => {
+    return goals
+      .filter(g => g.completedAt)
+      .map(goal => {
+        const contributed = transactions
+          .filter(
+            t =>
+              goal.linkedBucketIds.includes(t.bucketId) && t.remarks === '__savings_confirm__',
+          )
+          .reduce((sum, t) => sum + t.amount, 0)
+        const bucket = buckets.find(b => goal.linkedBucketIds.includes(b.id))
+        return {
+          ...goal,
+          current: goal.startBalance + contributed,
+          color: bucket?.color || colors.textMuted,
+        }
+      })
+  }, [goals, transactions, buckets])
+
+  const sipSuggestedTarget = suggestSipTarget(monthlyIncome, userAge)
 
   // Summary calculations
   const totalSaved = goalsWithStatus.reduce((sum, g) => sum + g.current, 0)
-  const totalMonthlyCommitment = goalsWithStatus.reduce((sum, g) => sum + g.monthlyContribution, 0)
+  const totalMonthlyCommitment = goalsWithStatus
+    .filter(g => g.isEF || g.isEnabled !== false)
+    .reduce((sum, g) => sum + (g.isEnabled === false ? 0 : g.monthlyContribution), 0)
   // EF coverage = target / Core Living monthly (how many months of core expenses covered)
   const coreLivingBucket = buckets.find(b => b.name === 'Core Living' && b.isActive)
   const coreLivingMonthly = coreLivingBucket?.monthlyAmount ?? 0
@@ -91,7 +125,7 @@ export default function GoalsScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <Text style={styles.headerTitle}>Vault</Text>
         <TouchableOpacity
           style={styles.addButton}
@@ -127,21 +161,51 @@ export default function GoalsScreen() {
           </View>
         </View>
 
-        <Text style={styles.sectionTitle}>Active Goals</Text>
-        {goalsWithStatus.map(goal => (
-          <GoalCard
+        <Text style={styles.sectionTitle}>Active goals</Text>
+        {goalsWithStatus.map((goal, i) => (
+          <Animated.View
             key={goal.id}
-            name={goal.name}
-            current={goal.current}
-            target={goal.targetAmount}
-            monthly={goal.monthlyContribution}
-            color={goal.color}
-            onPress={() => {
-              setSelectedGoal(goal)
-              setDetailVisible(true)
-            }}
-          />
+            entering={FadeInDown.delay(Math.min(i, 5) * 40).duration(350)}
+          >
+            <GoalCard
+              name={goal.name}
+              current={goal.current}
+              target={goal.targetAmount}
+              monthly={goal.monthlyContribution}
+              color={goal.color}
+              paused={!goal.isEF && goal.isEnabled === false}
+              suggestedTarget={
+                goal.linkedBucketIds.includes(SIP_BUCKET_ID) ? sipSuggestedTarget : null
+              }
+              onPress={() => {
+                setSelectedGoal(goal)
+                setDetailVisible(true)
+              }}
+            />
+          </Animated.View>
         ))}
+
+        {completedGoals.length > 0 && (
+          <>
+            <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Completed</Text>
+            {completedGoals.map(goal => (
+              <GoalCard
+                key={goal.id}
+                name={goal.name}
+                current={goal.current}
+                target={goal.targetAmount}
+                monthly={0}
+                color={goal.color}
+                paused
+                archived
+                onPress={() => {
+                  setSelectedGoal({ ...goal, monthlyContribution: 0 })
+                  setDetailVisible(true)
+                }}
+              />
+            ))}
+          </>
+        )}
 
         {goalsWithStatus.length === 0 && (
           <View style={styles.empty}>

@@ -1,443 +1,501 @@
-import { useEffect } from 'react'
-import { View, Text, StyleSheet } from 'react-native'
+import { useEffect, useMemo } from "react";
+import { View, Text, StyleSheet } from "react-native";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withRepeat,
-  withSequence,
   withTiming,
+  withRepeat,
   Easing,
-  useAnimatedProps,
-  useDerivedValue,
   FadeIn,
   interpolate,
-} from 'react-native-reanimated'
-import Svg, { Circle, Defs, LinearGradient, Stop, RadialGradient } from 'react-native-svg'
-import { Ionicons } from '@expo/vector-icons'
-import { colors } from '@/constants/colors'
-import { formatNPR } from '@/lib/format'
-
-type FinancialStatus = 'on-track' | 'caution' | 'overspending' | 'uncategorized'
+} from "react-native-reanimated";
+import Svg, { Circle } from "react-native-svg";
+import { Ionicons } from "@expo/vector-icons";
+import { colors } from "@/constants/colors";
+import { formatNPR, formatNPRShort } from "@/lib/format";
 
 interface HeroRingProps {
-  totalIncome: number
-  available: number
-  flaggedAmount: number
-  unconfirmedSavings: number
-  daysRemaining: number
-  weeklyRate: number
-  totalSpent: number
-  confirmedSavings: number
+  effectiveIncome: number;
+  safeToSpend: number;
+  lifestyleSpent: number;
+  personalDraws: number;
+  confirmedSavedInvested: number;
+  unconfirmedSavingsThisMonth: number;
+  lentOutstandingThisMonth: number;
+  daysRemaining: number;
+  weeklyRate: number;
+  flaggedAmount: number;
 }
 
-const SIZE = 248
-const STROKE = 12
-const RADIUS = (SIZE - STROKE) / 2
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS
+const SIZE = 220;
+const STROKE = 14;
+const RADIUS = (SIZE - STROKE) / 2;
+const CIRC = 2 * Math.PI * RADIUS;
+const CENTER = SIZE / 2;
+const PILL_ORBIT = RADIUS + STROKE / 2 + 2;
 
-const AnimatedCircle = Animated.createAnimatedComponent(Circle)
+type SegmentKind = "available" | "spent" | "unconfirmed" | "confirmed" | "lent";
 
-function getStatus(
+interface RingSegment {
+  kind: SegmentKind;
+  ratio: number;
+  startRatio: number;
+  stroke: string;
+  strokeWidth: number;
+  opacity: number;
+}
+
+function clampRatio(value: number, denom: number) {
+  if (denom <= 0) return 0;
+  return Math.max(0, Math.min(value / denom, 1));
+}
+
+function buildSegments(
+  income: number,
+  confirmed: number,
+  unconfirmed: number,
+  spent: number,
   available: number,
-  totalIncome: number,
-  flaggedAmount: number,
-  daysRemaining: number,
-  totalSpent: number,
-  confirmedSavings: number,
-): { status: FinancialStatus; label: string; icon: string; color: string } {
-  if (available < 0) {
-    return { status: 'overspending', label: 'Overspending', icon: 'trending-down', color: colors.red }
+  lentOutstanding: number,
+): RingSegment[] {
+  if (income <= 0) return [];
+
+  const raw = [
+    {
+      kind: "available" as const,
+      value: available,
+      stroke: colors.green,
+      strokeWidth: STROKE,
+      opacity: 1,
+    },
+    {
+      kind: "spent" as const,
+      value: spent,
+      stroke: colors.red,
+      strokeWidth: STROKE,
+      opacity: 1,
+    },
+    {
+      kind: "lent" as const,
+      value: lentOutstanding,
+      stroke: colors.purple,
+      strokeWidth: STROKE,
+      opacity: 1,
+    },
+    {
+      kind: "unconfirmed" as const,
+      value: unconfirmed,
+      stroke: colors.savingsSetAside,
+      strokeWidth: STROKE,
+      opacity: 0.4,
+    },
+    {
+      kind: "confirmed" as const,
+      value: confirmed,
+      stroke: colors.savingsSetAside,
+      strokeWidth: STROKE,
+      opacity: 1,
+    },
+  ];
+
+  let start = 0;
+  const segments: RingSegment[] = [];
+  for (const item of raw) {
+    const ratio = clampRatio(item.value, income);
+    if (ratio <= 0.001) continue;
+    segments.push({
+      kind: item.kind,
+      ratio,
+      startRatio: start,
+      stroke: item.stroke,
+      strokeWidth: item.strokeWidth,
+      opacity: item.opacity,
+    });
+    start += ratio;
   }
-  if (flaggedAmount > 0) {
-    return { status: 'uncategorized', label: 'Needs attention', icon: 'alert-circle', color: colors.amber }
-  }
-  if (totalIncome > 0 && daysRemaining > 0) {
-    const totalDays = 30
-    const elapsed = totalDays - daysRemaining
-    const elapsedRatio = elapsed / totalDays
-    const spentRatio = totalSpent / (totalIncome - confirmedSavings || 1)
-    if (spentRatio > elapsedRatio + 0.15) {
-      return { status: 'caution', label: 'Spending fast', icon: 'speedometer', color: colors.amber }
-    }
-  }
-  return { status: 'on-track', label: 'On track', icon: 'trending-up', color: colors.green }
+  return segments;
+}
+
+function RingArc({
+  ratio,
+  startRatio,
+  stroke,
+  strokeWidth,
+  opacity,
+}: {
+  ratio: number;
+  startRatio: number;
+  stroke: string;
+  strokeWidth: number;
+  opacity: number;
+}) {
+  const cx = CENTER;
+  const cy = CENTER;
+  return (
+    <Circle
+      cx={cx}
+      cy={cy}
+      r={RADIUS}
+      stroke={stroke}
+      strokeWidth={strokeWidth}
+      fill="none"
+      strokeLinecap="butt"
+      strokeOpacity={opacity}
+      strokeDasharray={`${CIRC * ratio} ${CIRC * (1 - ratio)}`}
+      rotation={-90 + startRatio * 360}
+      origin={`${cx}, ${cy}`}
+    />
+  );
+}
+
+function MetricChip({
+  value,
+  accent,
+  angleDeg,
+  phase,
+}: {
+  value: string;
+  accent: string;
+  angleDeg: number;
+  phase: number;
+}) {
+  const drift = useSharedValue(0);
+
+  useEffect(() => {
+    drift.value = withRepeat(
+      withTiming(1, {
+        duration: 2800 + phase * 400,
+        easing: Easing.inOut(Easing.ease),
+      }),
+      -1,
+      true,
+    );
+  }, [phase]);
+
+  const animStyle = useAnimatedStyle(() => {
+    "worklet";
+    const wobble = interpolate(drift.value, [0, 1], [-2.5, 2.5]);
+    const angleWobble = interpolate(drift.value, [0, 1], [-1.2, 1.2]);
+    const rad = ((angleDeg + angleWobble - 90) * Math.PI) / 180;
+    const r = PILL_ORBIT + wobble * 0.3;
+    return {
+      left: CENTER + r * Math.cos(rad) - 22,
+      top: CENTER + r * Math.sin(rad) - 10,
+    };
+  });
+
+  return (
+    <Animated.View style={[styles.chip, animStyle]}>
+      <Text style={[styles.chipValue, { color: accent }]}>{value}</Text>
+    </Animated.View>
+  );
 }
 
 export function HeroRing({
-  totalIncome,
-  available,
-  flaggedAmount,
-  unconfirmedSavings,
+  effectiveIncome,
+  safeToSpend,
+  lifestyleSpent,
+  personalDraws,
+  confirmedSavedInvested,
+  unconfirmedSavingsThisMonth,
+  lentOutstandingThisMonth,
   daysRemaining,
   weeklyRate,
-  totalSpent,
-  confirmedSavings,
+  flaggedAmount,
 }: HeroRingProps) {
-  const isOverspent = available < 0
-  const cx = SIZE / 2
-  const cy = SIZE / 2
+  const hasSalary = effectiveIncome > 0;
+  const spentTotal = lifestyleSpent + personalDraws;
+  const available = Math.max(0, safeToSpend);
+  const pulse = useSharedValue(0);
 
-  const { label: statusLabel, icon: statusIcon, color: statusColor } = getStatus(
-    available, totalIncome, flaggedAmount, daysRemaining, totalSpent, confirmedSavings,
-  )
-
-  const denom = totalIncome > 0 ? totalIncome : 1
-  
-  // Shared values for animation — each arc segment gets its own ratio
-  const spentRatioSV = useSharedValue(0)
-  const savingsRatioSV = useSharedValue(0)
-  const yellowRatioSV = useSharedValue(0)
-  const greyRatioSV = useSharedValue(0)
-  const centerPulse = useSharedValue(0)
+  const segments = useMemo(
+    () =>
+      hasSalary
+        ? buildSegments(
+            effectiveIncome,
+            confirmedSavedInvested,
+            unconfirmedSavingsThisMonth,
+            spentTotal,
+            available,
+            lentOutstandingThisMonth,
+          )
+        : [],
+    [
+      hasSalary,
+      effectiveIncome,
+      confirmedSavedInvested,
+      unconfirmedSavingsThisMonth,
+      spentTotal,
+      available,
+      lentOutstandingThisMonth,
+    ],
+  );
 
   useEffect(() => {
-    const targetSpent = Math.max(0, Math.min(totalSpent / denom, 1))
-    const targetSavings = Math.max(0, Math.min(confirmedSavings / denom, 1 - targetSpent))
-    const used = targetSpent + targetSavings
-    const targetYellow = Math.max(0, Math.min(flaggedAmount / denom, 1 - used))
-    const targetGrey = Math.max(0, Math.min(unconfirmedSavings / denom, 1 - used - targetYellow))
+    pulse.value = withTiming(1, {
+      duration: 2400,
+      easing: Easing.inOut(Easing.ease),
+    });
+  }, []);
 
-    spentRatioSV.value = withTiming(targetSpent, { duration: 1200, easing: Easing.out(Easing.exp) })
-    savingsRatioSV.value = withTiming(targetSavings, { duration: 1200, easing: Easing.out(Easing.exp) })
-    yellowRatioSV.value = withTiming(targetYellow, { duration: 1200, easing: Easing.out(Easing.exp) })
-    greyRatioSV.value = withTiming(targetGrey, { duration: 1200, easing: Easing.out(Easing.exp) })
+  const centerStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(pulse.value, [0, 1], [0.92, 1]),
+  }));
 
-    centerPulse.value = withRepeat(
-      withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
-      -1,
-      true
-    )
-  }, [totalSpent, confirmedSavings, flaggedAmount, unconfirmedSavings, denom])
+  const isOverspent = hasSalary && safeToSpend < 0;
 
-  // Animated props for Spending arc (full green)
-  const spentProps = useAnimatedProps(() => {
-    const offset = CIRCUMFERENCE * (1 - spentRatioSV.value)
-    return {
-      strokeDashoffset: offset,
-    }
-  })
+  const statusColor = !hasSalary
+    ? colors.textMuted
+    : isOverspent
+      ? colors.red
+      : flaggedAmount > 0
+        ? colors.amber
+        : colors.green;
 
-  // Animated props for Confirmed Savings arc (lighter green, starts after spending)
-  const savingsProps = useAnimatedProps(() => {
-    const dash = CIRCUMFERENCE * savingsRatioSV.value
-    const gap = CIRCUMFERENCE * (1 - savingsRatioSV.value)
-    const rotation = -90 + spentRatioSV.value * 360
-    return {
-      strokeDasharray: `${dash} ${gap}`,
-      rotation: rotation,
-    }
-  })
+  const statusLabel = !hasSalary
+    ? "Awaiting salary"
+    : isOverspent
+      ? "Overspending"
+      : flaggedAmount > 0
+        ? "Needs review"
+        : "On track";
 
-  // Animated props for Yellow arc (flagged, starts after spending + savings)
-  const yellowProps = useAnimatedProps(() => {
-    const dash = CIRCUMFERENCE * yellowRatioSV.value
-    const gap = CIRCUMFERENCE * (1 - yellowRatioSV.value)
-    const rotation = -90 + (spentRatioSV.value + savingsRatioSV.value) * 360
-    return {
-      strokeDasharray: `${dash} ${gap}`,
-      rotation: rotation,
-    }
-  })
-
-  // Animated props for Grey arc (unconfirmed savings, starts after spending + savings + flagged)
-  const greyProps = useAnimatedProps(() => {
-    const dash = CIRCUMFERENCE * greyRatioSV.value
-    const gap = CIRCUMFERENCE * (1 - greyRatioSV.value)
-    const rotation = -90 + (spentRatioSV.value + savingsRatioSV.value + yellowRatioSV.value) * 360
-    return {
-      strokeDasharray: `${dash} ${gap}`,
-      rotation: rotation,
-    }
-  })
-
-  // Subtle floating animation for pill
-  const pillY = useSharedValue(0)
-  useEffect(() => {
-    pillY.value = withRepeat(
-      withSequence(
-        withTiming(-3, { duration: 2400, easing: Easing.inOut(Easing.ease) }),
-        withTiming(3, { duration: 2400, easing: Easing.inOut(Easing.ease) }),
-      ),
-      -1,
-      true,
-    )
-  }, [])
-  const pillAnimStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: pillY.value }],
-  }))
-
-  const centerAnimStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: interpolate(centerPulse.value, [0, 1], [1, 1.02]) }],
-    opacity: interpolate(centerPulse.value, [0, 1], [0.95, 1]),
-  }))
+  const cx = CENTER;
+  const cy = CENTER;
 
   return (
-    <Animated.View entering={FadeIn.duration(800)} style={styles.container}>
-      {/* Floating pill — overlapping ring edge */}
-      <Animated.View style={[styles.pill, pillAnimStyle]}>
-        <View style={[styles.pillDot, isOverspent && { backgroundColor: colors.red }]} />
-        <Text style={styles.pillText}>{daysRemaining} days left</Text>
-      </Animated.View>
+    <Animated.View entering={FadeIn.duration(600)} style={styles.wrap}>
+      <View style={styles.ringArea}>
+        <View style={styles.pillLayer} pointerEvents="none">
+          <MetricChip
+            value={`${daysRemaining}d`}
+            accent={colors.textSecond}
+            angleDeg={40}
+            phase={0}
+          />
+          <MetricChip
+            value={formatNPRShort(spentTotal)}
+            accent={hasSalary ? colors.red : colors.textMuted}
+            angleDeg={220}
+            phase={1}
+          />
+          {hasSalary && confirmedSavedInvested > 0 && (
+            <MetricChip
+              value={formatNPRShort(confirmedSavedInvested)}
+              accent={colors.savingsSetAside}
+              angleDeg={320}
+              phase={2}
+            />
+          )}
+        </View>
 
-      <Svg width={SIZE} height={SIZE}>
-        <Defs>
-          <LinearGradient id="greenGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <Stop offset="0%" stopColor={colors.green} stopOpacity="0.8" />
-            <Stop offset="100%" stopColor={colors.green} stopOpacity="1" />
-          </LinearGradient>
-          <LinearGradient id="savingsGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <Stop offset="0%" stopColor={colors.green} stopOpacity="0.35" />
-            <Stop offset="100%" stopColor={colors.green} stopOpacity="0.5" />
-          </LinearGradient>
-          <LinearGradient id="yellowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <Stop offset="0%" stopColor={colors.amber} stopOpacity="0.8" />
-            <Stop offset="100%" stopColor={colors.amber} stopOpacity="1" />
-          </LinearGradient>
-          <LinearGradient id="redGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <Stop offset="0%" stopColor={colors.red} stopOpacity="0.8" />
-            <Stop offset="100%" stopColor={colors.red} stopOpacity="1" />
-          </LinearGradient>
-          <RadialGradient id="centerGlow" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
-            <Stop offset="0%" stopColor={statusColor} stopOpacity="0.08" />
-            <Stop offset="100%" stopColor={statusColor} stopOpacity="0" />
-          </RadialGradient>
-        </Defs>
-
-        {/* Background track */}
-        <Circle
-          cx={cx}
-          cy={cy}
-          r={RADIUS}
-          stroke="#E8EAED"
-          strokeWidth={STROKE}
-          fill="none"
-        />
-
-        {/* Center Glow */}
-        {!isOverspent && (
+        <Svg width={SIZE} height={SIZE}>
           <Circle
             cx={cx}
             cy={cy}
-            r={RADIUS - 20}
-            fill="url(#centerGlow)"
-          />
-        )}
-
-        {isOverspent ? (
-          <AnimatedCircle
-            cx={cx}
-            cy={cy}
             r={RADIUS}
-            stroke="url(#redGrad)"
+            stroke={hasSalary ? colors.green + "20" : "#E5E7EB"}
             strokeWidth={STROKE}
             fill="none"
-            strokeLinecap="round"
-            animatedProps={spentProps}
           />
-        ) : (
-          <>
-            {/* Grey — unconfirmed savings (pending confirmation) */}
-            <AnimatedCircle
-              cx={cx}
-              cy={cy}
-              r={RADIUS}
-              stroke={colors.textMuted}
-              strokeWidth={STROKE - 4}
-              fill="none"
-              strokeLinecap="round"
-              origin={`${cx}, ${cy}`}
-              opacity={0.3}
-              animatedProps={greyProps}
-            />
 
-            {/* Yellow — flagged amount */}
-            <AnimatedCircle
-              cx={cx}
-              cy={cy}
-              r={RADIUS}
-              stroke="url(#yellowGrad)"
-              strokeWidth={STROKE}
-              fill="none"
-              strokeLinecap="round"
-              origin={`${cx}, ${cy}`}
-              animatedProps={yellowProps}
-            />
+          {hasSalary &&
+            segments.map((seg, i) => (
+              <RingArc
+                key={`${seg.kind}-${i}`}
+                ratio={seg.ratio}
+                startRatio={seg.startRatio}
+                stroke={seg.stroke}
+                strokeWidth={seg.strokeWidth}
+                opacity={seg.opacity}
+              />
+            ))}
+        </Svg>
 
-            {/* Confirmed savings arc — lighter green */}
-            <AnimatedCircle
-              cx={cx}
-              cy={cy}
-              r={RADIUS}
-              stroke="url(#savingsGrad)"
-              strokeWidth={STROKE}
-              fill="none"
-              strokeLinecap="round"
-              origin={`${cx}, ${cy}`}
-              animatedProps={savingsProps}
+        <Animated.View style={[styles.center, centerStyle]}>
+          <Text style={styles.centerLabel}>Safe to spend</Text>
+          <Text
+            style={[styles.centerAmount, isOverspent && { color: colors.red }]}
+          >
+            {!hasSalary
+              ? "—"
+              : isOverspent
+                ? `-NPR ${formatNPR(Math.abs(safeToSpend))}`
+                : `NPR ${formatNPR(available)}`}
+          </Text>
+          <Text style={styles.centerHint}>
+            {!hasSalary
+              ? "Confirm salary in checklist"
+              : `${daysRemaining} days left this month`}
+          </Text>
+          <View style={[styles.badge, { backgroundColor: statusColor + "18" }]}>
+            <Ionicons
+              name={
+                !hasSalary
+                  ? "hourglass-outline"
+                  : isOverspent
+                    ? "trending-down"
+                    : "checkmark-circle"
+              }
+              size={12}
+              color={statusColor}
             />
+            <Text style={[styles.badgeText, { color: statusColor }]}>
+              {statusLabel}
+            </Text>
+          </View>
+        </Animated.View>
+      </View>
 
-            {/* Spending arc — full green */}
-            <AnimatedCircle
-              cx={cx}
-              cy={cy}
-              r={RADIUS}
-              stroke="url(#greenGrad)"
-              strokeWidth={STROKE}
-              fill="none"
-              strokeDasharray={`${CIRCUMFERENCE}`}
-              strokeLinecap="round"
-              rotation={-90}
-              origin={`${cx}, ${cy}`}
-              animatedProps={spentProps}
-            />
-          </>
-        )}
-      </Svg>
-
-      {/* Center text overlay */}
-      <Animated.View style={[styles.centerText, centerAnimStyle]}>
-        <Text style={styles.label}>SAFE TO SPEND</Text>
-        <Text style={[styles.amount, isOverspent && { color: colors.red }]}>
-          {isOverspent ? '-' : ''}NPR {formatNPR(Math.abs(available))}
+      {hasSalary && (
+        <Text style={styles.weekly}>
+          ≈ NPR {formatNPR(Math.round(Math.max(0, weeklyRate)))}/week
         </Text>
-        {/* Status badge */}
-        <View style={[styles.statusBadge, { backgroundColor: statusColor + '14' }]}>
-          <Ionicons name={statusIcon as any} size={13} color={statusColor} />
-          <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text>
-        </View>
-      </Animated.View>
+      )}
 
-      {/* Weekly rate — below ring */}
-      <Text style={styles.weekly}>
-        ≈ NPR {formatNPR(Math.round(weeklyRate))}/week
-      </Text>
-
-      {/* Ring legend */}
       <View style={styles.legend}>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: colors.green }]} />
-          <Text style={styles.legendText}>Spent</Text>
-        </View>
-        {confirmedSavings > 0 && (
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: colors.green, opacity: 0.4 }]} />
-            <Text style={styles.legendText}>Saved</Text>
-          </View>
+        <LegendDot
+          color={hasSalary ? colors.green : "#E5E7EB"}
+          label={hasSalary ? "Available" : "Locked"}
+        />
+        <LegendDot color={colors.red} label="Spent" />
+        {hasSalary && lentOutstandingThisMonth > 0 && (
+          <LegendDot color={colors.purple} label="Lent out" />
         )}
-        {unconfirmedSavings > 0 && (
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: colors.textMuted, opacity: 0.4 }]} />
-            <Text style={styles.legendText}>Pending</Text>
-          </View>
-        )}
-        {flaggedAmount > 0 && (
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: colors.amber }]} />
-            <Text style={styles.legendText}>Uncategorized</Text>
-          </View>
-        )}
+        <LegendDot
+          color={colors.savingsSetAside}
+          label="To save"
+          opacity={0.45}
+        />
+        <LegendDot color={colors.savingsSetAside} label="Confirmed" />
       </View>
     </Animated.View>
-  )
+  );
+}
+
+function LegendDot({
+  color,
+  label,
+  opacity = 1,
+}: {
+  color: string;
+  label: string;
+  opacity?: number;
+}) {
+  return (
+    <View style={styles.legendItem}>
+      <View style={[styles.legendDot, { backgroundColor: color, opacity }]} />
+      <Text style={styles.legendText}>{label}</Text>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 16,
-    paddingBottom: 12,
-    position: 'relative',
+  wrap: {
+    alignItems: "center",
+    paddingVertical: 8,
+    marginBottom: 8,
   },
-  centerText: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
+  ringArea: {
+    width: SIZE,
+    height: SIZE,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  label: {
-    fontSize: 11,
-    fontFamily: 'Inter_600SemiBold',
-    color: colors.textMuted,
-    letterSpacing: 1.2,
-    marginBottom: 6,
+  pillLayer: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2,
   },
-  amount: {
-    fontSize: 28,
-    fontFamily: 'Inter_700Bold',
-    color: colors.textPrimary,
-    fontVariant: ['tabular-nums'],
+  center: {
+    position: "absolute",
+    width: SIZE,
+    height: SIZE,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
   },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 12,
-    paddingHorizontal: 10,
+  chip: {
+    position: "absolute",
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 12,
-    gap: 4,
+    borderWidth: 1,
+    borderColor: colors.divider,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+    alignItems: "center",
   },
-  statusText: {
-    fontSize: 12,
-    fontFamily: 'Inter_600SemiBold',
+  chipValue: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+    fontVariant: ["tabular-nums"],
+  },
+  centerLabel: {
+    fontSize: 10,
+    fontFamily: "Inter_600SemiBold",
+    color: colors.textMuted,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  centerAmount: {
+    fontSize: 24,
+    fontFamily: "Inter_700Bold",
+    color: colors.textPrimary,
+    marginTop: 4,
+    fontVariant: ["tabular-nums"],
+  },
+  centerHint: {
+    fontSize: 10,
+    fontFamily: "Inter_400Regular",
+    color: colors.textMuted,
+    marginTop: 4,
+    textAlign: "center",
+  },
+  badge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  badgeText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
   },
   weekly: {
-    fontSize: 13,
-    fontFamily: 'Inter_400Regular',
-    color: colors.textMuted,
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  pill: {
-    position: 'absolute',
-    top: 28,
-    right: 30,
-    zIndex: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    boxShadow: '0 2px 6px rgba(0, 0, 0, 0.06)',
-    elevation: 3,
-  },
-  pillDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.green,
-    marginRight: 6,
-  },
-  pillText: {
     fontSize: 11,
-    fontFamily: 'Inter_600SemiBold',
-    color: colors.textPrimary,
+    fontFamily: "Inter_400Regular",
+    color: colors.textMuted,
+    marginTop: 6,
   },
   legend: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    marginTop: 8,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 10,
+    marginTop: 10,
   },
   legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
   legendDot: {
-    width: 8,
-    height: 8,
+    width: 7,
+    height: 7,
     borderRadius: 4,
   },
   legendText: {
-    fontSize: 11,
-    fontFamily: 'Inter_400Regular',
+    fontSize: 10,
+    fontFamily: "Inter_400Regular",
     color: colors.textMuted,
   },
-})
+});

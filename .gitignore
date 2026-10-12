@@ -37,9 +37,14 @@ yarn-error.*
 # skills CLI cache (restore: npx skills experimental_install)
 .agents/
 
+# Cursor local plans / uploads
+.cursor/
+
 # typescript
 *.tsbuildinfo
 
 # generated native folders
 /ios
 /android
+
+spendsense-release.keystore

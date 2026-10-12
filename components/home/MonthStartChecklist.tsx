@@ -16,6 +16,7 @@ interface MonthStartChecklistProps {
   visible: boolean
   items: ChecklistItem[]
   onToggleItem: (id: string) => void
+  onUndoItem?: (id: string) => void
   onDismiss: () => void
 }
 
@@ -23,6 +24,7 @@ export function MonthStartChecklist({
   visible,
   items,
   onToggleItem,
+  onUndoItem,
   onDismiss,
 }: MonthStartChecklistProps) {
   const allDone = items.every(i => i.completed)
@@ -61,9 +63,14 @@ export function MonthStartChecklist({
               <Animated.View key={item.id} layout={Layout.springify()}>
                 <TouchableOpacity
                   style={[styles.item, item.completed && styles.itemCompleted]}
-                  onPress={() => !item.completed && onToggleItem(item.id)}
-                  activeOpacity={item.completed ? 1 : 0.7}
-                  disabled={item.completed}
+                  onPress={() => {
+                    if (item.completed) {
+                      onUndoItem?.(item.id)
+                    } else {
+                      onToggleItem(item.id)
+                    }
+                  }}
+                  activeOpacity={0.7}
                 >
                   <View style={[styles.checkbox, item.completed && styles.checkboxActive]}>
                     {item.completed && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}

@@ -42,18 +42,21 @@ export default function TabsLayout() {
         <Tabs.Screen
           name="index"
           options={{
-            tabBarIcon: ({ focused }) => <TabBarIcon name={focused ? 'home' : 'home-outline'} focused={focused} />,
+            tabBarIcon: ({ focused }) => (
+              <TabBarIcon name={focused ? 'home' : 'home-outline'} focused={focused} />
+            ),
           }}
         />
 
         <Tabs.Screen
           name="transactions"
           options={{
-            tabBarIcon: ({ focused }) => <TabBarIcon name={focused ? 'list' : 'list-outline'} focused={focused} />,
+            tabBarIcon: ({ focused }) => (
+              <TabBarIcon name={focused ? 'list' : 'list-outline'} focused={focused} />
+            ),
           }}
         />
 
-        {/* Center FAB — custom button opens ManualEntrySheet, no navigation */}
         <Tabs.Screen
           name="add"
           options={{
@@ -73,13 +76,17 @@ export default function TabsLayout() {
         <Tabs.Screen
           name="goals"
           options={{
-            tabBarIcon: ({ focused }) => <TabBarIcon name={focused ? 'flag' : 'flag-outline'} focused={focused} />,
+            tabBarIcon: ({ focused }) => (
+              <TabBarIcon name={focused ? 'flag' : 'flag-outline'} focused={focused} />
+            ),
           }}
         />
         <Tabs.Screen
           name="settings"
           options={{
-            tabBarIcon: ({ focused }) => <TabBarIcon name={focused ? 'settings' : 'settings-outline'} focused={focused} />,
+            tabBarIcon: ({ focused }) => (
+              <TabBarIcon name={focused ? 'settings' : 'settings-outline'} focused={focused} />
+            ),
           }}
         />
       </Tabs>

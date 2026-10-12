@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { colors } from '@/constants/colors'
 import { formatNPR, formatDate } from '@/lib/format'
+import { transactionTitle } from '@/lib/transaction-label'
 import { useTransactionsStore, type Transaction } from '@/store/transactions'
 import { useBucketsStore } from '@/store/buckets'
 
@@ -114,7 +115,7 @@ export function FlaggedTransactionPrompt({
 
             {/* Txn Info */}
             <View style={styles.txnInfo}>
-              <Text style={styles.merchant}>{currentTxn.merchant || 'Unknown Merchant'}</Text>
+              <Text style={styles.merchant}>{transactionTitle(currentTxn)}</Text>
               <Text style={styles.amount}>NPR {formatNPR(currentTxn.amount)}</Text>
               <Text style={styles.date}>{formatDate(currentTxn.date)}</Text>
               <View style={styles.currentBucketBadge}>
