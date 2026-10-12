@@ -1,31 +1,25 @@
 // Auto-categorization (priority order):
-// 1. Keyword word match — keyword appears in description, remarks, or merchant text.
+// 1. Keyword word match — keyword appears in title (description) or extra detail (merchant).
 // 2. Sure-shot merchant — exact merchant name → mapped bucket.
 // 3. Fallback — fallback bucket, mark as flagged.
 
-function buildCorpus(
-  description: string | null,
-  remarks: string | null,
-  merchant: string | null,
-): string {
-  return [description, remarks, merchant]
-    .filter(t => t && !t.startsWith('__'))
+function buildCorpus(description: string | null, merchant: string | null): string {
+  return [description, merchant]
+    .filter((t): t is string => !!t && !t.startsWith('__'))
     .join(' ')
     .toLowerCase()
 }
 
 export function categorize(opts: {
   description?: string | null
-  remarks: string | null
   merchant: string | null
   keywords: { keyword: string; bucketId: string }[]
   sureShotMerchants: { merchantName: string; bucketId: string }[]
   fallbackBucketId: string
 }): { bucketId: string; isFlagged: boolean } {
-  const { description = null, remarks, merchant, keywords, sureShotMerchants, fallbackBucketId } =
-    opts
+  const { description = null, merchant, keywords, sureShotMerchants, fallbackBucketId } = opts
 
-  const corpus = buildCorpus(description, remarks, merchant)
+  const corpus = buildCorpus(description, merchant)
 
   if (corpus) {
     for (const mapping of keywords) {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -12,7 +12,7 @@ import Animated, {
 import Svg, { Circle } from "react-native-svg";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "@/constants/colors";
-import { formatNPR, formatNPRShort } from "@/lib/format";
+import { formatMoney, formatNPRShort } from "@/lib/format";
 
 interface HeroRingProps {
   effectiveIncome: number;
@@ -25,6 +25,8 @@ interface HeroRingProps {
   daysRemaining: number;
   weeklyRate: number;
   flaggedAmount: number;
+  onStartMonthEarly?: () => void;
+  startingMonthEarly?: boolean;
 }
 
 const SIZE = 220;
@@ -202,6 +204,8 @@ export function HeroRing({
   daysRemaining,
   weeklyRate,
   flaggedAmount,
+  onStartMonthEarly,
+  startingMonthEarly = false,
 }: HeroRingProps) {
   const hasSalary = effectiveIncome > 0;
   const spentTotal = lifestyleSpent + personalDraws;
@@ -288,6 +292,21 @@ export function HeroRing({
             />
           )}
         </View>
+        {onStartMonthEarly && (
+          <TouchableOpacity
+            style={styles.earlyPill}
+            onPress={onStartMonthEarly}
+            disabled={startingMonthEarly}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel="Start new month with early salary"
+          >
+            <Ionicons name="calendar-outline" size={12} color={colors.green} />
+            <Text style={styles.earlyPillText}>
+              {startingMonthEarly ? "Starting…" : "Paid early?"}
+            </Text>
+          </TouchableOpacity>
+        )}
 
         <Svg width={SIZE} height={SIZE}>
           <Circle
@@ -320,8 +339,8 @@ export function HeroRing({
             {!hasSalary
               ? "—"
               : isOverspent
-                ? `-NPR ${formatNPR(Math.abs(safeToSpend))}`
-                : `NPR ${formatNPR(available)}`}
+                ? `-${formatMoney(Math.abs(safeToSpend))}`
+                : `${formatMoney(available)}`}
           </Text>
           <Text style={styles.centerHint}>
             {!hasSalary
@@ -349,7 +368,7 @@ export function HeroRing({
 
       {hasSalary && (
         <Text style={styles.weekly}>
-          ≈ NPR {formatNPR(Math.round(Math.max(0, weeklyRate)))}/week
+          ≈ {formatMoney(Math.round(Math.max(0, weeklyRate)))}/week
         </Text>
       )}
 
@@ -435,6 +454,31 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: "Inter_700Bold",
     fontVariant: ["tabular-nums"],
+  },
+  earlyPill: {
+    position: "absolute",
+    right: -18,
+    bottom: 45,
+    zIndex: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: colors.green + "55",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  earlyPillText: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+    color: colors.green,
   },
   centerLabel: {
     fontSize: 10,

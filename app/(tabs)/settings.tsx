@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   View,
   Text,
@@ -7,12 +7,12 @@ import {
   TouchableOpacity,
   Switch,
   Alert,
+  Platform,
   StyleSheet,
   Pressable,
   Animated,
-  Platform,
-  AppState,
 } from 'react-native'
+import { router } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { colors } from '@/constants/colors'
@@ -21,7 +21,7 @@ import { usePlaybookStore } from '@/store/playbook'
 import { useBucketsStore, Bucket } from '@/store/buckets'
 import { useTransactionsStore } from '@/store/transactions'
 import { useGoalsStore } from '@/store/goals'
-import { formatNPR } from '@/lib/format'
+import { formatNPR, formatMoney } from '@/lib/format'
 import { getMonthRange } from '@/lib/month'
 import { EF_BUCKET_ID } from '@/constants/defaults'
 import { db, applySchemaPatches } from '@/db/client'
@@ -44,15 +44,17 @@ import { seedDefaults } from '@/db/seed'
 import { useLendingStore } from '@/store/lending'
 import { useAccountsStore } from '@/store/accounts'
 import { BANK_ACCOUNT_ID, ESEWA_ACCOUNT_ID } from '@/constants/accounts'
+import * as Clipboard from 'expo-clipboard'
+import { cacheDirectory, writeAsStringAsync } from 'expo-file-system/legacy'
+import * as Sharing from 'expo-sharing'
+import { buildClaudeSnapshot, CLAUDE_SHARE_PROMPT, snapshotFilename } from '@/lib/claude-snapshot'
 import {
-  getPaymentWatchEnabled,
-  hasPaymentWatchUsageAccess,
-  isPaymentWatchAvailable,
-  openPaymentWatchUsageSettings,
-  setPaymentWatchEnabled,
-} from '@/lib/payment-watch'
-import { requestPermissions } from '@/lib/notifications'
-
+  backupFilename,
+  exportBackup,
+  hydrateStoresAfterDbChange,
+  saveBackupToDevice,
+} from '@/lib/backup'
+import { startImportBackupFlow } from '@/lib/import-backup-flow'
 const BUCKET_TYPES: Bucket['type'][] = ['spending', 'savings', 'investment']
 
 function SectionHeader({ title, description }: { title: string; description?: string }) {
@@ -60,6 +62,23 @@ function SectionHeader({ title, description }: { title: string; description?: st
     <View style={{ marginBottom: 8, marginTop: 24 }}>
       <Text style={styles.sectionTitle}>{title}</Text>
       {description && <Text style={styles.sectionDesc}>{description}</Text>}
+    </View>
+  )
+}
+
+function SubGroupHeader({
+  title,
+  total,
+  first,
+}: {
+  title: string
+  total: number
+  first?: boolean
+}) {
+  return (
+    <View style={[styles.subGroupHeader, first && { marginTop: 0 }]}>
+      <Text style={styles.subGroupTitle}>{title}</Text>
+      <Text style={styles.subGroupTotal}>{formatMoney(total)}</Text>
     </View>
   )
 }
@@ -238,41 +257,6 @@ function TypeBadge({ type }: { type: Bucket['type'] }) {
   )
 }
 
-function BucketPicker({
-  activeBuckets,
-  selectedId,
-  onSelect,
-}: {
-  activeBuckets: Bucket[]
-  selectedId: string
-  onSelect: (id: string) => void
-}) {
-  return (
-    <View style={styles.bucketPicker}>
-      {activeBuckets.map(b => (
-        <Pressable
-          key={b.id}
-          onPress={() => onSelect(b.id)}
-          style={[
-            styles.bucketPickerItem,
-            selectedId === b.id && { backgroundColor: colors.greenFill, borderColor: colors.green },
-          ]}
-        >
-          <Text
-            style={[
-              styles.bucketPickerText,
-              selectedId === b.id && { color: colors.green },
-            ]}
-            numberOfLines={1}
-          >
-            {b.icon} {b.name}
-          </Text>
-        </Pressable>
-      ))}
-    </View>
-  )
-}
-
 function useSavedFeedback() {
   const opacity = useRef(new Animated.Value(0)).current
   const show = () => {
@@ -335,8 +319,8 @@ function MoneyLocationsCard() {
   return (
     <>
       <SectionHeader
-        title="Money locations"
-        description="Where Your money sits — Bank, eSewa, Cash. Add found cash or move between wallets."
+        title="Accounts"
+        description="Where Your money sits. Add found cash or move between wallets."
       />
       <Card>
         {accounts.map((a, i) => (
@@ -344,7 +328,7 @@ function MoneyLocationsCard() {
             {i > 0 && <View style={styles.divider} />}
             <View style={styles.toggleRow}>
               <Text style={styles.editableLabel}>{a.name}</Text>
-              <Text style={styles.editableValue}>NPR {formatNPR(a.balance)}</Text>
+              <Text style={styles.editableValue}>{formatMoney(a.balance)}</Text>
             </View>
           </View>
         ))}
@@ -462,97 +446,26 @@ function MoneyLocationsCard() {
 }
 
 function PaymentWatchCard() {
-  const available = isPaymentWatchAvailable()
-  const [enabled, setEnabled] = useState(false)
-  const [usage, setUsage] = useState(false)
-
-  const refresh = useCallback(async () => {
-    if (!available) return
-    const [on, access] = await Promise.all([
-      getPaymentWatchEnabled(),
-      hasPaymentWatchUsageAccess(),
-    ])
-    setEnabled(on)
-    setUsage(access)
-  }, [available])
-
-  useEffect(() => {
-    refresh()
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') refresh()
-    })
-    return () => sub.remove()
-  }, [refresh])
-
-  if (Platform.OS !== 'android') return null
-
-  const onToggle = async (value: boolean) => {
-    if (!available) return
-    if (value) {
-      await requestPermissions()
-    }
-    const result = await setPaymentWatchEnabled(value)
-    await refresh()
-    if (value && result === 'needs_usage_access') {
-      Alert.alert(
-        'Usage access needed',
-        'Android will show a list of apps. Find SpendSense and turn usage access on. We never record your screen — we only see which app is open so we can offer a log notification.',
-        [
-          { text: 'Later', style: 'cancel' },
-          { text: 'Open settings', onPress: () => openPaymentWatchUsageSettings() },
-        ],
-      )
-    }
-  }
-
   return (
     <>
       <SectionHeader
         title="Payment helper"
-        description="While eSewa or nBank is open, type the amount in a notification. Assign a bucket the next time you open SpendSense. Off until you enable it."
+        description="Log an amount from a notification while a payment app is open."
       />
       <Card>
-        {!available ? (
-          <Text style={styles.sectionDesc}>
-            Needs a development build (not Expo Go). Rebuild with npx expo run:android.
-          </Text>
-        ) : (
-          <>
-            <View style={styles.toggleRow}>
-              <Text style={[styles.editableLabel, { flex: 1, paddingRight: 12 }]}>
-                Log from eSewa / nBank
-              </Text>
-              <Switch
-                value={enabled}
-                onValueChange={onToggle}
-                trackColor={{ false: colors.border, true: colors.greenFill }}
-                thumbColor={enabled ? colors.green : '#f4f3f4'}
-              />
-            </View>
-            {enabled && !usage && (
-              <>
-                <View style={styles.divider} />
-                <Text style={[styles.sectionDesc, { marginBottom: 10 }]}>
-                  Usage access is off. SpendSense cannot tell when a payment app is open.
-                </Text>
-                <TouchableOpacity
-                  onPress={() => openPaymentWatchUsageSettings()}
-                  style={styles.actionButton}
-                >
-                  <Text style={styles.actionButtonText}>Grant usage access</Text>
-                </TouchableOpacity>
-              </>
-            )}
-            {enabled && usage && (
-              <>
-                <View style={styles.divider} />
-                <Text style={styles.sectionDesc}>
-                  A notification appears about 5 seconds after eSewa or nBank is open. After you log and pick a bucket, it stays gone until you leave that app.
-                </Text>
-              </>
-            )}
-          </>
-        )}
+        <TouchableOpacity
+          style={styles.mappingRow}
+          onPress={() => router.push('/notification-settings')}
+          accessibilityRole="button"
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={styles.editableLabel}>Delay and apps</Text>
+            <Text style={styles.mappingBucket}>
+              Toggle, show-after delay, and watched apps
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </TouchableOpacity>
       </Card>
     </>
   )
@@ -569,6 +482,8 @@ export default function SettingsScreen() {
   const activeBuckets = bs.buckets.filter(b => b.isActive)
   const livingBuckets = activeBuckets.filter(b => b.type === 'spending')
   const futureBuckets = activeBuckets.filter(b => b.type === 'savings' || b.type === 'investment')
+  const livingTotal = livingBuckets.reduce((s, b) => s + b.monthlyAmount, 0)
+  const futureTotal = futureBuckets.reduce((s, b) => s + b.monthlyAmount, 0)
 
   // Bucket inline editor state
   const [expandedBucketId, setExpandedBucketId] = useState<string | null>(null)
@@ -590,16 +505,6 @@ export default function SettingsScreen() {
   const [addingBucket, setAddingBucket] = useState(false)
   const [newBucket, setNewBucket] = useState({ name: '', monthlyAmount: '', type: 'spending' as Bucket['type'], showOnHome: true })
 
-  // Keyword mapping state
-  const [addingMapping, setAddingMapping] = useState(false)
-  const [newKeyword, setNewKeyword] = useState('')
-  const [newMappingBucketId, setNewMappingBucketId] = useState(activeBuckets[0]?.id ?? '')
-
-  // Merchant add state
-  const [addingMerchant, setAddingMerchant] = useState(false)
-  const [newMerchant, setNewMerchant] = useState('')
-  const [newMerchantBucketId, setNewMerchantBucketId] = useState(activeBuckets[0]?.id ?? '')
-
   // Notification toggles — synced to playbook store
   const [nudges, setNudges] = useState(pb.nudgeToggles)
 
@@ -619,6 +524,8 @@ export default function SettingsScreen() {
     if (!bucket) return
     const amt = parseInt(draft.monthlyAmount, 10)
     if (!draft.name.trim() || isNaN(amt) || amt < 0) return
+    // Blur/toggle auto-persist: a 0 from a stale draft must never wipe a live ceiling.
+    if (amt === 0 && bucket.monthlyAmount > 0) return
     const patch: Partial<Bucket> = {
       name: draft.name.trim(),
       monthlyAmount: amt,
@@ -719,30 +626,136 @@ export default function SettingsScreen() {
     setAddingBucket(false)
   }
 
-  const handleAddMapping = async () => {
-    if (!newKeyword.trim() || !newMappingBucketId) return
-    await bs.addKeywordMapping(newKeyword.trim().toLowerCase(), newMappingBucketId)
-    setNewKeyword('')
-    setAddingMapping(false)
-  }
-
-  const handleAddMerchant = async () => {
-    if (!newMerchant.trim() || !newMerchantBucketId) return
-    await bs.addSureShotMerchant(newMerchant.trim(), newMerchantBucketId)
-    setNewMerchant('')
-    setAddingMerchant(false)
-  }
-
   const getBucketName = (id: string) => bs.buckets.find(b => b.id === id)?.name ?? 'Unknown'
+
+  const handleShareForClaude = async () => {
+    try {
+      if (txnStore.allTransactions.length === 0) {
+        await txnStore.loadAllTransactions()
+      }
+      if (useLendingStore.getState().allEntries.length === 0) {
+        await useLendingStore.getState().loadAllEntries()
+      }
+      const markdown = buildClaudeSnapshot({
+        playbook: {
+          userName: pb.userName,
+          userAge: pb.userAge,
+          monthlyIncome: pb.monthlyIncome,
+          monthStartDay: pb.monthStartDay,
+          earlyMonthStartDate: pb.earlyMonthStartDate,
+          efFloor: pb.efFloor,
+          efStartBalance: pb.efStartBalance,
+          carriedForwardBalance: pb.carriedForwardBalance,
+        },
+        buckets: bs.buckets,
+        transactions: useTransactionsStore.getState().allTransactions,
+        accounts: useAccountsStore.getState().accounts,
+        adjustments: useAccountsStore.getState().adjustments,
+        contacts: useLendingStore.getState().contacts,
+        entries: useLendingStore.getState().allEntries,
+        goals: goalsStore.goals.map(g => ({
+          name: g.name,
+          targetAmount: g.targetAmount,
+          monthlyContribution: g.monthlyContribution,
+          startBalance: g.startBalance,
+          linkedBucketIds: g.linkedBucketIds,
+          completedAt: g.completedAt ?? null,
+        })),
+        keywordMappings: bs.keywordMappings,
+        sureShotMerchants: bs.sureShotMerchants,
+      })
+      await Clipboard.setStringAsync(CLAUDE_SHARE_PROMPT)
+      const name = snapshotFilename()
+      const dir = cacheDirectory
+      if (!dir) throw new Error('Could not write the snapshot file.')
+      const path = `${dir}${name}`
+      await writeAsStringAsync(path, markdown)
+      if (!(await Sharing.isAvailableAsync())) {
+        Alert.alert('Share for Claude', 'Prompt copied. Sharing is not available on this device.')
+        return
+      }
+      try {
+        await Sharing.shareAsync(path, {
+          mimeType: 'text/markdown',
+          dialogTitle: 'Share for Claude',
+          UTI: 'public.plain-text',
+        })
+      } catch (shareError) {
+        const text = shareError instanceof Error ? shareError.message : ''
+        if (/cancel|dismiss|abort/i.test(text)) return
+        throw shareError
+      }
+      Alert.alert('Share for Claude', 'Prompt copied. Attach the file in Claude.')
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Could not build the snapshot.'
+      Alert.alert('Share failed', message)
+    }
+  }
+
+  const shareBackupFile = async (json: string, name: string) => {
+    const dir = cacheDirectory
+    if (!dir) throw new Error('Could not write the backup file.')
+    const path = `${dir}${name}`
+    await writeAsStringAsync(path, json)
+    if (!(await Sharing.isAvailableAsync())) {
+      Alert.alert('Backup ready', 'Sharing is not available on this device.')
+      return
+    }
+    await Sharing.shareAsync(path, {
+      mimeType: 'application/json',
+      dialogTitle: 'Export UnSpoil backup',
+      UTI: 'public.json',
+    })
+  }
+
+  const handleExportBackup = () => {
+    const runSave = async () => {
+      try {
+        const json = await exportBackup()
+        const name = backupFilename()
+        await saveBackupToDevice(json, name)
+        Alert.alert('Backup saved', `${name} is in the folder you selected (e.g. Downloads).`)
+      } catch (e) {
+        const message = e instanceof Error ? e.message : 'Could not export backup.'
+        if (message === 'CANCELLED') return
+        Alert.alert('Export failed', message)
+      }
+    }
+    const runShare = async () => {
+      try {
+        const json = await exportBackup()
+        await shareBackupFile(json, backupFilename())
+      } catch (e) {
+        const text = e instanceof Error ? e.message : ''
+        if (/cancel|dismiss|abort/i.test(text)) return
+        Alert.alert('Export failed', text || 'Could not export backup.')
+      }
+    }
+
+    if (Platform.OS === 'android') {
+      Alert.alert(
+        'Export backup',
+        'Save a copy on this phone before reinstalling or switching to the new app.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Save to device', onPress: () => void runSave() },
+          { text: 'Share', onPress: () => void runShare() },
+        ],
+      )
+      return
+    }
+    void runShare()
+  }
+
+  const handleImportBackup = () => startImportBackupFlow()
 
   const handleExportCSV = () => {
     const rows = txnStore.transactions
-    const header = 'Date,Type,Amount,Merchant,Bucket,Remarks,Source'
+    const header = 'Date,Type,Amount,Fee,Merchant,Bucket,Source'
     const csvRows = rows.map(t => {
       const bucket = getBucketName(t.bucketId)
       const merchant = (t.merchant ?? '').replace(/,/g, ' ')
-      const remarks = (t.remarks ?? '').replace(/,/g, ' ')
-      return `${t.date},${t.type},${t.amount},${merchant},${bucket},${remarks},${t.source}`
+      return `${t.date},${t.type},${t.amount},${t.feeAmount},${merchant},${bucket},${t.source}`
     })
     const csv = [header, ...csvRows].join('\n')
     Alert.alert('CSV Export', `${rows.length} transactions exported.\n\n${csv.slice(0, 500)}${csv.length > 500 ? '...' : ''}`)
@@ -774,15 +787,7 @@ export default function SettingsScreen() {
               await db.delete(playbook)
               applySchemaPatches()
               await seedDefaults()
-              await pb.loadPlaybook()
-              await bs.loadBuckets()
-              const { start, end } = getMonthRange(pb.monthStartDay)
-              await txnStore.loadTransactions(start, end)
-              await goalsStore.loadGoals()
-              await useLendingStore.getState().loadContacts()
-              await useLendingStore.getState().loadAllEntries()
-              await useLendingStore.getState().loadEntries(start, end)
-              await useAccountsStore.getState().loadAccounts()
+              await hydrateStoresAfterDbChange()
               Alert.alert('Done', 'All data cleared and defaults restored.')
             } catch (e) {
               Alert.alert('Error', e instanceof Error ? e.message : 'Could not clear data')
@@ -817,7 +822,7 @@ export default function SettingsScreen() {
       {b.accumulates && (
         <>
           <Text style={[styles.fieldHint, { marginTop: 8 }]}>
-            Current balance: NPR {formatNPR(bs.getBucketBalance(b.id))}
+            Current balance: {formatMoney(bs.getBucketBalance(b.id))}
           </Text>
           <TextInput
             style={[styles.input, { marginTop: 8 }]}
@@ -877,7 +882,7 @@ export default function SettingsScreen() {
       >
 
         {/* Section 1: Playbook */}
-        <SectionHeader title="Playbook" description="Core financial parameters" />
+        <SectionHeader title="Playbook" description="Name, currency, income, and the month" />
         <Card>
           <EditableStringRow
             label="Display name"
@@ -887,10 +892,18 @@ export default function SettingsScreen() {
             placeholder="Your name"
           />
           <View style={styles.divider} />
+          <TouchableOpacity
+            style={styles.editableRow}
+            onPress={() => router.push('/currency')}
+          >
+            <Text style={styles.editableLabel}>Currency</Text>
+            <Text style={styles.editableValue}>{pb.currency}</Text>
+          </TouchableOpacity>
+          <View style={styles.divider} />
           <EditableRow
             label="Monthly income"
             value={pb.monthlyIncome}
-            prefix="NPR "
+            prefix={`${pb.currency} `}
             onSave={v => pb.updatePlaybook({ monthlyIncome: v })}
             onSaved={saved.show}
           />
@@ -906,7 +919,7 @@ export default function SettingsScreen() {
           <EditableRow
             label="EF floor"
             value={pb.efFloor}
-            prefix="NPR "
+            prefix={`${pb.currency} `}
             onSave={v => pb.updatePlaybook({ efFloor: v })}
             onSaved={saved.show}
           />
@@ -921,7 +934,7 @@ export default function SettingsScreen() {
 
         <SectionHeader title="Buckets" description="Categorize and manage your financial buckets" />
         
-        <Text style={styles.subGroupTitle}>Living (Spending)</Text>
+        <SubGroupHeader title="Living (Spending)" total={livingTotal} first />
         <Card>
           {livingBuckets.map((b, i) => (
             <View key={b.id}>
@@ -940,8 +953,8 @@ export default function SettingsScreen() {
                     </View>
                     <Text style={styles.bucketAmount}>
                       {b.accumulates
-                        ? `Fund: NPR ${formatNPR(bs.getBucketBalance(b.id))} · +${formatNPR(b.monthlyAmount)}/mo`
-                        : `NPR ${formatNPR(b.monthlyAmount)}/mo`}
+                        ? `Fund: ${formatMoney(bs.getBucketBalance(b.id))} · +${formatMoney(b.monthlyAmount)}/mo`
+                        : `${formatMoney(b.monthlyAmount)}/mo`}
                     </Text>
                   </View>
                   <TypeBadge type={b.type} />
@@ -959,7 +972,7 @@ export default function SettingsScreen() {
           )}
         </Card>
 
-        <Text style={[styles.subGroupTitle, { marginTop: 20 }]}>Future (Savings & Investments)</Text>
+        <SubGroupHeader title="Future (Savings & Investments)" total={futureTotal} />
         <Card>
           {futureBuckets.map((b, i) => (
             <View key={b.id}>
@@ -978,8 +991,8 @@ export default function SettingsScreen() {
                     </View>
                     <Text style={styles.bucketAmount}>
                       {b.accumulates
-                        ? `Fund: NPR ${formatNPR(bs.getBucketBalance(b.id))} · +${formatNPR(b.monthlyAmount)}/mo`
-                        : `NPR ${formatNPR(b.monthlyAmount)}/mo`}
+                        ? `Fund: ${formatMoney(bs.getBucketBalance(b.id))} · +${formatMoney(b.monthlyAmount)}/mo`
+                        : `${formatMoney(b.monthlyAmount)}/mo`}
                     </Text>
                   </View>
                   <TypeBadge type={b.type} />
@@ -1066,117 +1079,12 @@ export default function SettingsScreen() {
           )}
         </Card>
 
-        {/* Section 3: Keyword Mappings */}
-        <SectionHeader title="Keyword Mappings" description='End remarks with "keyword -" to auto-categorize' />
-        <Card>
-          {bs.keywordMappings.map((km, i) => (
-            <View key={km.id}>
-              {i > 0 && <View style={styles.divider} />}
-              <View style={styles.mappingRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.mappingKeyword}>{km.keyword}</Text>
-                  <Text style={styles.mappingBucket}>{getBucketName(km.bucketId)}</Text>
-                </View>
-                <TouchableOpacity onPress={() => bs.deleteKeywordMapping(km.id)} hitSlop={8}>
-                  <Ionicons name="close-circle" size={20} color={colors.textMuted} />
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))}
-
-          {bs.keywordMappings.length > 0 && <View style={styles.divider} />}
-
-          {addingMapping ? (
-            <View style={{ paddingTop: 4 }}>
-              <TextInput
-                style={styles.input}
-                value={newKeyword}
-                onChangeText={setNewKeyword}
-                placeholder="Keyword (exact match)"
-                placeholderTextColor={colors.textMuted}
-                autoFocus
-                autoCapitalize="none"
-              />
-              <Text style={[styles.editableLabel, { marginTop: 8, marginBottom: 4 }]}>Bucket:</Text>
-              <BucketPicker
-                activeBuckets={activeBuckets}
-                selectedId={newMappingBucketId}
-                onSelect={setNewMappingBucketId}
-              />
-              <View style={styles.editorActions}>
-                <TouchableOpacity onPress={() => setAddingMapping(false)}>
-                  <Text style={{ color: colors.textMuted, fontSize: 14 }}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={handleAddMapping}>
-                  <Text style={{ color: colors.green, fontSize: 14, fontFamily: 'Inter_600SemiBold' }}>Add</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : (
-            <TouchableOpacity onPress={() => { setAddingMapping(true); setNewMappingBucketId(activeBuckets[0]?.id ?? '') }} style={{ paddingVertical: 8 }}>
-              <Text style={{ color: colors.green, fontSize: 14, fontFamily: 'Inter_600SemiBold' }}>+ Add keyword</Text>
-            </TouchableOpacity>
-          )}
-        </Card>
-
-        {/* Section 4: Sure-Shot Merchants */}
-        <SectionHeader title="Sure-Shot Merchants" description="Auto-categorize by merchant name" />
-        <Card>
-          {bs.sureShotMerchants.map((m, i) => (
-            <View key={m.id}>
-              {i > 0 && <View style={styles.divider} />}
-              <View style={styles.mappingRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.mappingKeyword}>{m.merchantName}</Text>
-                  <Text style={styles.mappingBucket}>{getBucketName(m.bucketId)}</Text>
-                </View>
-                <TouchableOpacity onPress={() => bs.deleteSureShotMerchant(m.id)} hitSlop={8}>
-                  <Ionicons name="close-circle" size={20} color={colors.textMuted} />
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))}
-
-          {bs.sureShotMerchants.length > 0 && <View style={styles.divider} />}
-
-          {addingMerchant ? (
-            <View style={{ paddingTop: 4 }}>
-              <TextInput
-                style={styles.input}
-                value={newMerchant}
-                onChangeText={setNewMerchant}
-                placeholder="Merchant name"
-                placeholderTextColor={colors.textMuted}
-                autoFocus
-              />
-              <Text style={[styles.editableLabel, { marginTop: 8, marginBottom: 4 }]}>Bucket:</Text>
-              <BucketPicker
-                activeBuckets={activeBuckets}
-                selectedId={newMerchantBucketId}
-                onSelect={setNewMerchantBucketId}
-              />
-              <View style={styles.editorActions}>
-                <TouchableOpacity onPress={() => setAddingMerchant(false)}>
-                  <Text style={{ color: colors.textMuted, fontSize: 14 }}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={handleAddMerchant}>
-                  <Text style={{ color: colors.green, fontSize: 14, fontFamily: 'Inter_600SemiBold' }}>Add</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : (
-            <TouchableOpacity onPress={() => { setAddingMerchant(true); setNewMerchantBucketId(activeBuckets[0]?.id ?? '') }} style={{ paddingVertical: 8 }}>
-              <Text style={{ color: colors.green, fontSize: 14, fontFamily: 'Inter_600SemiBold' }}>+ Add merchant</Text>
-            </TouchableOpacity>
-          )}
-        </Card>
-
         <MoneyLocationsCard />
 
         <PaymentWatchCard />
 
         {/* Section 5: Notifications */}
-        <SectionHeader title="Notifications" description="Nudge preferences (max 1 per day, quiet 10pm-8am)" />
+        <SectionHeader title="Notifications" description="At most one nudge a day, quiet 10pm–8am" />
         <Card>
           {[
             { key: 'budgetBreach' as const, label: 'Budget breach alerts' },
@@ -1204,17 +1112,63 @@ export default function SettingsScreen() {
         </Card>
 
         {/* Section 6: Data */}
-        <SectionHeader title="Data" description="Export your transactions" />
+        <SectionHeader
+          title="Data"
+          description="Full backup for another phone, UnSpoil reinstall, or your own analysis."
+        />
         <Card>
+          <TouchableOpacity onPress={handleExportBackup} style={styles.actionButton}>
+            <Text style={styles.actionButtonText}>Export backup</Text>
+          </TouchableOpacity>
+          <View style={styles.divider} />
+          <TouchableOpacity onPress={handleImportBackup} style={styles.actionButton}>
+            <Text style={styles.actionButtonText}>Import backup</Text>
+          </TouchableOpacity>
+          <View style={styles.divider} />
+          <TouchableOpacity onPress={handleShareForClaude} style={styles.actionButton}>
+            <Text style={styles.actionButtonText}>Share for Claude</Text>
+          </TouchableOpacity>
+          <View style={styles.divider} />
           <TouchableOpacity onPress={handleExportCSV} style={styles.actionButton}>
-            <Text style={styles.actionButtonText}>Export CSV</Text>
+            <Text style={styles.actionButtonText}>Export CSV (transactions)</Text>
           </TouchableOpacity>
         </Card>
 
-        <SectionHeader title="Data" description="Danger zone" />
+        <SectionHeader
+          title="Danger zone"
+          description={
+            (pb.personalRecoveryDebt ?? 0) > 0
+              ? `Personal top-up is ${formatMoney(1000)}/mo until ${formatMoney(pb.personalRecoveryDebt)} is recovered.`
+              : 'These cannot be undone.'
+          }
+        />
         <Card>
-          <TouchableOpacity onPress={handleClearAllData} style={[styles.actionButton, { borderColor: colors.red }]}>
-            <Text style={[styles.actionButtonText, { color: colors.red }]}>Clear All Data</Text>
+          {(pb.personalRecoveryDebt ?? 0) > 0 && (
+            <>
+              <TouchableOpacity
+                style={styles.dangerButton}
+                onPress={() => {
+                  Alert.alert(
+                    'Reset Personal recovery?',
+                    'Restores full Personal top-up starting next month rollover (debt cleared now).',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Reset',
+                        style: 'destructive',
+                        onPress: () => pb.resetPersonalRecovery(),
+                      },
+                    ],
+                  )
+                }}
+              >
+                <Text style={styles.dangerButtonText}>Reset Personal recovery</Text>
+              </TouchableOpacity>
+              <View style={styles.divider} />
+            </>
+          )}
+          <TouchableOpacity onPress={handleClearAllData} style={styles.dangerButton}>
+            <Text style={styles.dangerButtonText}>Clear all data</Text>
           </TouchableOpacity>
         </Card>
       </ScrollView>
@@ -1263,14 +1217,29 @@ const styles = StyleSheet.create({
     marginTop: 2,
     marginBottom: 12,
   },
+  subGroupHeader: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    marginLeft: 4,
+    marginRight: 4,
+    marginTop: 20,
+  },
   subGroupTitle: {
     fontSize: 12,
     fontFamily: 'Inter_700Bold',
     color: colors.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 1,
-    marginBottom: 8,
-    marginLeft: 4,
+    flex: 1,
+    marginRight: 12,
+  },
+  subGroupTotal: {
+    fontSize: 13,
+    fontFamily: 'Inter_700Bold',
+    color: colors.textPrimary,
+    fontVariant: ['tabular-nums'],
   },
   emptyText: {
     paddingVertical: 16,
@@ -1405,11 +1374,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 4,
   },
-  mappingKeyword: {
-    fontSize: 15,
-    fontFamily: 'Inter_600SemiBold',
-    color: colors.textPrimary,
-  },
   mappingBucket: {
     fontSize: 13,
     fontFamily: 'Inter_400Regular',
@@ -1422,24 +1386,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 4,
   },
-  bucketPicker: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  bucketPickerItem: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.pageBg,
-  },
-  bucketPickerText: {
-    fontSize: 12,
-    fontFamily: 'Inter_500Medium',
-    color: colors.textSecond,
-  },
   actionButton: {
     borderWidth: 1,
     borderColor: colors.green,
@@ -1451,5 +1397,17 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Inter_600SemiBold',
     color: colors.green,
+  },
+  dangerButton: {
+    borderWidth: 1,
+    borderColor: colors.red,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  dangerButtonText: {
+    fontSize: 15,
+    fontFamily: 'Inter_600SemiBold',
+    color: colors.red,
   },
 })

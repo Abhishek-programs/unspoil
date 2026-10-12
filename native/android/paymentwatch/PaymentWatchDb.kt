@@ -12,7 +12,6 @@ import kotlin.random.Random
 
 object PaymentWatchDb {
   private const val TAG = "PaymentWatchDb"
-  private const val MAX_CHIPS = 8
 
   fun insertFlaggedExpense(
     context: Context,
@@ -42,8 +41,8 @@ object PaymentWatchDb {
         """
         INSERT INTO transactions (
           id, type, amount, merchant, description, bucket_id, date, source,
-          remarks, funded_from_bucket_id, account_id, parsed_txn_id, is_flagged, is_recurring_draft, created_at
-        ) VALUES (?, 'expense', ?, ?, ?, ?, ?, 'notification', NULL, NULL, ?, NULL, 1, 0, ?)
+          funded_from_bucket_id, account_id, parsed_txn_id, is_flagged, is_recurring_draft, created_at
+        ) VALUES (?, 'expense', ?, ?, ?, ?, ?, 'notification', NULL, ?, NULL, 1, 0, ?)
         """.trimIndent(),
         arrayOf(id, amount, merchant, description, bucketId, now, accountId, now),
       )
@@ -97,44 +96,49 @@ object PaymentWatchDb {
     }
   }
 
-  fun spendingBucketNames(context: Context): Array<String> {
+  fun spendingBucketNames(context: Context): Array<String> =
+    spendingBuckets(context).map { it.name }.toTypedArray()
+
+  data class SpendingBucket(val id: String, val name: String, val icon: String)
+
+  fun spendingBuckets(context: Context): List<SpendingBucket> {
     val dbFile = File(context.filesDir, "SQLite/spendsense.db")
-    if (!dbFile.exists()) return emptyArray()
+    if (!dbFile.exists()) return emptyList()
     var db: SQLiteDatabase? = null
     return try {
       db = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
-      loadSpendingBuckets(db).map { it.name }.take(MAX_CHIPS).toTypedArray()
+      loadSpendingBuckets(db)
     } catch (e: Exception) {
       Log.e(TAG, "Failed to load buckets", e)
-      emptyArray()
+      emptyList()
     } finally {
       db?.close()
     }
   }
 
-  private data class BucketRow(val id: String, val name: String)
-
-  private fun loadSpendingBuckets(db: SQLiteDatabase): List<BucketRow> {
+  private fun loadSpendingBuckets(db: SQLiteDatabase): List<SpendingBucket> {
+    // All active Living buckets (defaults + user-created). Ceilings before Personal fund.
     val cursor = db.rawQuery(
       """
-      SELECT id, name FROM buckets
+      SELECT id, name, COALESCE(icon, '') FROM buckets
       WHERE is_active = 1 AND type = 'spending'
-      ORDER BY sort_order ASC
+      ORDER BY accumulates ASC, sort_order ASC, name ASC
       """.trimIndent(),
       null,
     )
-    val rows = mutableListOf<BucketRow>()
+    val rows = mutableListOf<SpendingBucket>()
     cursor.use {
       while (it.moveToNext()) {
         val id = it.getString(0) ?: continue
         val name = it.getString(1) ?: continue
-        if (name.isNotBlank()) rows.add(BucketRow(id, name))
+        val icon = it.getString(2).orEmpty()
+        if (name.isNotBlank()) rows.add(SpendingBucket(id, name, icon))
       }
     }
     return rows
   }
 
-  private fun resolveSpendingBucket(db: SQLiteDatabase, raw: String?): BucketRow? {
+  private fun resolveSpendingBucket(db: SQLiteDatabase, raw: String?): SpendingBucket? {
     val q = raw?.trim().orEmpty()
     if (q.isEmpty()) return null
     val rows = loadSpendingBuckets(db)
@@ -197,6 +201,27 @@ object PaymentWatchDb {
     val fromBank = amount - fromPrimary
     if (fromPrimary > 0) setAccountBalance(db, primary, primaryBal - fromPrimary)
     if (fromBank > 0) setAccountBalance(db, "bank", accountBalance(db, "bank") - fromBank)
+  }
+
+  fun currencyCode(context: Context): String {
+    val dbFile = File(context.filesDir, "SQLite/spendsense.db")
+    if (!dbFile.exists()) return "NPR"
+    var db: SQLiteDatabase? = null
+    return try {
+      db = SQLiteDatabase.openDatabase(
+        dbFile.absolutePath,
+        null,
+        SQLiteDatabase.OPEN_READONLY,
+      )
+      val cursor = db.rawQuery("SELECT currency FROM playbook LIMIT 1", null)
+      val code = if (cursor.moveToFirst()) cursor.getString(0) else null
+      cursor.close()
+      code?.takeIf { it.length == 3 } ?: "NPR"
+    } catch (_: Exception) {
+      "NPR"
+    } finally {
+      db?.close()
+    }
   }
 
   fun accountIdForPackage(pkg: String): String {

@@ -14,7 +14,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { colors } from '@/constants/colors'
-import { formatNPR, formatNPRShort } from '@/lib/format'
+import { formatMoney, formatMoneyShort } from '@/lib/format'
 import { useKeyboardHeight } from '@/hooks/useKeyboardHeight'
 
 interface SettleUpSheetProps {
@@ -91,8 +91,8 @@ export function SettleUpSheet({
 
               <Text style={styles.sub}>
                 {receiving
-                  ? `${personName} owes you NPR ${formatNPRShort(balance)}`
-                  : `You owe ${personName} NPR ${formatNPRShort(Math.abs(balance))}`}
+                  ? `${personName} owes you ${formatMoneyShort(balance)}`
+                  : `You owe ${personName} ${formatMoneyShort(Math.abs(balance))}`}
               </Text>
 
               <Text style={styles.label}>Amount</Text>
@@ -105,7 +105,10 @@ export function SettleUpSheet({
                 placeholderTextColor={colors.textMuted}
               />
               <Text style={styles.hint}>
-                {receiving ? 'They paid you back' : 'You paid them'} · max NPR {formatNPR(maxAmount)}
+                {receiving
+                  ? 'Adds to Your money'
+                  : 'Leaves Your money (this month + carried forward)'}{' '}
+                · max {formatMoney(maxAmount)}
               </Text>
 
               <TouchableOpacity

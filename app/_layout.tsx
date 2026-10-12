@@ -13,7 +13,7 @@ import { useTransactionsStore } from '@/store/transactions'
 import { useGoalsStore } from '@/store/goals'
 import { useLendingStore } from '@/store/lending'
 import { useAccountsStore } from '@/store/accounts'
-import { getMonthRange, getDaysRemaining } from '@/lib/month'
+import { getMonthRange, getDaysRemaining, toLocalDateKey } from '@/lib/month'
 import {
   requestPermissions,
   setupNotificationChannel,
@@ -37,7 +37,7 @@ export default function RootLayout() {
   const [dbReady, setDbReady] = useState(false)
   const { loadPlaybook, isOnboarded, isLoaded: playbookLoaded } = usePlaybookStore()
   const { loadBuckets } = useBucketsStore()
-  const { loadTransactions } = useTransactionsStore()
+  const { loadTransactions, loadAllTransactions } = useTransactionsStore()
   const { loadGoals } = useGoalsStore()
   const { loadContacts, loadEntries, loadAllEntries } = useLendingStore()
   const { loadAccounts } = useAccountsStore()
@@ -60,26 +60,41 @@ export default function RootLayout() {
   useEffect(() => {
     if (!playbookLoaded) return
     const pb = usePlaybookStore.getState()
-    const { start, end } = getMonthRange(pb.monthStartDay)
+    const { start, end } = getMonthRange(pb.monthStartDay, pb.earlyMonthStartDate)
     loadBuckets().then(() => {
       if (isOnboarded) {
-        runMonthRollover(pb.monthStartDay, pb.lastBalanceRolloverMonth).then(async monthKey => {
+        runMonthRollover(
+          pb.monthStartDay,
+          pb.lastBalanceRolloverMonth,
+          pb.earlyMonthStartDate,
+        ).then(async monthKey => {
           if (monthKey !== pb.lastBalanceRolloverMonth) {
-            await pb.updatePlaybook({ lastBalanceRolloverMonth: monthKey })
+            await usePlaybookStore.getState().loadPlaybook()
+            await usePlaybookStore.getState().updatePlaybook({ lastBalanceRolloverMonth: monthKey })
             await useBucketsStore.getState().loadBuckets()
           }
           const surplusKey = await runSurplusRollover(
             pb.monthStartDay,
             pb.lastSurplusRolloverMonth,
+            pb.earlyMonthStartDate,
           )
           if (surplusKey !== pb.lastSurplusRolloverMonth) {
-            await pb.updatePlaybook({ lastSurplusRolloverMonth: surplusKey })
             await usePlaybookStore.getState().loadPlaybook()
+            await usePlaybookStore.getState().updatePlaybook({ lastSurplusRolloverMonth: surplusKey })
+          }
+          if (
+            pb.earlyMonthStartDate &&
+            toLocalDateKey(start) !== pb.earlyMonthStartDate
+          ) {
+            await usePlaybookStore.getState().updatePlaybook({
+              earlyMonthStartDate: null,
+            })
           }
         })
       }
     })
     loadTransactions(start, end)
+    loadAllTransactions()
     loadGoals()
     loadContacts()
     loadAllEntries()
@@ -103,7 +118,7 @@ export default function RootLayout() {
     const sub = AppState.addEventListener('change', (state) => {
       if (state !== 'active') return
       const pb = usePlaybookStore.getState()
-      const { start, end } = getMonthRange(pb.monthStartDay)
+      const { start, end } = getMonthRange(pb.monthStartDay, pb.earlyMonthStartDate)
       loadTransactions(start, end)
       startPaymentWatchIfEnabled()
     })
@@ -133,7 +148,10 @@ export default function RootLayout() {
     })
 
     const confirmedIds = ts.getConfirmedSavingsBuckets()
-    const daysSinceStart = Math.max(0, getDaysRemaining(pb.monthStartDay))
+    const daysSinceStart = Math.max(
+      0,
+      getDaysRemaining(pb.monthStartDay, pb.earlyMonthStartDate),
+    )
     const unconfirmedSavings = savingsBuckets
       .filter(b => b.showOnHome && !confirmedIds.has(b.id))
       .map(b => ({ name: b.name, daysSinceMonthStart: 30 - daysSinceStart }))
@@ -142,7 +160,7 @@ export default function RootLayout() {
     const efBucket = bs.buckets.find(b => b.id === 'ef')
     const efBalance = efBucket
       ? ts.transactions
-          .filter(t => t.bucketId === efBucket.id && t.remarks === '__savings_confirm__')
+          .filter(t => t.bucketId === efBucket.id && t.type === 'expense')
           .reduce((sum, t) => sum + t.amount, 0)
       : 0
 
@@ -184,6 +202,7 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="lending" options={{ headerShown: false }} />
+          <Stack.Screen name="notification-settings" options={{ headerShown: false }} />
           <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
         </Stack>
       )}

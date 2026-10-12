@@ -1,6 +1,6 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import { colors } from '@/constants/colors'
-import { formatNPR, formatDate } from '@/lib/format'
+import { formatDate, formatMoney } from '@/lib/format'
 import { transactionSubtitle, transactionTitle } from '@/lib/transaction-label'
 import { useBucketsStore } from '@/store/buckets'
 import type { Transaction } from '@/store/transactions'
@@ -40,6 +40,9 @@ export function TransactionRow({ transaction, bucketName, bucketColor, onPress }
             {subtitle}
           </Text>
         ) : null}
+        {transaction.feeAmount > 0 && (
+          <Text style={styles.fee}>fee {formatMoney(transaction.feeAmount)}</Text>
+        )}
         <Text style={styles.date}>{formatDate(transaction.date)}</Text>
       </View>
 
@@ -52,7 +55,7 @@ export function TransactionRow({ transaction, bucketName, bucketColor, onPress }
       </View>
 
       <Text style={[styles.amount, { color: isIncome ? colors.green : colors.red }]}>
-        {isIncome ? '+' : '-'} NPR {formatNPR(transaction.amount)}
+        {isIncome ? '+' : '-'} {formatMoney(transaction.amount)}
       </Text>
     </TouchableOpacity>
   )
@@ -92,6 +95,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter_400Regular',
     color: colors.textMuted,
+    marginTop: 2,
+  },
+  fee: {
+    fontSize: 11,
+    fontFamily: 'Inter_500Medium',
+    color: colors.amber,
     marginTop: 2,
   },
   center: {

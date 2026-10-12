@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { CurrencyPrefix } from '@/components/ui/CurrencyPrefix'
 import {
   View,
   Text,
@@ -70,7 +71,7 @@ export function LendBorrowForm({
   return (
     <View>
       <View style={styles.amountContainer}>
-        <Text style={styles.currencyLabel}>NPR</Text>
+        <CurrencyPrefix style={styles.currencyLabel} />
         <TextInput
           style={styles.amountInput}
           value={amount}

@@ -11,8 +11,10 @@ import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors } from '@/constants/colors'
 import { formatNPR, formatNPRShort, formatDate } from '@/lib/format'
-import { useTransactionsStore, INCOME_BUCKET_ID } from '@/store/transactions'
+import { useTransactionsStore, INCOME_BUCKET_ID, SALARY_BUCKET_ID } from '@/store/transactions'
 import { useBucketsStore } from '@/store/buckets'
+import { usePlaybookStore } from '@/store/playbook'
+import { getMonthRangeBack } from '@/lib/month'
 import { useGoalsStore } from '@/store/goals'
 import { TransactionRow } from '@/components/transactions/TransactionRow'
 import { TransactionDetailSheet } from '@/components/transactions/TransactionDetailSheet'
@@ -20,26 +22,57 @@ import { LendingRow } from '@/components/transactions/LendingRow'
 import { ChartsView } from '@/components/transactions/ChartsView'
 import type { Transaction } from '@/store/transactions'
 import { useLendingStore } from '@/store/lending'
-import { router } from 'expo-router'
+import { LendingEntrySheet } from '@/components/lending/LendingEntrySheet'
+import type { LendBorrowEntry } from '@/store/lending'
 
 type FilterKey = 'all' | 'income' | 'flagged' | 'lending' | string
 
 export default function TransactionsScreen() {
   const insets = useSafeAreaInsets()
-  const { transactions } = useTransactionsStore()
+  const { allTransactions } = useTransactionsStore()
+  const { monthStartDay, earlyMonthStartDate } = usePlaybookStore()
   const { buckets, getSpendingBuckets, getSavingsBuckets } = useBucketsStore()
-  const { entries: lendingEntries, contacts, allEntries } = useLendingStore()
+  const {
+    entries: lendingEntries,
+    contacts,
+    allEntries,
+    updateEntry,
+    deleteEntry,
+  } = useLendingStore()
 
+  const [periodOffset, setPeriodOffset] = useState(0)
   const [viewMode, setViewMode] = useState<'list' | 'chart'>('list')
   const [chartPeriod, setChartPeriod] = useState<'month' | 'year'>('month')
   const [activeFilter, setActiveFilter] = useState<FilterKey>('all')
   const [selectedTxn, setSelectedTxn] = useState<Transaction | null>(null)
   const [detailVisible, setDetailVisible] = useState(false)
+  const [selectedLendingEntry, setSelectedLendingEntry] =
+    useState<LendBorrowEntry | null>(null)
+
+  const period = useMemo(
+    () => getMonthRangeBack(monthStartDay, earlyMonthStartDate, periodOffset),
+    [monthStartDay, earlyMonthStartDate, periodOffset],
+  )
+
+  const transactions = useMemo(() => {
+    const startMs = period.start.getTime()
+    const endMs = period.end.getTime()
+    return allTransactions.filter(t => {
+      const ms = new Date(t.date).getTime()
+      return ms >= startMs && ms <= endMs
+    })
+  }, [allTransactions, period])
+
+  const hasOlderPeriods = useMemo(
+    () => allTransactions.some(t => new Date(t.date).getTime() < period.start.getTime()),
+    [allTransactions, period],
+  )
 
   const bucketMap = useMemo(() => {
     const m = new Map<string, { name: string; color: string }>()
     buckets.forEach(b => m.set(b.id, { name: b.name, color: b.color }))
     m.set(INCOME_BUCKET_ID, { name: 'Income', color: colors.green })
+    m.set(SALARY_BUCKET_ID, { name: 'Salary', color: colors.green })
     return m
   }, [buckets])
 
@@ -116,7 +149,15 @@ export default function TransactionsScreen() {
     [transactions],
   )
   const totalSpent = useMemo(
-    () => transactions.filter(t => t.type === 'expense' && !t.isFlagged && !t.isRecurringDraft).reduce((s, t) => s + t.amount, 0),
+    () => transactions
+      .filter(t => t.type === 'expense' && !t.isFlagged && !t.isRecurringDraft)
+      .reduce((s, t) => s + t.amount + t.feeAmount, 0),
+    [transactions],
+  )
+  const currentFees = useMemo(
+    () => transactions
+      .filter(t => t.type === 'expense' && !t.isFlagged && !t.isRecurringDraft)
+      .reduce((s, t) => s + t.feeAmount, 0),
     [transactions],
   )
   const net = totalIncome - totalSpent
@@ -153,10 +194,12 @@ export default function TransactionsScreen() {
   const { goals } = useGoalsStore()
   const goalsInfo = useMemo(() => {
     return goals.map(g => {
-      const current = transactions
-        .filter(t => g.linkedBucketIds.includes(t.bucketId))
+      const current = allTransactions
+        .filter(
+          t => g.linkedBucketIds.includes(t.bucketId) && t.type === 'expense',
+        )
         .reduce((sum, t) => sum + t.amount, 0)
-      
+
       return {
         name: g.name,
         current: g.startBalance + current,
@@ -164,7 +207,33 @@ export default function TransactionsScreen() {
         projectedDate: 'Phase 3 goal',
       }
     })
-  }, [goals, transactions])
+  }, [goals, allTransactions])
+
+  // Trend bars are calendar months (lib/chart-data), so match on the local month key.
+  const getMonthDetail = useCallback(
+    (monthKey: string) => {
+      const rows = allTransactions.filter(t => {
+        if (t.type !== 'expense' || t.isFlagged || t.isRecurringDraft) return false
+        const d = new Date(t.date)
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === monthKey
+      })
+      const byBucket = new Map<string, number>()
+      rows.forEach(t => byBucket.set(t.bucketId, (byBucket.get(t.bucketId) ?? 0) + t.amount))
+      return {
+        total: rows.reduce((s, t) => s + t.amount, 0),
+        fees: rows.reduce((s, t) => s + t.feeAmount, 0),
+        count: rows.length,
+        buckets: [...byBucket.entries()]
+          .map(([id, value]) => ({
+            label: bucketMap.get(id)?.name ?? 'Unknown',
+            color: bucketMap.get(id)?.color ?? colors.textMuted,
+            value,
+          }))
+          .sort((a, b) => b.value - a.value),
+      }
+    },
+    [allTransactions, bucketMap],
+  )
 
   const openDetail = useCallback((txn: Transaction) => {
     setSelectedTxn(txn)
@@ -205,6 +274,38 @@ export default function TransactionsScreen() {
           />
         </TouchableOpacity>
       </View>
+
+      {/* Period stepper */}
+      {!isLendingFilter && (
+        <View style={styles.periodRow}>
+          <TouchableOpacity
+            style={[styles.periodArrow, !hasOlderPeriods && styles.periodArrowDisabled]}
+            disabled={!hasOlderPeriods}
+            hitSlop={10}
+            onPress={() => setPeriodOffset(o => o + 1)}
+          >
+            <Ionicons name="chevron-back" size={16} color={colors.textSecond} />
+          </TouchableOpacity>
+          <View style={styles.periodLabelCol}>
+            <Text style={styles.periodRangeText}>
+              {formatDate(period.start)} – {formatDate(period.end)}
+            </Text>
+            <Text style={styles.periodCaption}>
+              {periodOffset === 0
+                ? 'This period'
+                : `${periodOffset} period${periodOffset > 1 ? 's' : ''} ago`}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.periodArrow, periodOffset === 0 && styles.periodArrowDisabled]}
+            disabled={periodOffset === 0}
+            hitSlop={10}
+            onPress={() => setPeriodOffset(o => Math.max(0, o - 1))}
+          >
+            <Ionicons name="chevron-forward" size={16} color={colors.textSecond} />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Filter chips */}
       <View>
@@ -282,7 +383,7 @@ export default function TransactionsScreen() {
             <LendingRow
               entry={item}
               personName={contactMap.get(item.contactId) ?? 'Unknown'}
-              onPress={() => router.push(`/lending/${item.contactId}`)}
+              onPress={() => setSelectedLendingEntry(item)}
             />
           )}
           ListEmptyComponent={
@@ -338,7 +439,9 @@ export default function TransactionsScreen() {
             spendingByBucket={spendingByBucket}
             savingsByBucket={savingsInfo}
             goals={goalsInfo}
+            currentFees={currentFees}
             period={chartPeriod}
+            getMonthDetail={getMonthDetail}
           />
         </ScrollView>
       )}
@@ -348,6 +451,18 @@ export default function TransactionsScreen() {
         transaction={selectedTxn}
         visible={detailVisible}
         onClose={closeDetail}
+      />
+      <LendingEntrySheet
+        visible={selectedLendingEntry !== null}
+        entry={selectedLendingEntry}
+        personName={
+          selectedLendingEntry
+            ? contactMap.get(selectedLendingEntry.contactId) ?? 'Unknown'
+            : ''
+        }
+        onSave={updateEntry}
+        onDelete={deleteEntry}
+        onClose={() => setSelectedLendingEntry(null)}
       />
     </View>
   )
@@ -370,6 +485,44 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontFamily: 'Inter_700Bold',
     color: colors.textPrimary,
+  },
+  periodRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 16,
+    marginBottom: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderCurve: 'continuous',
+  },
+  periodArrow: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  periodArrowDisabled: {
+    opacity: 0.25,
+  },
+  periodLabelCol: {
+    alignItems: 'center',
+  },
+  periodRangeText: {
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+    color: colors.textPrimary,
+    fontVariant: ['tabular-nums'],
+  },
+  periodCaption: {
+    fontSize: 11,
+    fontFamily: 'Inter_400Regular',
+    color: colors.textMuted,
+    marginTop: 1,
   },
   filterScroll: {
     flexGrow: 0,

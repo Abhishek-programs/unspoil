@@ -6,10 +6,19 @@ import { useLendingStore } from '@/store/lending'
 import { useAccountsStore } from '@/store/accounts'
 import { getMonthRange, getDaysRemaining } from '@/lib/month'
 import { computeMonthMetrics } from '@/lib/lending/balance'
+import { computeCashOnHand, foundMoneyInRange, periodCashFromTransactions } from '@/lib/your-money'
 import { EF_BUCKET_ID, SIP_BUCKET_ID, SHARES_BUCKET_ID } from '@/constants/defaults'
+import { BANK_ACCOUNT_ID } from '@/constants/accounts'
+import { isSalaryTxn, isSavingsConfirmTxn } from '@/lib/txn-kind'
 
 export function usePulseData() {
-  const { monthStartDay, monthlyIncome, efStartBalance, carriedForwardBalance } = usePlaybookStore()
+  const {
+    monthStartDay,
+    earlyMonthStartDate,
+    monthlyIncome,
+    efStartBalance,
+    carriedForwardBalance,
+  } = usePlaybookStore()
   const { buckets, bucketBalances } = useBucketsStore()
   const {
     flaggedTransactions,
@@ -18,6 +27,7 @@ export function usePulseData() {
     getConfirmedSavingsBuckets,
     addTransaction,
     transactions,
+    allTransactions,
   } = useTransactionsStore()
   const { goals } = useGoalsStore()
   const { allEntries, contacts, getLentOutTotal, getYouOweTotal, getTotalNetBalance } =
@@ -31,7 +41,7 @@ export function usePulseData() {
   const savingsBuckets = allSavingsBuckets.filter(b => b.isActive && b.showOnHome)
 
   const confirmedSavingIds = getConfirmedSavingsBuckets()
-  const { start, end } = getMonthRange(monthStartDay)
+  const { start, end } = getMonthRange(monthStartDay, earlyMonthStartDate)
 
   const spentByBucket: Record<string, number> = {}
   allSpendingBuckets.forEach(b => {
@@ -41,21 +51,7 @@ export function usePulseData() {
   const accumulatingBuckets = allSpendingBuckets.filter(b => b.isActive && b.accumulates)
   const regularSpendingBuckets = allSpendingBuckets.filter(b => b.isActive && !b.accumulates)
 
-  const personalDraws = accumulatingBuckets.reduce((s, b) => {
-    return (
-      s +
-      transactions
-        .filter(
-          t =>
-            t.type === 'expense' &&
-            !t.isFlagged &&
-            !t.isRecurringDraft &&
-            ((t.bucketId === b.id && (!t.remarks || !t.remarks.startsWith('__'))) ||
-              (t.fundedFromBucketId === b.id && t.remarks === '__savings_confirm__')),
-        )
-        .reduce((sum, t) => sum + t.amount, 0)
-    )
-  }, 0)
+  const personalDraws = accumulatingBuckets.reduce((s, b) => s + (spentByBucket[b.id] ?? 0), 0)
 
   const personalTopUps = accumulatingBuckets.reduce((s, b) => s + b.monthlyAmount, 0)
   const lifestyleBudget = regularSpendingBuckets.reduce((s, b) => s + b.monthlyAmount, 0)
@@ -66,6 +62,9 @@ export function usePulseData() {
     0,
   )
   const flaggedAmount = flaggedTransactions.reduce((s, t) => s + t.amount, 0)
+  const feesThisMonth = transactions
+    .filter(t => t.type === 'expense' && !t.isFlagged && !t.isRecurringDraft)
+    .reduce((s, t) => s + t.feeAmount, 0)
 
   const totalAllocations = activeBuckets.reduce((s, b) => s + b.monthlyAmount, 0)
   const plannedSavings = allSavingsBuckets
@@ -79,15 +78,15 @@ export function usePulseData() {
   const plannedInvestment = investmentBuckets.reduce((s, b) => s + b.monthlyAmount, 0)
 
   const hasSalaryThisMonth = transactions.some(
-    t => t.type === 'income' && t.remarks === '__salary__' && !t.isRecurringDraft,
+    t => isSalaryTxn(t) && !t.isRecurringDraft,
   )
   const salaryAmount = transactions
-    .filter(t => t.type === 'income' && t.remarks === '__salary__' && !t.isRecurringDraft)
+    .filter(t => isSalaryTxn(t) && !t.isRecurringDraft)
     .reduce((sum, t) => sum + t.amount, 0)
   const effectiveIncome = hasSalaryThisMonth ? salaryAmount || monthlyIncome : 0
 
   const confirmedSavedInvested = transactions
-    .filter(t => t.remarks === '__savings_confirm__' && t.type === 'expense')
+    .filter(t => isSavingsConfirmTxn(t, buckets))
     .reduce((s, t) => s + t.amount, 0)
 
   const confirmedSavingsOnly = savingsOnlyBuckets
@@ -98,7 +97,7 @@ export function usePulseData() {
     .filter(b => confirmedSavingIds.has(b.id))
     .reduce((s, b) => {
       const actual = transactions
-        .filter(t => t.bucketId === b.id && t.remarks === '__savings_confirm__')
+        .filter(t => t.bucketId === b.id && t.type === 'expense')
         .reduce((sum, t) => sum + t.amount, 0)
       return s + actual
     }, 0)
@@ -119,18 +118,30 @@ export function usePulseData() {
 
   const lendBorrowMonth = computeMonthMetrics(allEntries, start, end)
   const lendBorrowCashAdjust = lendBorrowMonth.lendBorrowCashAdjust
-  const adjustedSafeToSpend = safeToSpend + lendBorrowCashAdjust
+  const adjustedSafeToSpend = safeToSpend + lendBorrowCashAdjust - feesThisMonth
   const lentOutstandingThisMonth = lendBorrowMonth.lentOutstandingThisMonth
 
   const unconfirmedSavingsThisMonth = Math.max(0, plannedSavings - confirmedSavedInvested)
   const stillInBank = hasSalaryThisMonth ? unconfirmedSavingsThisMonth : 0
 
-  const availableBalance = Math.max(0, adjustedSafeToSpend) + carriedForwardBalance
-  const { foundMoneyTotal, accounts: moneyAccounts } = useAccountsStore()
-  const yourMoney = availableBalance + stillInBank + foundMoneyTotal
-  const monthRemainingBalance = Math.max(0, adjustedSafeToSpend)
+  const availableBalance = Math.max(0, adjustedSafeToSpend + carriedForwardBalance)
+  const { foundMoneyTotal, accounts: moneyAccounts, adjustments } = useAccountsStore()
+  const periodCash = periodCashFromTransactions(transactions)
+  const bankPile = computeCashOnHand({
+    carriedForward: carriedForwardBalance,
+    income: periodCash.income,
+    expenses: periodCash.expenses,
+    fees: periodCash.fees,
+    lendingCashAdjust: lendBorrowCashAdjust,
+    foundThisPeriod: foundMoneyInRange(adjustments, start, end),
+  })
+  const otherWallets = moneyAccounts
+    .filter(a => a.id !== BANK_ACCOUNT_ID)
+    .reduce((s, a) => s + a.balance, 0)
+  const yourMoney = bankPile + otherWallets
+  const monthRemainingBalance = adjustedSafeToSpend
 
-  const daysRemaining = getDaysRemaining(monthStartDay)
+  const daysRemaining = getDaysRemaining(monthStartDay, earlyMonthStartDate)
   const weeksRemaining = Math.max(1, daysRemaining / 7)
   const weeklyRate =
     daysRemaining > 0 ? Math.max(0, adjustedSafeToSpend) / weeksRemaining : 0
@@ -144,8 +155,8 @@ export function usePulseData() {
 
   const efBucket = buckets.find(b => b.id === EF_BUCKET_ID)
   const efContributions = efBucket
-    ? transactions
-        .filter(t => t.bucketId === efBucket.id && t.remarks === '__savings_confirm__')
+    ? allTransactions
+        .filter(t => t.bucketId === efBucket.id && t.type === 'expense')
         .reduce((sum, t) => sum + t.amount, 0)
     : 0
 
@@ -153,8 +164,8 @@ export function usePulseData() {
   const activeGoals = goals.filter(g => g.isEnabled && !g.completedAt)
 
   const goalValue = (g: (typeof goals)[0]) => {
-    const current = transactions
-      .filter(t => g.linkedBucketIds.includes(t.bucketId) && t.remarks === '__savings_confirm__')
+    const current = allTransactions
+      .filter(t => g.linkedBucketIds.includes(t.bucketId) && t.type === 'expense')
       .reduce((sum, t) => sum + t.amount, 0)
     return g.startBalance + current
   }
@@ -169,14 +180,14 @@ export function usePulseData() {
 
   const sipLifetime = sipGoal
     ? goalValue(sipGoal)
-    : transactions
-        .filter(t => t.bucketId === SIP_BUCKET_ID && t.remarks === '__savings_confirm__')
+    : allTransactions
+        .filter(t => t.bucketId === SIP_BUCKET_ID && t.type === 'expense')
         .reduce((sum, t) => sum + t.amount, 0)
 
   const sharesLifetime = sharesGoal
     ? goalValue(sharesGoal)
-    : transactions
-        .filter(t => t.bucketId === SHARES_BUCKET_ID && t.remarks === '__savings_confirm__')
+    : allTransactions
+        .filter(t => t.bucketId === SHARES_BUCKET_ID && t.type === 'expense')
         .reduce((sum, t) => sum + t.amount, 0)
 
   const efValue = efStartBalance + efContributions
@@ -203,6 +214,7 @@ export function usePulseData() {
     hasSalaryThisMonth,
     availableBalance,
     yourMoney,
+    bankPile,
     stillInBank,
     safeToSpend: adjustedSafeToSpend,
     rawSafeToSpend: safeToSpend,
@@ -223,6 +235,7 @@ export function usePulseData() {
     totalAllocations,
     savingsSetAside: plannedSavings,
     flaggedAmount,
+    feesThisMonth,
     unconfirmedSavings,
     stillToSave,
     stillToInvest,

@@ -7,6 +7,7 @@ export interface MonthlySpend {
   month: string // "Jan", "Feb", etc.
   monthKey: string // "2026-04"
   total: number
+  fees: number
   isCurrent: boolean
 }
 
@@ -40,11 +41,15 @@ export async function getMonthlySpendHistory(months: number): Promise<MonthlySpe
     const total = rows
       .filter(r => !r.isFlagged && !r.isRecurringDraft)
       .reduce((sum, r) => sum + r.amount, 0)
+    const fees = rows
+      .filter(r => !r.isFlagged && !r.isRecurringDraft)
+      .reduce((sum, r) => sum + (r.feeAmount ?? 0), 0)
 
     result.push({
       month: label,
       monthKey,
       total,
+      fees,
       isCurrent: monthKey === currentKey,
     })
   }

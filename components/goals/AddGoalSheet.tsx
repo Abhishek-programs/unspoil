@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { CurrencyPrefix } from '@/components/ui/CurrencyPrefix'
 import {
   Modal,
   View,
@@ -17,8 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { colors } from '@/constants/colors'
 import { useGoalsStore, type Goal } from '@/store/goals'
-import { useBucketsStore } from '@/store/buckets'
-import { formatNPR } from '@/lib/format'
+import { formatMoney } from '@/lib/format'
 import {
   type PaymentMode,
   computeGoalPlan,
@@ -42,8 +42,6 @@ function paymentModeFromChoice(choice: PaymentChoice): PaymentMode {
 
 export function AddGoalSheet({ visible, onClose, editGoal }: AddGoalSheetProps) {
   const { createGoalWithBuckets, updateGoalPaymentPlan, loadGoals } = useGoalsStore()
-  const { loadBuckets } = useBucketsStore()
-
   const [name, setName] = useState('')
   const [targetAmount, setTargetAmount] = useState('')
   const [monthlyContribution, setMonthlyContribution] = useState('')
@@ -142,7 +140,6 @@ export function AddGoalSheet({ visible, onClose, editGoal }: AddGoalSheetProps) 
         isEnabled: true,
       })
     }
-    await loadBuckets()
     await loadGoals()
     onClose()
   }
@@ -195,7 +192,7 @@ export function AddGoalSheet({ visible, onClose, editGoal }: AddGoalSheetProps) 
             <View style={styles.field}>
               <Text style={styles.label}>TARGET AMOUNT</Text>
               <View style={styles.inputRow}>
-                <Text style={styles.prefix}>NPR</Text>
+                <CurrencyPrefix style={styles.prefix} />
                 <TextInput
                   style={[styles.input, { flex: 1 }]}
                   placeholder="500,000"
@@ -221,7 +218,7 @@ export function AddGoalSheet({ visible, onClose, editGoal }: AddGoalSheetProps) 
             <View style={styles.field}>
               <Text style={styles.label}>ALREADY SAVED</Text>
               <View style={styles.inputRow}>
-                <Text style={styles.prefix}>NPR</Text>
+                <CurrencyPrefix style={styles.prefix} />
                 <TextInput
                   style={[styles.input, { flex: 1 }]}
                   placeholder="0"
@@ -253,7 +250,7 @@ export function AddGoalSheet({ visible, onClose, editGoal }: AddGoalSheetProps) 
             {paymentChoice === 'upfront_emi' && target > 0 && (
               <View style={styles.emiBlock}>
                 <Text style={styles.label}>HOW MUCH UPFRONT?</Text>
-                <Text style={styles.upfrontValue}>NPR {formatNPR(upfrontAmount)}</Text>
+                <Text style={styles.upfrontValue}>{formatMoney(upfrontAmount)}</Text>
                 <Slider
                   minimumValue={Math.round(target * 0.1)}
                   maximumValue={Math.round(target * 0.9)}
@@ -277,7 +274,7 @@ export function AddGoalSheet({ visible, onClose, editGoal }: AddGoalSheetProps) 
             <View style={styles.field}>
               <Text style={styles.label}>MONTHLY CONTRIBUTION</Text>
               <View style={styles.inputRow}>
-                <Text style={styles.prefix}>NPR</Text>
+                <CurrencyPrefix style={styles.prefix} />
                 <TextInput
                   style={[styles.input, { flex: 1 }]}
                   placeholder={String((plan?.totalMonthly ?? backCalc) || 0)}
@@ -288,7 +285,7 @@ export function AddGoalSheet({ visible, onClose, editGoal }: AddGoalSheetProps) 
                 />
               </View>
               {plan && (
-                <Text style={styles.hint}>Suggested: NPR {formatNPR(plan.totalMonthly)}/mo</Text>
+                <Text style={styles.hint}>Suggested: {formatMoney(plan.totalMonthly)}/mo</Text>
               )}
             </View>
           </ScrollView>

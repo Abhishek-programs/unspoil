@@ -1,7 +1,7 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { colors } from '@/constants/colors'
-import { formatNPRShort } from '@/lib/format'
+import { formatMoneyShort } from '@/lib/format'
 
 interface LentBorrowRowProps {
   totalNet: number
@@ -19,7 +19,7 @@ export function LentBorrowRow({ totalNet, onPress }: LentBorrowRowProps) {
       <Text style={styles.label}>Lent & Borrowed</Text>
       <Text style={styles.dot}>·</Text>
       <Text style={[styles.net, { color: accent }]}>
-        NPR {sign}{formatNPRShort(Math.abs(totalNet))} net
+        {sign}{formatMoneyShort(Math.abs(totalNet))} net
       </Text>
       <Ionicons name="chevron-forward" size={16} color={colors.textMuted} style={styles.chevron} />
     </TouchableOpacity>

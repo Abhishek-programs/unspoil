@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { CurrencyPrefix } from '@/components/ui/CurrencyPrefix'
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -50,7 +51,7 @@ function MoneyFields({
         <View style={styles.inputGroup}>
           <Text style={styles.label}>MONTHLY TAKE-HOME MONEY</Text>
           <View style={styles.inputWrapper}>
-            <Text style={styles.prefix}>NPR</Text>
+            <CurrencyPrefix style={styles.prefix} />
             <TextInput
               style={styles.input}
               placeholder="125,000"
@@ -66,7 +67,7 @@ function MoneyFields({
         <View style={styles.inputGroup}>
           <Text style={styles.label}>CASH ON HAND (OPTIONAL)</Text>
           <View style={styles.inputWrapper}>
-            <Text style={styles.prefix}>NPR</Text>
+            <CurrencyPrefix style={styles.prefix} />
             <TextInput
               style={styles.input}
               placeholder="0"

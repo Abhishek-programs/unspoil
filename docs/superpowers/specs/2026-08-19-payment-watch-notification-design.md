@@ -10,12 +10,12 @@ No MediaProjection, no screenshot, no SYSTEM_ALERT_WINDOW overlay, no Accessibil
 
 ## Flow
 
-1. Watcher runs in the background **without** a persistent “helper on” notification.  
-2. After eSewa/nBank has been in the foreground for **5 seconds**: amount + Log.  
-3. After Log: bucket chips (native RemoteInput choices). Tap a chip to assign.  
-4. After bucket (or amount-only if no chips): no log again until you **leave** that payment app. Re-open → 5 second delay again.
+1. Payment Helper watches eSewa and nBank (defaults). Settings → **Payment helper** toggle.
+2. After about 5 seconds in the payment app: amount + Log notification.
+3. After Log: open SpendSense (or the bucket picker) to assign a Living bucket.
+4. After bucket (or amount-only if no buckets): no log again until you leave that payment app.
 
-Android still requires a brief FGS handshake when the service starts; it is dismissed immediately if you are not in a payment app.
+Usage access (`UsageStatsManager`) detects the foreground app. No screenshot, overlay, or Accessibility.
 
 ## Save
 

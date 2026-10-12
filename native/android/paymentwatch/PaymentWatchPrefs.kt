@@ -6,6 +6,7 @@ object PaymentWatchPrefs {
   private const val PREFS = "payment_watch"
   private const val KEY_ENABLED = "enabled"
   private const val KEY_PACKAGES = "packages"
+  private const val KEY_LOG_DELAY_MS = "log_delay_ms"
   private const val KEY_PENDING_TXN = "pending_txn_id"
   private const val KEY_PENDING_AMOUNT = "pending_amount"
   private const val KEY_PENDING_MERCHANT = "pending_merchant"
@@ -13,6 +14,7 @@ object PaymentWatchPrefs {
   private const val KEY_HOLD_CANCEL_UNTIL = "hold_cancel_until"
 
   const val DEFAULT_PACKAGES = "com.f1soft.esewa,com.esewa,com.f1soft.nabilmbank"
+  const val DEFAULT_LOG_DELAY_MS = 5000L
 
   fun isEnabled(context: Context): Boolean =
     context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_ENABLED, false)
@@ -21,6 +23,18 @@ object PaymentWatchPrefs {
     context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
       .edit()
       .putBoolean(KEY_ENABLED, enabled)
+      .apply()
+  }
+
+  fun logDelayMs(context: Context): Long =
+    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+      .getLong(KEY_LOG_DELAY_MS, DEFAULT_LOG_DELAY_MS)
+      .coerceIn(0L, 60_000L)
+
+  fun setLogDelayMs(context: Context, delayMs: Long) {
+    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+      .edit()
+      .putLong(KEY_LOG_DELAY_MS, delayMs.coerceIn(0L, 60_000L))
       .apply()
   }
 
@@ -38,11 +52,18 @@ object PaymentWatchPrefs {
       .apply()
   }
 
-  fun merchantLabel(packageName: String): String {
-    return when (packageName) {
+  fun merchantLabel(context: Context, packageName: String): String {
+    val known = when (packageName) {
       "com.f1soft.esewa", "com.esewa" -> "eSewa"
       "com.f1soft.nabilmbank" -> "nBank"
-      else -> packageName.substringAfterLast('.').replaceFirstChar { it.uppercase() }
+      else -> null
+    }
+    if (known != null) return known
+    return try {
+      val info = context.packageManager.getApplicationInfo(packageName, 0)
+      context.packageManager.getApplicationLabel(info).toString()
+    } catch (_: Exception) {
+      packageName.substringAfterLast('.').replaceFirstChar { it.uppercase() }
     }
   }
 

@@ -212,6 +212,14 @@ CREATE TABLE IF NOT EXISTS \`account_adjustments\` (
 \`created_at\` text NOT NULL
 );`
 
+const m0012 = `ALTER TABLE \`transactions\` ADD COLUMN \`fee_amount\` real DEFAULT 0 NOT NULL;
+--> statement-breakpoint
+ALTER TABLE \`playbook\` ADD COLUMN \`last_checklist_prompt_month\` text;`
+
+const m0013 = `ALTER TABLE \`playbook\` ADD COLUMN \`early_month_start_date\` text;`
+
+const m0014 = `ALTER TABLE \`buckets\` ADD COLUMN \`last_monthly_amount\` real;`
+
 export const migrations = {
   journal,
   migrations: {
@@ -227,5 +235,8 @@ export const migrations = {
     m0009,
     m0010,
     m0011,
+    m0012,
+    m0013,
+    m0014,
   },
 }

@@ -1,9 +1,11 @@
 import { eq } from 'drizzle-orm'
-import { db } from '@/db/client'
-import { bucketBalances, buckets } from '@/db/schema'
+import { db, restoreWipedSpendingCeilings } from '@/db/client'
+import { bucketBalances, buckets, playbook } from '@/db/schema'
 import { PERSONAL_BUCKET_ID } from '@/constants/defaults'
-import { getMonthRange } from '@/lib/month'
+import { getMonthRange, toLocalDateKey } from '@/lib/month'
 import type { Bucket } from '@/store/buckets'
+
+export const PERSONAL_RECOVERY_TOP_UP = 1000
 
 export function effectiveCap(bucket: Bucket): number | null {
   if (bucket.capOverride != null && bucket.capOverride > 0) {
@@ -16,9 +18,15 @@ function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
 }
 
-export function currentMonthKey(monthStartDay: number): string {
-  const { start } = getMonthRange(monthStartDay)
-  return start.toISOString().slice(0, 7)
+export function currentMonthKey(
+  monthStartDay: number,
+  earlyMonthStartDate?: string | null,
+): string {
+  const { start } = getMonthRange(monthStartDay, earlyMonthStartDate)
+  const startKey = toLocalDateKey(start)
+  return earlyMonthStartDate === startKey
+    ? `${startKey.slice(0, 7)}@early-${startKey}`
+    : startKey.slice(0, 7)
 }
 
 export async function getBucketBalance(bucketId: string): Promise<number> {
@@ -119,9 +127,20 @@ export async function ensureBalanceRow(bucketId: string): Promise<void> {
 export async function runMonthRollover(
   monthStartDay: number,
   lastRolloverMonth: string | null | undefined,
+  earlyMonthStartDate?: string | null,
 ): Promise<string> {
-  const monthKey = currentMonthKey(monthStartDay)
-  if (lastRolloverMonth === monthKey) return monthKey
+  const monthKey = currentMonthKey(monthStartDay, earlyMonthStartDate)
+  if (lastRolloverMonth === monthKey) {
+    restoreWipedSpendingCeilings()
+    return monthKey
+  }
+
+  restoreWipedSpendingCeilings()
+
+  const pbRows = await db.select().from(playbook).limit(1)
+  const pb = pbRows[0]
+  let recoveryDebt = pb?.personalRecoveryDebt ?? 0
+  const normalTopUp = pb?.personalNormalTopUp ?? null
 
   const allBuckets = await db.select().from(buckets)
   for (const bucket of allBuckets) {
@@ -139,11 +158,18 @@ export async function runMonthRollover(
     }
 
     await ensureBalanceRow(bucket.id)
+
+    const inRecovery =
+      bucket.id === PERSONAL_BUCKET_ID && recoveryDebt > 0
+    const topUpAmount = inRecovery
+      ? PERSONAL_RECOVERY_TOP_UP
+      : bucket.monthlyAmount
+
     await applyTopUp({
       id: bucket.id,
       name: bucket.name,
       type: bucket.type as Bucket['type'],
-      monthlyAmount: bucket.monthlyAmount,
+      monthlyAmount: topUpAmount,
       color: bucket.color,
       icon: bucket.icon,
       sortOrder: bucket.sortOrder,
@@ -155,8 +181,22 @@ export async function runMonthRollover(
       capOverrideReason: null,
       capOverridePurchaseAmount: null,
     })
+
+    if (inRecovery && pb) {
+      const baseline = normalTopUp != null && normalTopUp > 0 ? normalTopUp : bucket.monthlyAmount
+      const recovered = Math.max(0, baseline - PERSONAL_RECOVERY_TOP_UP)
+      recoveryDebt = Math.max(0, recoveryDebt - recovered)
+      await db
+        .update(playbook)
+        .set({
+          personalRecoveryDebt: recoveryDebt,
+          personalNormalTopUp: recoveryDebt > 0 ? baseline : null,
+        })
+        .where(eq(playbook.id, pb.id))
+    }
   }
 
+  restoreWipedSpendingCeilings()
   return monthKey
 }
 
@@ -171,7 +211,3 @@ export async function clearPersonalCapOverride(): Promise<void> {
     .where(eq(buckets.id, PERSONAL_BUCKET_ID))
 }
 
-export function isAccumulatingExpense(remarks: string | null | undefined): boolean {
-  if (!remarks) return true
-  return !remarks.startsWith('__')
-}

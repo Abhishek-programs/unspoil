@@ -6,16 +6,19 @@ import {
   TouchableOpacity,
   StyleSheet,
   Modal,
+  Alert,
 } from 'react-native'
 import { router, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { colors } from '@/constants/colors'
-import { formatNPR, formatDate } from '@/lib/format'
+import { formatDate, formatMoney } from '@/lib/format'
 import { useLendingStore } from '@/store/lending'
 import { computePersonBalance, directionLabel } from '@/lib/lending/balance'
 import { SettleUpSheet } from '@/components/lending/SettleUpSheet'
 import { LendBorrowForm } from '@/components/lending/LendBorrowForm'
+import { LendingEntrySheet } from '@/components/lending/LendingEntrySheet'
+import type { LendBorrowEntry } from '@/store/lending'
 
 function entryLabel(type: string) {
   if (type === 'lend') return 'Lent'
@@ -31,9 +34,17 @@ function entryColor(type: string) {
 
 export default function PersonDetailScreen() {
   const { contactId } = useLocalSearchParams<{ contactId: string }>()
-  const { contacts, allEntries, addEntry } = useLendingStore()
+  const {
+    contacts,
+    allEntries,
+    addEntry,
+    updateEntry,
+    deleteEntry,
+    deleteContact,
+  } = useLendingStore()
   const [settleVisible, setSettleVisible] = useState(false)
   const [addVisible, setAddVisible] = useState(false)
+  const [selectedEntry, setSelectedEntry] = useState<LendBorrowEntry | null>(null)
 
   const contact = contacts.find(c => c.id === contactId)
 
@@ -66,15 +77,39 @@ export default function PersonDetailScreen() {
           <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{contact.name}</Text>
-        <TouchableOpacity onPress={() => setAddVisible(true)} hitSlop={12}>
-          <Ionicons name="add-circle-outline" size={26} color={colors.purple} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            onPress={() =>
+              Alert.alert(
+                `Delete ${contact.name}?`,
+                'This deletes the person and all lending history with them.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                      await deleteContact(contact.id)
+                      router.back()
+                    },
+                  },
+                ],
+              )
+            }
+            hitSlop={12}
+          >
+            <Ionicons name="trash-outline" size={22} color={colors.red} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setAddVisible(true)} hitSlop={12}>
+            <Ionicons name="add-circle-outline" size={26} color={colors.purple} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.balanceCard}>
         <Text style={styles.balanceLabel}>Current balance</Text>
         <Text style={[styles.balanceAmount, { color: accent }]}>
-          {balance < 0 ? '−' : ''}NPR {formatNPR(Math.abs(balance))}
+          {balance < 0 ? '−' : ''}{formatMoney(Math.abs(balance))}
         </Text>
         <Text style={[styles.balanceDir, { color: accent }]}>{directionLabel(balance)}</Text>
       </View>
@@ -93,18 +128,23 @@ export default function PersonDetailScreen() {
           <Text style={styles.emptyHistory}>No transactions yet</Text>
         ) : (
           history.map(entry => (
-            <View key={entry.id} style={styles.entryRow}>
+            <TouchableOpacity
+              key={entry.id}
+              style={styles.entryRow}
+              onPress={() => setSelectedEntry(entry)}
+              activeOpacity={0.8}
+            >
               <View style={[styles.entryBadge, { backgroundColor: entryColor(entry.type) + '18' }]}>
                 <Text style={[styles.entryType, { color: entryColor(entry.type) }]}>
                   {entryLabel(entry.type)}
                 </Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.entryAmount}>NPR {formatNPR(entry.amount)}</Text>
+                <Text style={styles.entryAmount}>{formatMoney(entry.amount)}</Text>
                 {entry.note ? <Text style={styles.entryNote}>{entry.note}</Text> : null}
                 <Text style={styles.entryDate}>{formatDate(entry.date)}</Text>
               </View>
-            </View>
+            </TouchableOpacity>
           ))
         )}
       </ScrollView>
@@ -151,6 +191,15 @@ export default function PersonDetailScreen() {
           </ScrollView>
         </SafeAreaView>
       </Modal>
+
+      <LendingEntrySheet
+        visible={selectedEntry !== null}
+        entry={selectedEntry}
+        personName={contact.name}
+        onSave={updateEntry}
+        onDelete={deleteEntry}
+        onClose={() => setSelectedEntry(null)}
+      />
     </SafeAreaView>
   )
 }
@@ -176,6 +225,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: 'Inter_700Bold',
     color: colors.textPrimary,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
   },
   balanceCard: {
     marginHorizontal: 16,

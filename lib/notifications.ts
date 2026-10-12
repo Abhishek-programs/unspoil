@@ -1,5 +1,6 @@
 import Constants, { ExecutionEnvironment } from 'expo-constants'
 import { Platform } from 'react-native'
+import { formatMoney } from '@/lib/format'
 
 export type NudgeType =
   | 'budgetBreach'
@@ -79,7 +80,7 @@ export async function setupNotificationChannel() {
   if (Platform.OS !== 'android' || !Notifications) return
 
   await Notifications.setNotificationChannelAsync('spendsense_nudges', {
-    name: 'SpendSense Nudges',
+    name: 'UnSpoil',
     importance: Notifications.AndroidImportance.DEFAULT,
     vibrationPattern: [0, 250],
     lightColor: '#16A34A',
@@ -191,7 +192,7 @@ export async function checkAndScheduleAll(params: {
       const sent = await scheduleNudge(
         'budgetBreach',
         `${b.name} is at 80%`,
-        `NPR ${Math.round(remaining).toLocaleString()} left in ${b.name}.`,
+        `${formatMoney(Math.round(remaining))} left in ${b.name}.`,
       )
       if (sent) return
     }
@@ -212,7 +213,7 @@ export async function checkAndScheduleAll(params: {
       const sent = await scheduleNudge(
         'efMilestone',
         'Emergency Fund hit Stage 1!',
-        'You have NPR 1,50,000 in your Emergency Fund. Keep going!',
+        `You have ${formatMoney(150000)} in your Emergency Fund. Keep going!`,
       )
       if (sent) return
     }

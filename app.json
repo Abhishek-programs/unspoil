@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "SpendSense",
-    "slug": "SpendSense",
+    "name": "UnSpoil",
+    "slug": "unspoil",
     "owner": "abhishek-programs",
-    "scheme": "spendsense",
+    "scheme": "unspoil",
     "version": "1.0.0",
     "runtimeVersion": {
       "policy": "appVersion"
@@ -22,7 +22,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.SpendSense"
+      "bundleIdentifier": "app.unspoil"
     },
     "android": {
       "adaptiveIcon": {
@@ -35,7 +35,7 @@
         "barStyle": "dark-content"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.SpendSense"
+      "package": "app.unspoil"
     },
     "web": {
       "favicon": "./assets/favicon.png"

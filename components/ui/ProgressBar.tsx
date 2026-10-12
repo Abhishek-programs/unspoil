@@ -8,12 +8,13 @@ import Animated, {
 import { colors } from '@/constants/colors'
 
 interface ProgressBarProps {
-  value: number // 0 to 1+ (can exceed 1 for over-budget)
+  value: number
   height?: number
   color?: string
   trackColor?: string
-  /** When 'fill', bar shows balance level (green when high). Default 'deplete' for spend bars. */
   mode?: 'deplete' | 'fill'
+  /** green | red | optional darkRed (overshoot) | optional grey (Personal headroom) */
+  segments?: { green: number; red: number; darkRed?: number; grey?: number }
 }
 
 function getBarColor(value: number, mode: 'deplete' | 'fill'): string {
@@ -33,10 +34,49 @@ export function ProgressBar({
   color,
   trackColor = '#F0F2F5',
   mode = 'deplete',
+  segments,
 }: ProgressBarProps) {
+  if (segments) {
+    let green = Math.max(0, segments.green)
+    let red = Math.max(0, segments.red)
+    let darkRed = Math.max(0, segments.darkRed ?? 0)
+    let grey = Math.max(0, segments.grey ?? 0)
+    const sum = green + red + darkRed + grey
+    if (sum > 1.0001) {
+      green /= sum
+      red /= sum
+      darkRed /= sum
+      grey /= sum
+    }
+
+    return (
+      <View
+        style={{
+          height,
+          borderRadius: height / 2,
+          backgroundColor: trackColor,
+          overflow: 'hidden',
+          flexDirection: 'row',
+        }}
+      >
+        {green > 0.0005 && (
+          <View style={{ flex: green, backgroundColor: colors.green, height }} />
+        )}
+        {red > 0.0005 && (
+          <View style={{ flex: red, backgroundColor: colors.red, height }} />
+        )}
+        {darkRed > 0.0005 && (
+          <View style={{ flex: darkRed, backgroundColor: colors.redDark, height }} />
+        )}
+        {grey > 0.0005 && (
+          <View style={{ flex: grey, backgroundColor: colors.border, height }} />
+        )}
+      </View>
+    )
+  }
+
   const clampedWidth = Math.min(Math.max(value, 0), 1)
   const barColor = color ?? getBarColor(value, mode)
-
   const widthSv = useSharedValue(clampedWidth)
 
   useEffect(() => {

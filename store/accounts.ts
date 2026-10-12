@@ -11,8 +11,8 @@ import {
 import {
   creditAccount,
   debitWithBankFallback,
-  reconcileAccountsToYourMoney,
   setAccountBalance,
+  syncBankToPile as writeBankPile,
 } from '@/lib/accounts'
 
 export interface Account {
@@ -24,18 +24,34 @@ export interface Account {
   isSystem: boolean
 }
 
+export interface AccountAdjustment {
+  id: string
+  accountId: string
+  amount: number
+  note: string | null
+  date: string
+}
+
 interface AccountsState {
   accounts: Account[]
+  adjustments: AccountAdjustment[]
   foundMoneyTotal: number
   isLoaded: boolean
   loadAccounts: () => Promise<void>
   ensureAccounts: () => Promise<void>
   /** Seed Bank with yourMoney if all zero and yourMoney > 0 */
-  seedFromYourMoney: (yourMoney: number) => Promise<void>
-  reconcileToYourMoney: (yourMoney: number) => Promise<void>
+  seedFromYourMoney: (bankPile: number) => Promise<void>
+  syncBankToPile: (bankPile: number) => Promise<void>
   applyIncome: (accountId: string | null | undefined, amount: number) => Promise<void>
   applyExpense: (accountId: string | null | undefined, amount: number) => Promise<void>
   addFoundMoney: (accountId: string, amount: number, note?: string) => Promise<void>
+  recordCashAdjustment: (args: {
+    id?: string
+    accountId: string
+    amount: number
+    note: string
+    date: string
+  }) => Promise<void>
   transfer: (fromId: string, toId: string, amount: number, note?: string) => Promise<void>
 }
 
@@ -45,14 +61,15 @@ function generateId(): string {
 
 export const useAccountsStore = create<AccountsState>((set, get) => ({
   accounts: [],
+  adjustments: [],
   foundMoneyTotal: 0,
   isLoaded: false,
 
   loadAccounts: async () => {
     await get().ensureAccounts()
     const rows = await db.select().from(accounts).orderBy(asc(accounts.sortOrder))
-    const adjustments = await db.select().from(accountAdjustments)
-    const foundMoneyTotal = adjustments.reduce((s, a) => s + a.amount, 0)
+    const adjustmentRows = await db.select().from(accountAdjustments)
+    const foundMoneyTotal = adjustmentRows.reduce((s, a) => s + a.amount, 0)
     set({
       accounts: rows.map(r => ({
         id: r.id,
@@ -61,6 +78,13 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
         balance: r.balance,
         sortOrder: r.sortOrder,
         isSystem: r.isSystem,
+      })),
+      adjustments: adjustmentRows.map(a => ({
+        id: a.id,
+        accountId: a.accountId,
+        amount: a.amount,
+        note: a.note ?? null,
+        date: a.date,
       })),
       foundMoneyTotal,
       isLoaded: true,
@@ -83,18 +107,18 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
     }
   },
 
-  seedFromYourMoney: async (yourMoney) => {
+  seedFromYourMoney: async (bankPile) => {
     await get().ensureAccounts()
     const rows = await db.select().from(accounts)
     const sum = rows.reduce((s, r) => s + r.balance, 0)
-    if (sum === 0 && yourMoney > 0) {
-      await setAccountBalance(BANK_ACCOUNT_ID, yourMoney)
+    if (sum === 0 && bankPile > 0) {
+      await setAccountBalance(BANK_ACCOUNT_ID, bankPile)
     }
     await get().loadAccounts()
   },
 
-  reconcileToYourMoney: async (yourMoney) => {
-    await reconcileAccountsToYourMoney(yourMoney)
+  syncBankToPile: async (bankPile) => {
+    await writeBankPile(bankPile)
     await get().loadAccounts()
   },
 
@@ -124,6 +148,27 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
     })
     if (amount > 0) await creditAccount(accountId, amount)
     else await debitWithBankFallback(accountId, -amount)
+    await get().loadAccounts()
+  },
+
+  recordCashAdjustment: async ({ id, accountId, amount, note, date }) => {
+    if (amount === 0) return
+    const rowId = id || generateId()
+    const existing = await db
+      .select({ id: accountAdjustments.id })
+      .from(accountAdjustments)
+      .where(eq(accountAdjustments.id, rowId))
+      .limit(1)
+    if (existing.length > 0) return
+    const now = new Date().toISOString()
+    await db.insert(accountAdjustments).values({
+      id: rowId,
+      accountId,
+      amount,
+      note,
+      date,
+      createdAt: now,
+    })
     await get().loadAccounts()
   },
 

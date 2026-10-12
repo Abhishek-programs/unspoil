@@ -12,7 +12,31 @@ import { ensureBalanceRow } from '@/lib/bucket-balance'
 
 export async function seedDefaults() {
   const existing = await db.select().from(playbook).limit(1)
-  if (existing.length > 0) return
+  if (existing.length > 0) {
+    // Playbook exists, but a failed migration reset can leave buckets missing.
+    const existingBuckets = await db.select({ id: buckets.id }).from(buckets)
+    const have = new Set(existingBuckets.map(b => b.id))
+    const missing = DEFAULT_BUCKETS.filter(b => !have.has(b.id)).map((b, i) => ({
+      id: b.id,
+      name: b.name,
+      type: b.type,
+      monthlyAmount: b.monthlyAmount,
+      color: b.color,
+      icon: b.icon,
+      sortOrder: existingBuckets.length + i,
+      isActive: true,
+      showOnHome: true,
+      accumulates: b.accumulates ?? false,
+      accumulationCap: b.accumulationCap ?? null,
+    }))
+    if (missing.length > 0) {
+      await db.insert(buckets).values(missing).onConflictDoNothing()
+      if (missing.some(b => b.id === PERSONAL_BUCKET_ID && b.accumulates)) {
+        await ensureBalanceRow(PERSONAL_BUCKET_ID)
+      }
+    }
+    return
+  }
 
   const bucketInserts = DEFAULT_BUCKETS.map((b, i) => ({
     id: b.id,

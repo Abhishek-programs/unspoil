@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { CurrencyPrefix } from '@/components/ui/CurrencyPrefix'
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -45,7 +46,7 @@ function BalancesFields({
         <View style={styles.inputGroup}>
           <Text style={styles.label}>TOTAL SIP INVESTED TO DATE</Text>
           <View style={styles.inputWrapper}>
-            <Text style={styles.prefix}>NPR</Text>
+            <CurrencyPrefix style={styles.prefix} />
             <TextInput
               style={styles.input}
               placeholder="0"
@@ -62,7 +63,7 @@ function BalancesFields({
         <View style={styles.inputGroup}>
           <Text style={styles.label}>TOTAL SHARES INVESTED TO DATE</Text>
           <View style={styles.inputWrapper}>
-            <Text style={styles.prefix}>NPR</Text>
+            <CurrencyPrefix style={styles.prefix} />
             <TextInput
               style={styles.input}
               placeholder="0"

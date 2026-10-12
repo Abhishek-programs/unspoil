@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { colors } from '@/constants/colors'
-import { formatNPR, formatNPRShort } from '@/lib/format'
+import { formatNPR, formatNPRShort, formatMoneyShort } from '@/lib/format'
 import { useGoalsStore, type Goal } from '@/store/goals'
 import { useBucketsStore } from '@/store/buckets'
 import { projectGoal } from '@/lib/projection'
@@ -31,8 +31,8 @@ interface GoalDetailSheetProps {
 }
 
 export function GoalDetailSheet({ goal, visible, onClose, onEdit }: GoalDetailSheetProps) {
-  const { deleteGoal, updateGoalPaymentPlan } = useGoalsStore()
-  const { buckets, loadBuckets } = useBucketsStore()
+  const { deleteGoal, updateGoalPaymentPlan, goals } = useGoalsStore()
+  const { buckets } = useBucketsStore()
   const [editingMonthly, setEditingMonthly] = useState(false)
   const [monthlyDraft, setMonthlyDraft] = useState('')
   const keyboardHeight = useKeyboardHeight(visible && editingMonthly)
@@ -48,14 +48,16 @@ export function GoalDetailSheet({ goal, visible, onClose, onEdit }: GoalDetailSh
 
   if (!goal) return null
 
-  const linkedBuckets = buckets.filter(b => goal.linkedBucketIds.includes(b.id))
-  const isArchived = !!goal.completedAt
+  const storeGoal = goals.find(g => g.id === goal.id)
+  const viewGoal = storeGoal ? { ...goal, ...storeGoal, current: goal.current } : goal
+
+  const linkedBuckets = buckets.filter(b => viewGoal.linkedBucketIds.includes(b.id))
+  const isArchived = !!viewGoal.completedAt
 
   const handleSaveMonthly = async () => {
     const val = parseFloat(monthlyDraft)
     if (!val || val <= 0) return
     await updateGoalPaymentPlan(goal.id, { monthlyContribution: val })
-    await loadBuckets()
     setEditingMonthly(false)
   }
 
@@ -77,15 +79,15 @@ export function GoalDetailSheet({ goal, visible, onClose, onEdit }: GoalDetailSh
     )
   }
 
-  const percent = Math.min((goal.current / goal.targetAmount) * 100, 100)
-  const { projectedDate, monthsRemaining, nudge } = projectGoal({ 
-    current: goal.current, 
-    target: goal.targetAmount, 
-    monthly: goal.monthlyContribution 
+  const percent = Math.min((viewGoal.current / viewGoal.targetAmount) * 100, 100)
+  const { projectedDate, monthsRemaining, nudge } = projectGoal({
+    current: viewGoal.current,
+    target: viewGoal.targetAmount,
+    monthly: viewGoal.monthlyContribution,
   })
 
   const pieData = [
-    { value: percent, color: goal.color },
+    { value: percent, color: viewGoal.color },
     { value: 100 - percent, color: colors.divider },
   ]
 
@@ -98,9 +100,13 @@ export function GoalDetailSheet({ goal, visible, onClose, onEdit }: GoalDetailSh
             <Ionicons name="close" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Goal Details</Text>
-          <TouchableOpacity hitSlop={12} onPress={() => onEdit?.(goal)}>
-            <Text style={styles.editLink}>Edit</Text>
-          </TouchableOpacity>
+          {!isArchived ? (
+            <TouchableOpacity hitSlop={12} onPress={() => onEdit?.(viewGoal)}>
+              <Text style={styles.editLink}>Edit</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={{ width: 40 }} />
+          )}
         </View>
 
         <KeyboardAvoidingView
@@ -135,11 +141,11 @@ export function GoalDetailSheet({ goal, visible, onClose, onEdit }: GoalDetailSh
 
           {/* Key Stats */}
           <View style={styles.goalInfo}>
-            <Text style={styles.goalName}>{goal.name}</Text>
+            <Text style={styles.goalName}>{viewGoal.name}</Text>
             <View style={styles.statsRow}>
               <View style={styles.statItem}>
                 <Text style={styles.statLabel}>Contributed</Text>
-                <Text style={styles.statValue}>{formatNPRShort(goal.current)}</Text>
+                <Text style={styles.statValue}>{formatNPRShort(viewGoal.current)}</Text>
               </View>
               <View style={styles.statItem}>
                 <Text style={styles.statLabel}>Monthly</Text>
@@ -160,17 +166,17 @@ export function GoalDetailSheet({ goal, visible, onClose, onEdit }: GoalDetailSh
                   <TouchableOpacity
                     disabled={isArchived}
                     onPress={() => {
-                      setMonthlyDraft(String(goal.monthlyContribution))
+                      setMonthlyDraft(String(viewGoal.monthlyContribution))
                       setEditingMonthly(true)
                     }}
                   >
-                    <Text style={styles.statValue}>{formatNPRShort(goal.monthlyContribution)}</Text>
+                    <Text style={styles.statValue}>{formatNPRShort(viewGoal.monthlyContribution)}</Text>
                   </TouchableOpacity>
                 )}
               </View>
               <View style={styles.statItem}>
                 <Text style={styles.statLabel}>Target</Text>
-                <Text style={styles.statValue}>{formatNPRShort(goal.targetAmount)}</Text>
+                <Text style={styles.statValue}>{formatNPRShort(viewGoal.targetAmount)}</Text>
               </View>
             </View>
           </View>
@@ -197,7 +203,7 @@ export function GoalDetailSheet({ goal, visible, onClose, onEdit }: GoalDetailSh
             )}
           </View>
 
-          {goal.paymentMode === 'upfront_emi' && linkedBuckets.length > 1 && (
+          {viewGoal.paymentMode === 'upfront_emi' && linkedBuckets.length > 1 && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Monthly split</Text>
               {linkedBuckets.map(b => {
@@ -210,14 +216,14 @@ export function GoalDetailSheet({ goal, visible, onClose, onEdit }: GoalDetailSh
                       <Text style={styles.splitTitle}>{title}</Text>
                       {hint && <Text style={styles.splitHint}>{hint}</Text>}
                     </View>
-                    <Text style={styles.splitAmount}>NPR {formatNPRShort(b.monthlyAmount)}/mo</Text>
+                    <Text style={styles.splitAmount}>{formatMoneyShort(b.monthlyAmount)}/mo</Text>
                   </View>
                 )
               })}
             </View>
           )}
 
-          {!goal.isEnabled && (
+          {!viewGoal.isEnabled && (
             <View style={styles.pausedBanner}>
               <Text style={styles.pausedText}>This goal is paused — re-enable in Settings or Bucket Builder</Text>
             </View>

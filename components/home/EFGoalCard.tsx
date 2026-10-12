@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet } from 'react-native'
 import { colors } from '@/constants/colors'
-import { formatNPR, formatNPRShort } from '@/lib/format'
+import { formatNPRShort, formatMoney } from '@/lib/format'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 
 interface EFGoalCardProps {
@@ -22,7 +22,7 @@ export function EFGoalCard({ current, target, monthlyContribution }: EFGoalCardP
         <View style={styles.info}>
           <Text style={styles.title}>Emergency Fund</Text>
           <Text style={styles.subtitle}>
-            NPR {formatNPR(current)} of {formatNPRShort(target)} · {pct}%
+            {formatMoney(current)} of {formatNPRShort(target)} · {pct}%
           </Text>
         </View>
         <Text style={styles.monthly}>+{formatNPRShort(monthlyContribution)}/mo</Text>

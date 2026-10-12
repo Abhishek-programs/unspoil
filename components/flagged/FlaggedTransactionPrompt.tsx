@@ -6,12 +6,11 @@ import {
   TouchableOpacity,
   ScrollView,
   Modal,
-  Switch,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { colors } from '@/constants/colors'
-import { formatNPR, formatDate } from '@/lib/format'
+import { formatDate, formatMoney } from '@/lib/format'
 import { transactionTitle } from '@/lib/transaction-label'
 import { useTransactionsStore, type Transaction } from '@/store/transactions'
 import { useBucketsStore } from '@/store/buckets'
@@ -28,12 +27,11 @@ export function FlaggedTransactionPrompt({
   onClose
 }: FlaggedTransactionPromptProps) {
   const { updateTransaction } = useTransactionsStore()
-  const { getSpendingBuckets, getSavingsBuckets, addSureShotMerchant, buckets } = useBucketsStore()
+  const { getSpendingBuckets, getSavingsBuckets, buckets } = useBucketsStore()
 
   const [currentIndex, setCurrentIndex] = useState(0)
   const [saving, setSaving] = useState(false)
   const [selectedBucketId, setSelectedBucketId] = useState<string | null>(null)
-  const [alwaysUse, setAlwaysUse] = useState(false)
 
   const currentTxn = flaggedTransactions[currentIndex]
   const allBuckets = [...getSpendingBuckets(), ...getSavingsBuckets()]
@@ -51,17 +49,7 @@ export function FlaggedTransactionPrompt({
         isFlagged: false,
       })
 
-      // Add to sure-shot merchants if toggled and merchant exists
-      if (alwaysUse) {
-        const label = transactionTitle(currentTxn)
-        if (label && label !== 'Unknown') {
-          await addSureShotMerchant(label, bucketId)
-        }
-      }
-
-      // Reset for next
       setSelectedBucketId(null)
-      setAlwaysUse(false)
 
       if (currentIndex < flaggedTransactions.length - 1) {
         setCurrentIndex(v => v + 1)
@@ -78,7 +66,6 @@ export function FlaggedTransactionPrompt({
 
   const handleSkip = () => {
     setSelectedBucketId(null)
-    setAlwaysUse(false)
     if (currentIndex < flaggedTransactions.length - 1) {
       setCurrentIndex(v => v + 1)
     } else {
@@ -90,7 +77,6 @@ export function FlaggedTransactionPrompt({
   const handleClose = () => {
     setCurrentIndex(0)
     setSelectedBucketId(null)
-    setAlwaysUse(false)
     onClose()
   }
 
@@ -119,18 +105,13 @@ export function FlaggedTransactionPrompt({
             {/* Txn Info */}
             <View style={styles.txnInfo}>
               <Text style={styles.merchant}>{transactionTitle(currentTxn)}</Text>
-              <Text style={styles.amount}>NPR {formatNPR(currentTxn.amount)}</Text>
+              <Text style={styles.amount}>{formatMoney(currentTxn.amount)}</Text>
               <Text style={styles.date}>{formatDate(currentTxn.date)}</Text>
               <View style={styles.currentBucketBadge}>
                 <Text style={styles.currentBucketText}>
                   Currently in: {currentBucket?.name || 'Unknown'}
                 </Text>
               </View>
-              {currentTxn.remarks && currentTxn.remarks !== '__savings_confirm__' && (
-                <View style={styles.remarksBadge}>
-                  <Text style={styles.remarksText}>"{currentTxn.remarks}"</Text>
-                </View>
-              )}
             </View>
 
             <Text style={styles.question}>Assign to bucket:</Text>
@@ -161,21 +142,6 @@ export function FlaggedTransactionPrompt({
                 )
               })}
             </ScrollView>
-
-            {/* Always use toggle */}
-            {transactionTitle(currentTxn) !== 'Unknown' && (
-              <View style={styles.alwaysRow}>
-                <Text style={styles.alwaysText} numberOfLines={2}>
-                  Always use this bucket for "{transactionTitle(currentTxn)}"
-                </Text>
-                <Switch
-                  value={alwaysUse}
-                  onValueChange={setAlwaysUse}
-                  trackColor={{ false: colors.border, true: colors.greenFill }}
-                  thumbColor={alwaysUse ? colors.green : '#f4f3f4'}
-                />
-              </View>
-            )}
 
             {/* Actions */}
             <View style={styles.actions}>
@@ -281,19 +247,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_500Medium',
     color: colors.amber,
   },
-  remarksBadge: {
-    marginTop: 8,
-    backgroundColor: colors.pageBg,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  remarksText: {
-    fontSize: 12,
-    fontFamily: 'Inter_400Regular',
-    color: colors.textSecond,
-    fontStyle: 'italic',
-  },
   question: {
     fontSize: 14,
     fontFamily: 'Inter_600SemiBold',
@@ -336,24 +289,6 @@ const styles = StyleSheet.create({
   },
   bucketNameSelected: {
     color: colors.green,
-  },
-  alwaysRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 16,
-    marginTop: 12,
-    padding: 12,
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: 12,
-  },
-  alwaysText: {
-    flex: 1,
-    fontSize: 13,
-    fontFamily: 'Inter_500Medium',
-    color: colors.textSecond,
   },
   actions: {
     flexDirection: 'row',

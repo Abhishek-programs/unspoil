@@ -3,31 +3,123 @@ import { openDatabaseSync } from 'expo-sqlite'
 import { migrate } from 'drizzle-orm/expo-sqlite/migrator'
 import * as schema from './schema'
 import { migrations } from './migrations'
+import {
+  CORE_LIVING_BUCKET_ID,
+  DATES_BUCKET_ID,
+  DEFAULT_BUCKETS,
+  EF_MULTIPLIER,
+  FUN_BUCKET_ID,
+  GOAL_POOL_BUCKET_ID,
+  MISC_BUCKET_ID,
+} from '@/constants/defaults'
 
 const sqlite = openDatabaseSync('spendsense.db', { enableChangeListener: true })
+export { sqlite }
 export const db = drizzle(sqlite, { schema })
 
-const APP_TABLES = [
-  'account_adjustments',
-  'account_transfers',
-  'accounts',
-  'bucket_balances',
+export const USER_DATA_TABLES = [
+  'playbook',
   'buckets',
-  'contacts',
-  'goals',
+  'bucket_balances',
   'keyword_mappings',
+  'sure_shot_merchants',
+  'accounts',
+  'goals',
+  'contacts',
+  'transactions',
+  'account_transfers',
+  'account_adjustments',
   'lend_borrow_entries',
   'net_worth_snapshots',
-  'playbook',
-  'sure_shot_merchants',
-  'transactions',
-]
+] as const
+
+const APP_TABLES = [...USER_DATA_TABLES]
 
 type TableInfoRow = { name: string }
 
 function hasColumn(table: string, column: string): boolean {
-  const cols = sqlite.getAllSync(`PRAGMA table_info("${table}")`) as TableInfoRow[]
-  return cols.some(c => c.name === column)
+  try {
+    const cols = sqlite.getAllSync(`PRAGMA table_info(${table})`) as Array<
+      TableInfoRow | Record<string, unknown>
+    >
+    return cols.some(c => {
+      if (c && typeof c === 'object' && 'name' in c) {
+        return String((c as TableInfoRow).name) === column
+      }
+      // Some drivers return PRAGMA rows as arrays: [cid, name, type, ...]
+      if (Array.isArray(c)) return String(c[1]) === column
+      return false
+    })
+  } catch {
+    return false
+  }
+}
+
+function tryExec(sql: string) {
+  try {
+    sqlite.execSync(sql)
+  } catch (error) {
+    console.warn('Schema patch skipped:', sql.slice(0, 80), error)
+  }
+}
+
+function ensureColumn(table: string, column: string, alterSql: string) {
+  if (!hasColumn(table, column)) {
+    tryExec(alterSql)
+  }
+}
+
+function livingFallbackAmount(id: string, efFloor?: number | null): number | null {
+  if (id === CORE_LIVING_BUCKET_ID && efFloor && efFloor > 0) {
+    return Math.round(efFloor / EF_MULTIPLIER)
+  }
+  const preset = DEFAULT_BUCKETS.find(b => b.id === id)
+  return preset && preset.monthlyAmount > 0 ? preset.monthlyAmount : null
+}
+
+/** Re-apply a wiped spending ceiling from the last good amount, then playbook defaults. */
+export function restoreWipedSpendingCeilings() {
+  const bucketsExists = sqlite.getFirstSync(
+    `SELECT name FROM sqlite_master WHERE type='table' AND name='buckets'`,
+  )
+  if (!bucketsExists) return
+
+  ensureColumn(
+    'buckets',
+    'last_monthly_amount',
+    `ALTER TABLE \`buckets\` ADD COLUMN \`last_monthly_amount\` real`,
+  )
+
+  tryExec(
+    `UPDATE \`buckets\` SET \`last_monthly_amount\` = \`monthly_amount\`
+     WHERE \`monthly_amount\` > 0
+       AND (\`last_monthly_amount\` IS NULL OR \`last_monthly_amount\` <= 0)`,
+  )
+  tryExec(
+    `UPDATE \`buckets\` SET \`monthly_amount\` = \`last_monthly_amount\`
+     WHERE \`monthly_amount\` = 0
+       AND \`last_monthly_amount\` > 0
+       AND \`id\` != '${GOAL_POOL_BUCKET_ID}'`,
+  )
+
+  const pb = sqlite.getFirstSync<{ ef_floor?: number }>(
+    `SELECT ef_floor FROM playbook LIMIT 1`,
+  )
+  const efFloor = Number(pb?.ef_floor) || 0
+  const fallbacks = [
+    CORE_LIVING_BUCKET_ID,
+    DATES_BUCKET_ID,
+    FUN_BUCKET_ID,
+    MISC_BUCKET_ID,
+  ]
+  for (const id of fallbacks) {
+    const amount = livingFallbackAmount(id, efFloor)
+    if (!amount) continue
+    tryExec(
+      `UPDATE \`buckets\` SET \`monthly_amount\` = ${amount}, \`last_monthly_amount\` = ${amount}
+       WHERE (\`id\` = '${id}') AND \`monthly_amount\` = 0`,
+    )
+  }
 }
 
 /** Idempotent fixes for installs that missed a migration (e.g. m0004 ef_start_balance). */
@@ -35,8 +127,16 @@ export function applySchemaPatches() {
   const playbookExists = sqlite.getFirstSync(
     `SELECT name FROM sqlite_master WHERE type='table' AND name='playbook'`
   )
+  // Apply early-month column first — Paid early writes it before other patches matter.
+  if (playbookExists) {
+    ensureColumn(
+      'playbook',
+      'early_month_start_date',
+      `ALTER TABLE \`playbook\` ADD COLUMN \`early_month_start_date\` text`,
+    )
+  }
   if (playbookExists && !hasColumn('playbook', 'ef_start_balance')) {
-    sqlite.execSync(`ALTER TABLE \`playbook\` ADD COLUMN \`ef_start_balance\` real DEFAULT 0 NOT NULL`)
+    tryExec(`ALTER TABLE \`playbook\` ADD COLUMN \`ef_start_balance\` real DEFAULT 0 NOT NULL`)
   }
 
   const bucketsExists = sqlite.getFirstSync(
@@ -47,34 +147,32 @@ export function applySchemaPatches() {
       `SELECT id FROM buckets WHERE id = 'food' OR name = 'Food' LIMIT 1`
     )
     if (foodBucket) {
-      sqlite.execSync(`DELETE FROM keyword_mappings WHERE keyword = 'food'`)
-      sqlite.execSync(`DELETE FROM buckets WHERE id = '${foodBucket.id}'`)
+      tryExec(`DELETE FROM keyword_mappings WHERE keyword = 'food'`)
+      tryExec(`DELETE FROM buckets WHERE id = '${foodBucket.id}'`)
     }
 
-    if (!hasColumn('buckets', 'linked_goal_id')) {
-      sqlite.execSync(`ALTER TABLE \`buckets\` ADD COLUMN \`linked_goal_id\` text`)
-    }
-    if (!hasColumn('buckets', 'goal_bucket_role')) {
-      sqlite.execSync(`ALTER TABLE \`buckets\` ADD COLUMN \`goal_bucket_role\` text`)
-    }
-    if (!hasColumn('buckets', 'accumulates')) {
-      sqlite.execSync(`ALTER TABLE \`buckets\` ADD COLUMN \`accumulates\` integer DEFAULT false NOT NULL`)
-    }
-    if (!hasColumn('buckets', 'accumulation_cap')) {
-      sqlite.execSync(`ALTER TABLE \`buckets\` ADD COLUMN \`accumulation_cap\` real`)
-    }
-    if (!hasColumn('buckets', 'cap_override')) {
-      sqlite.execSync(`ALTER TABLE \`buckets\` ADD COLUMN \`cap_override\` real`)
-    }
-    if (!hasColumn('buckets', 'cap_override_reason')) {
-      sqlite.execSync(`ALTER TABLE \`buckets\` ADD COLUMN \`cap_override_reason\` text`)
-    }
-    if (!hasColumn('buckets', 'cap_override_purchase_amount')) {
-      sqlite.execSync(`ALTER TABLE \`buckets\` ADD COLUMN \`cap_override_purchase_amount\` real`)
-    }
-    sqlite.execSync(`UPDATE \`buckets\` SET \`is_active\` = 0, \`show_on_home\` = 0 WHERE \`id\` = 'food' OR \`name\` = 'Food'`)
-    sqlite.execSync(`DELETE FROM keyword_mappings WHERE keyword = 'food'`)
-    sqlite.execSync(`DELETE FROM buckets WHERE id = 'food' OR name = 'Food'`)
+    ensureColumn('buckets', 'linked_goal_id', `ALTER TABLE \`buckets\` ADD COLUMN \`linked_goal_id\` text`)
+    ensureColumn('buckets', 'goal_bucket_role', `ALTER TABLE \`buckets\` ADD COLUMN \`goal_bucket_role\` text`)
+    ensureColumn(
+      'buckets',
+      'accumulates',
+      `ALTER TABLE \`buckets\` ADD COLUMN \`accumulates\` integer DEFAULT 0 NOT NULL`,
+    )
+    ensureColumn('buckets', 'accumulation_cap', `ALTER TABLE \`buckets\` ADD COLUMN \`accumulation_cap\` real`)
+    ensureColumn('buckets', 'cap_override', `ALTER TABLE \`buckets\` ADD COLUMN \`cap_override\` real`)
+    ensureColumn(
+      'buckets',
+      'cap_override_reason',
+      `ALTER TABLE \`buckets\` ADD COLUMN \`cap_override_reason\` text`,
+    )
+    ensureColumn(
+      'buckets',
+      'cap_override_purchase_amount',
+      `ALTER TABLE \`buckets\` ADD COLUMN \`cap_override_purchase_amount\` real`,
+    )
+    tryExec(`UPDATE \`buckets\` SET \`is_active\` = 0, \`show_on_home\` = 0 WHERE \`id\` = 'food' OR \`name\` = 'Food'`)
+    tryExec(`DELETE FROM keyword_mappings WHERE keyword = 'food'`)
+    tryExec(`DELETE FROM buckets WHERE id = 'food' OR name = 'Food'`)
 
     const personalBucket = sqlite.getFirstSync<{ id: string }>(
       `SELECT id FROM buckets WHERE id = 'personal' OR name = 'Personal' LIMIT 1`
@@ -101,8 +199,13 @@ export function applySchemaPatches() {
     )
     if (!miscBucket) {
       sqlite.execSync(
-        `INSERT INTO \`buckets\` (\`id\`, \`name\`, \`type\`, \`monthly_amount\`, \`color\`, \`icon\`, \`sort_order\`, \`is_active\`, \`show_on_home\`, \`accumulates\`)
-         VALUES ('misc', 'Misc', 'spending', 3000, '#64748B', '📦', 5, 1, 1, 0)`
+        `INSERT OR IGNORE INTO \`buckets\` (\`id\`, \`name\`, \`type\`, \`monthly_amount\`, \`color\`, \`icon\`, \`sort_order\`, \`is_active\`, \`show_on_home\`, \`accumulates\`)
+         VALUES ('misc', 'Misc', 'spending', 3000, '#64748B', '📦', 4, 1, 1, 0)`
+      )
+    } else {
+      // Keep Misc active so payment helper / Living always include it
+      sqlite.execSync(
+        `UPDATE \`buckets\` SET \`is_active\` = 1, \`type\` = 'spending' WHERE \`id\` = 'misc' OR \`name\` = 'Misc'`
       )
     }
     const miscId = miscBucket?.id ?? 'misc'
@@ -124,20 +227,53 @@ export function applySchemaPatches() {
   const playbookTable = sqlite.getFirstSync(
     `SELECT name FROM sqlite_master WHERE type='table' AND name='playbook'`
   )
-  if (playbookTable && !hasColumn('playbook', 'last_balance_rollover_month')) {
-    sqlite.execSync(`ALTER TABLE \`playbook\` ADD COLUMN \`last_balance_rollover_month\` text`)
-  }
-  if (playbookTable && !hasColumn('playbook', 'user_age')) {
-    sqlite.execSync(`ALTER TABLE \`playbook\` ADD COLUMN \`user_age\` integer`)
-  }
-  if (playbookTable && !hasColumn('playbook', 'carried_forward_balance')) {
-    sqlite.execSync(`ALTER TABLE \`playbook\` ADD COLUMN \`carried_forward_balance\` real DEFAULT 0`)
-  }
-  if (playbookTable && !hasColumn('playbook', 'last_surplus_rollover_month')) {
-    sqlite.execSync(`ALTER TABLE \`playbook\` ADD COLUMN \`last_surplus_rollover_month\` text`)
-  }
-  if (playbookTable && !hasColumn('playbook', 'last_personal_rebalance_prompt_month')) {
-    sqlite.execSync(`ALTER TABLE \`playbook\` ADD COLUMN \`last_personal_rebalance_prompt_month\` text`)
+  if (playbookTable) {
+    ensureColumn(
+      'playbook',
+      'last_balance_rollover_month',
+      `ALTER TABLE \`playbook\` ADD COLUMN \`last_balance_rollover_month\` text`,
+    )
+    ensureColumn(
+      'playbook',
+      'early_month_start_date',
+      `ALTER TABLE \`playbook\` ADD COLUMN \`early_month_start_date\` text`,
+    )
+    ensureColumn(
+      'playbook',
+      'last_checklist_prompt_month',
+      `ALTER TABLE \`playbook\` ADD COLUMN \`last_checklist_prompt_month\` text`,
+    )
+    ensureColumn('playbook', 'user_age', `ALTER TABLE \`playbook\` ADD COLUMN \`user_age\` integer`)
+    ensureColumn(
+      'playbook',
+      'currency',
+      `ALTER TABLE \`playbook\` ADD COLUMN \`currency\` text DEFAULT 'NPR' NOT NULL`,
+    )
+    ensureColumn(
+      'playbook',
+      'carried_forward_balance',
+      `ALTER TABLE \`playbook\` ADD COLUMN \`carried_forward_balance\` real DEFAULT 0`,
+    )
+    ensureColumn(
+      'playbook',
+      'last_surplus_rollover_month',
+      `ALTER TABLE \`playbook\` ADD COLUMN \`last_surplus_rollover_month\` text`,
+    )
+    ensureColumn(
+      'playbook',
+      'last_personal_rebalance_prompt_month',
+      `ALTER TABLE \`playbook\` ADD COLUMN \`last_personal_rebalance_prompt_month\` text`,
+    )
+    ensureColumn(
+      'playbook',
+      'personal_recovery_debt',
+      `ALTER TABLE \`playbook\` ADD COLUMN \`personal_recovery_debt\` real DEFAULT 0`,
+    )
+    ensureColumn(
+      'playbook',
+      'personal_normal_top_up',
+      `ALTER TABLE \`playbook\` ADD COLUMN \`personal_normal_top_up\` real`,
+    )
   }
 
   const balancesTable = sqlite.getFirstSync(
@@ -195,6 +331,13 @@ export function applySchemaPatches() {
   }
   if (transactionsExists && !hasColumn('transactions', 'account_id')) {
     sqlite.execSync(`ALTER TABLE \`transactions\` ADD COLUMN \`account_id\` text`)
+  }
+  if (transactionsExists && !hasColumn('transactions', 'fee_amount')) {
+    sqlite.execSync(`ALTER TABLE \`transactions\` ADD COLUMN \`fee_amount\` real DEFAULT 0 NOT NULL`)
+  }
+  if (transactionsExists && hasColumn('transactions', 'remarks')) {
+    tryExec(`UPDATE \`transactions\` SET \`bucket_id\` = '_salary' WHERE \`remarks\` = '__salary__'`)
+    tryExec(`ALTER TABLE \`transactions\` DROP COLUMN \`remarks\``)
   }
 
   const accountsTable = sqlite.getFirstSync(
@@ -299,6 +442,32 @@ export function applySchemaPatches() {
       )`,
     )
   }
+
+  restoreWipedSpendingCeilings()
+
+  // Leftover at Paid early was remembered as 120.47; nBank implies 120.31
+  // (16 paisa). Carry was 120.47+450 Foil — nudge that leftover only.
+  tryExec(
+    `UPDATE \`playbook\` SET \`carried_forward_balance\` = 570.31
+     WHERE \`early_month_start_date\` = '2026-09-16'
+       AND \`last_surplus_rollover_month\` = '2026-09@early-2026-09-16'
+       AND \`carried_forward_balance\` = 570.47`,
+  )
+
+  // CTZN was fully settled then hard-deleted. Keep this period's cash
+  // (Food borrow + settle) so Your money does not invent the SIP payoff back.
+  tryExec(
+    `INSERT INTO \`account_adjustments\` (\`id\`, \`account_id\`, \`amount\`, \`note\`, \`date\`, \`created_at\`)
+     SELECT 'lending-cash-mu3lccr3kjxl5y', 'bank', 1000, 'Lending cash', '2026-09-16T04:18:36.795Z', '2026-09-16T04:18:36.795Z'
+     WHERE NOT EXISTS (SELECT 1 FROM \`lend_borrow_entries\` WHERE \`id\` = 'mu3lccr3kjxl5y')
+       AND NOT EXISTS (SELECT 1 FROM \`account_adjustments\` WHERE \`id\` = 'lending-cash-mu3lccr3kjxl5y')`,
+  )
+  tryExec(
+    `INSERT INTO \`account_adjustments\` (\`id\`, \`account_id\`, \`amount\`, \`note\`, \`date\`, \`created_at\`)
+     SELECT 'lending-cash-mu4cnuos1qeep3', 'bank', -6004.52, 'Lending cash', '2026-09-16T17:03:33.148Z', '2026-09-16T17:03:33.148Z'
+     WHERE NOT EXISTS (SELECT 1 FROM \`lend_borrow_entries\` WHERE \`id\` = 'mu4cnuos1qeep3')
+       AND NOT EXISTS (SELECT 1 FROM \`account_adjustments\` WHERE \`id\` = 'lending-cash-mu4cnuos1qeep3')`,
+  )
 }
 
 let migrationsPromise: Promise<void> | null = null
@@ -314,7 +483,12 @@ function countRecordedMigrations(): number {
 
 export async function runMigrations() {
   // Fast Refresh / Strict Mode can remount root layout; share one in-flight run.
-  if (migrationsPromise) return migrationsPromise
+  if (migrationsPromise) {
+    await migrationsPromise
+    // Idempotent patches must still run after hot reload / new code.
+    applySchemaPatches()
+    return
+  }
 
   migrationsPromise = (async () => {
     const appTableExists = sqlite.getFirstSync(
@@ -332,19 +506,35 @@ export async function runMigrations() {
 
     try {
       await migrate(db, migrations)
-      applySchemaPatches()
-      const afterCount = countRecordedMigrations()
-      if (afterCount > beforeCount) {
-        console.log(`DB migrations applied (${beforeCount} → ${afterCount})`)
-      }
     } catch (error) {
-      console.error('Migration failed, attempting hard reset:', error)
-      for (const table of [...APP_TABLES, '__drizzle_migrations']) {
-        sqlite.execSync(`DROP TABLE IF EXISTS "${table}"`)
+      // Additive migration failures must not wipe user data. Only reset when the
+      // schema is unusable (no buckets table after a failed migrate).
+      console.error('Migration failed:', error)
+      const bucketsOk = sqlite.getFirstSync(
+        `SELECT name FROM sqlite_master WHERE type='table' AND name='buckets'`,
+      )
+      if (!bucketsOk) {
+        console.warn('DB unusable after migration failure — rebuilding empty schema')
+        for (const table of [...APP_TABLES, '__drizzle_migrations']) {
+          sqlite.execSync(`DROP TABLE IF EXISTS "${table}"`)
+        }
+        await migrate(db, migrations)
+        console.log('DB recovered after hard reset')
+      } else {
+        console.warn('Keeping existing data; relying on schema patches')
       }
-      await migrate(db, migrations)
+    }
+
+    // Never let a patch failure wipe user data — patches are idempotent ALTERs.
+    try {
       applySchemaPatches()
-      console.log('DB recovered after hard reset')
+    } catch (error) {
+      console.error('Schema patches failed:', error)
+    }
+
+    const afterCount = countRecordedMigrations()
+    if (afterCount > beforeCount) {
+      console.log(`DB migrations applied (${beforeCount} → ${afterCount})`)
     }
   })()
 
@@ -354,4 +544,11 @@ export async function runMigrations() {
     migrationsPromise = null
     throw error
   }
+}
+
+// Ensure critical columns exist as soon as this module loads (before store hydration).
+try {
+  applySchemaPatches()
+} catch (error) {
+  console.warn('Initial schema patches failed:', error)
 }

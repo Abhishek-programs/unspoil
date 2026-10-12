@@ -95,7 +95,7 @@ class PaymentWatchService : Service() {
     }
     if (prev != null) PaymentWatchPrefs.setDoneThisVisit(this, false)
     waitingForDelay = true
-    handler.postDelayed(showLogLater, LOG_DELAY_MS)
+    handler.postDelayed(showLogLater, PaymentWatchPrefs.logDelayMs(this))
   }
 
   private var foregroundPkg: String? = null
@@ -192,7 +192,7 @@ class PaymentWatchService : Service() {
   private fun placeholderNotification(): Notification {
     return NotificationCompat.Builder(this, CHANNEL_IDLE)
       .setSmallIcon(R.drawable.ic_stat_spendsense)
-      .setContentTitle("SpendSense")
+      .setContentTitle("UnSpoil")
       .setContentText("Payment helper")
       .setOngoing(true)
       .setSilent(true)
@@ -202,46 +202,38 @@ class PaymentWatchService : Service() {
 
   private fun categoryNotification(pending: PaymentWatchPrefs.PendingTxn): Notification {
     val npr = pending.amount.toInt()
-    val title = "NPR $npr · ${pending.merchant}"
-    val chips = PaymentWatchDb.spendingBucketNames(this)
-    val bucketInput = RemoteInput.Builder(KEY_BUCKET)
-      .setLabel("Bucket")
-      .setAllowFreeFormInput(true)
-      .setChoices(chips)
-      .apply {
-        if (Build.VERSION.SDK_INT >= 29) {
-          setEditChoicesBeforeSending(RemoteInput.EDIT_CHOICES_BEFORE_SENDING_DISABLED)
-        }
-      }
-      .build()
-    val assignIntent = Intent(this, PaymentWatchReceiver::class.java).apply {
-      action = ACTION_ASSIGN
-      putExtra(EXTRA_TXN_ID, pending.id)
+    val title = "${PaymentWatchDb.currencyCode(this)} $npr · ${pending.merchant}"
+    val pickIntent = Intent(this, PaymentWatchPickActivity::class.java).apply {
+      putExtra(PaymentWatchPickActivity.EXTRA_TXN_ID, pending.id)
+      putExtra(PaymentWatchPickActivity.EXTRA_AMOUNT, pending.amount)
+      putExtra(PaymentWatchPickActivity.EXTRA_MERCHANT, pending.merchant)
+      flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
     }
-    val assignPending = PendingIntent.getBroadcast(
+    val pickPending = PendingIntent.getActivity(
       this,
       pending.id.hashCode(),
-      assignIntent,
-      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+      pickIntent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
-    val assign = NotificationCompat.Action.Builder(
-      android.R.drawable.ic_menu_send,
-      "Bucket",
-      assignPending,
-    ).addRemoteInput(bucketInput).build()
+    val open = NotificationCompat.Action.Builder(
+      android.R.drawable.ic_menu_agenda,
+      "Pick bucket",
+      pickPending,
+    ).build()
 
     return NotificationCompat.Builder(this, CHANNEL_LOG)
       .setSmallIcon(R.drawable.ic_stat_spendsense)
       .setContentTitle(title)
-      .setContentText("Tap a bucket")
+      .setContentText("Tap to choose any Living bucket")
+      .setContentIntent(pickPending)
       .setOngoing(true)
       .setPriority(NotificationCompat.PRIORITY_HIGH)
-      .addAction(assign)
+      .addAction(open)
       .build()
   }
 
   private fun logNotification(packageName: String): Notification {
-    val label = PaymentWatchPrefs.merchantLabel(packageName)
+    val label = PaymentWatchPrefs.merchantLabel(this, packageName)
     val amountInput = RemoteInput.Builder(KEY_AMOUNT)
       .setLabel("400 momo")
       .build()
@@ -283,7 +275,6 @@ class PaymentWatchService : Service() {
     const val EXTRA_PACKAGE = "payment_watch_package"
     const val EXTRA_TXN_ID = "payment_watch_txn_id"
     private const val POLL_MS = 1500L
-    private const val LOG_DELAY_MS = 5000L
 
     fun start(context: Context) {
       if (!PaymentWatchPrefs.isEnabled(context) || !PaymentWatchAccess.hasUsageAccess(context)) return

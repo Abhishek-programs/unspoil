@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { CurrencyPrefix } from '@/components/ui/CurrencyPrefix'
 import {
   Modal,
   View,
@@ -15,11 +16,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { colors } from '@/constants/colors'
-import { formatNPR, formatDate } from '@/lib/format'
+import { formatDate } from '@/lib/format'
 import { transactionTitle } from '@/lib/transaction-label'
 import { useBucketsStore } from '@/store/buckets'
-import { useTransactionsStore } from '@/store/transactions'
+import { useTransactionsStore, INCOME_BUCKET_ID } from '@/store/transactions'
+import { isSalaryTxn } from '@/lib/txn-kind'
 import type { Transaction } from '@/store/transactions'
+import { useAccountsStore } from '@/store/accounts'
+import { BANK_ACCOUNT_ID, defaultAccountId } from '@/constants/accounts'
 import { useKeyboardHeight } from '@/hooks/useKeyboardHeight'
 
 interface TransactionDetailSheetProps {
@@ -31,22 +35,31 @@ interface TransactionDetailSheetProps {
 export function TransactionDetailSheet({ transaction, visible, onClose }: TransactionDetailSheetProps) {
   const { getSpendingBuckets, getSavingsBuckets } = useBucketsStore()
   const { updateTransaction, deleteTransaction } = useTransactionsStore()
+  const { accounts: moneyAccounts } = useAccountsStore()
 
-  const allBuckets = [...getSpendingBuckets(), ...getSavingsBuckets()]
+  const spendingBuckets = getSpendingBuckets()
+  const allBuckets = [...spendingBuckets, ...getSavingsBuckets()]
 
   const [selectedBucketId, setSelectedBucketId] = useState<string>('')
+  const [accountId, setAccountId] = useState(defaultAccountId())
+  const [amount, setAmount] = useState('')
+  const [feeAmount, setFeeAmount] = useState('')
+  const [showFee, setShowFee] = useState(false)
   const [description, setDescription] = useState('')
   const [merchant, setMerchant] = useState('')
-  const [remarks, setRemarks] = useState('')
   const [saving, setSaving] = useState(false)
   const keyboardHeight = useKeyboardHeight(visible)
 
   useEffect(() => {
     if (transaction && visible) {
       setSelectedBucketId(transaction.bucketId)
-      setDescription(transaction.description ?? '')
+      setAccountId(transaction.accountId || defaultAccountId())
+      setAmount(String(transaction.amount))
+      setFeeAmount(transaction.feeAmount > 0 ? String(transaction.feeAmount) : '')
+      setShowFee(transaction.feeAmount > 0)
+      const existingTitle = transaction.description?.trim() || transactionTitle(transaction)
+      setDescription(existingTitle === 'Unknown' ? '' : existingTitle)
       setMerchant(transaction.merchant ?? '')
-      setRemarks(transaction.remarks ?? '')
       setSaving(false)
     }
   }, [transaction, visible])
@@ -69,18 +82,24 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
     if (saving) return
     setSaving(true)
     try {
+      const parsedAmount = parseFloat(amount.replace(/,/g, '')) || 0
+      const parsedFee = parseFloat(feeAmount.replace(/,/g, '')) || 0
+      if (parsedAmount <= 0) return
       const patch: Partial<Transaction> = {
+        amount: parsedAmount,
+        feeAmount: isExpense ? Math.max(0, parsedFee) : 0,
         description: description.trim() || null,
         merchant: merchant.trim() || null,
-      }
-      if (!transaction.remarks?.startsWith('__')) {
-        patch.remarks = remarks.trim() || null
+        accountId,
       }
       if (isExpense && selectedBucketId) {
         patch.bucketId = selectedBucketId
         if (transaction.isFlagged && selectedBucketId !== transaction.bucketId) {
           patch.isFlagged = false
         }
+      }
+      if (isIncome && !isSalaryTxn(transaction)) {
+        patch.bucketId = selectedBucketId || INCOME_BUCKET_ID
       }
       await updateTransaction(transaction.id, patch)
       onClose()
@@ -143,9 +162,38 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
           >
             {/* Amount */}
             <View style={styles.amountContainer}>
-              <Text style={[styles.amount, { color: isIncome ? colors.green : colors.red }]}>
-                NPR {formatNPR(transaction.amount)}
-              </Text>
+              <View style={styles.amountEditRow}>
+                <CurrencyPrefix style={[styles.amountPrefix, { color: isIncome ? colors.green : colors.red }]} />
+                <TextInput
+                  style={[styles.amountInput, { color: isIncome ? colors.green : colors.red }]}
+                  value={amount}
+                  onChangeText={setAmount}
+                  keyboardType="decimal-pad"
+                />
+                {isExpense && (
+                  <TouchableOpacity
+                    style={[styles.feeChip, showFee && styles.feeChipActive]}
+                    onPress={() => setShowFee(v => !v)}
+                  >
+                    <Text style={[styles.feeChipText, showFee && styles.feeChipTextActive]}>
+                      + Fee
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              {isExpense && showFee && (
+                <View style={styles.feeInputRow}>
+                  <Text style={styles.feeLabel}>Fee <CurrencyPrefix /></Text>
+                  <TextInput
+                    style={styles.feeInput}
+                    value={feeAmount}
+                    onChangeText={setFeeAmount}
+                    placeholder="0"
+                    placeholderTextColor={colors.textMuted}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+              )}
               <View style={[styles.typeBadge, { backgroundColor: isIncome ? colors.greenFill : '#FEE2E2' }]}>
                 <Text style={[styles.typeBadgeText, { color: isIncome ? colors.green : colors.red }]}>
                   {isIncome ? 'Income' : 'Expense'}
@@ -156,17 +204,13 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
             {/* Title */}
             <View style={styles.section}>
               <Text style={styles.label}>Title</Text>
-              {isIncome ? (
-                <Text style={styles.valueText}>{transactionTitle(transaction)}</Text>
-              ) : (
-                <TextInput
-                  style={styles.textInput}
-                  value={description}
-                  onChangeText={setDescription}
-                  placeholder="What you bought or did"
-                  placeholderTextColor={colors.textMuted}
-                />
-              )}
+              <TextInput
+                style={styles.textInput}
+                value={description}
+                onChangeText={setDescription}
+                placeholder={isIncome ? 'e.g. Ankeet share, leftover' : 'What you bought or did'}
+                placeholderTextColor={colors.textMuted}
+              />
             </View>
 
             {/* Description (stored as merchant) */}
@@ -178,9 +222,93 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
                 onChangeText={setMerchant}
                 placeholder="Optional extra detail"
                 placeholderTextColor={colors.textMuted}
-                editable={!isIncome || transaction.source !== 'manual'}
               />
             </View>
+
+            <View style={styles.section}>
+              <Text style={styles.label}>{isIncome ? 'Lands in' : 'Paid from'}</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.chipRow}
+              >
+                {(moneyAccounts.length > 0
+                  ? moneyAccounts
+                  : [
+                      { id: BANK_ACCOUNT_ID, name: 'Bank' },
+                      { id: 'esewa', name: 'eSewa' },
+                      { id: 'cash', name: 'Cash' },
+                    ]
+                ).map(acc => {
+                  const selected = accountId === acc.id
+                  return (
+                    <TouchableOpacity
+                      key={acc.id}
+                      style={[
+                        styles.bucketChip,
+                        selected && { backgroundColor: colors.greenFill, borderColor: colors.green },
+                      ]}
+                      onPress={() => setAccountId(acc.id)}
+                    >
+                      <Text style={[styles.bucketChipText, selected && { color: colors.green }]}>
+                        {acc.name}
+                      </Text>
+                    </TouchableOpacity>
+                  )
+                })}
+              </ScrollView>
+            </View>
+
+            {isIncome && !isSalaryTxn(transaction) && (
+              <View style={styles.section}>
+                <Text style={styles.label}>Put back into</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.chipRow}
+                >
+                  <TouchableOpacity
+                    style={[
+                      styles.bucketChip,
+                      (selectedBucketId === INCOME_BUCKET_ID || !selectedBucketId) && {
+                        backgroundColor: colors.greenFill,
+                        borderColor: colors.green,
+                      },
+                    ]}
+                    onPress={() => setSelectedBucketId(INCOME_BUCKET_ID)}
+                  >
+                    <Text
+                      style={[
+                        styles.bucketChipText,
+                        (selectedBucketId === INCOME_BUCKET_ID || !selectedBucketId) && {
+                          color: colors.green,
+                        },
+                      ]}
+                    >
+                      None
+                    </Text>
+                  </TouchableOpacity>
+                  {spendingBuckets.map(bucket => {
+                    const selected = selectedBucketId === bucket.id
+                    return (
+                      <TouchableOpacity
+                        key={bucket.id}
+                        style={[
+                          styles.bucketChip,
+                          selected && { backgroundColor: bucket.color + '22', borderColor: bucket.color },
+                        ]}
+                        onPress={() => setSelectedBucketId(bucket.id)}
+                      >
+                        <Text style={{ fontSize: 14, marginRight: 4 }}>{bucket.icon}</Text>
+                        <Text style={[styles.bucketChipText, selected && { color: bucket.color }]}>
+                          {bucket.name}
+                        </Text>
+                      </TouchableOpacity>
+                    )
+                  })}
+                </ScrollView>
+              </View>
+            )}
 
             {/* Bucket selector — expense only */}
             {isExpense && (
@@ -214,19 +342,6 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
                 </ScrollView>
               </View>
             )}
-
-            {!transaction.remarks?.startsWith('__') ? (
-              <View style={styles.section}>
-                <Text style={styles.label}>Remarks</Text>
-                <TextInput
-                  style={styles.textInput}
-                  value={remarks}
-                  onChangeText={setRemarks}
-                  placeholder="Notes (optional)"
-                  placeholderTextColor={colors.textMuted}
-                />
-              </View>
-            ) : null}
 
             {transaction.fundedFromBucketId ? (
               <View style={styles.section}>
@@ -319,10 +434,63 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 20,
   },
-  amount: {
+  amountEditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  amountPrefix: {
+    fontSize: 20,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  amountInput: {
+    minWidth: 100,
     fontSize: 36,
     fontFamily: 'Inter_700Bold',
     fontVariant: ['tabular-nums'],
+    padding: 0,
+    textAlign: 'center',
+  },
+  feeChip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  feeChipActive: {
+    borderColor: colors.amber,
+    backgroundColor: colors.amberFill,
+  },
+  feeChipText: {
+    fontSize: 11,
+    fontFamily: 'Inter_600SemiBold',
+    color: colors.textMuted,
+  },
+  feeChipTextActive: {
+    color: colors.amber,
+  },
+  feeInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  feeLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+    color: colors.textMuted,
+  },
+  feeInput: {
+    minWidth: 70,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.amber,
+    fontSize: 16,
+    fontFamily: 'Inter_600SemiBold',
+    color: colors.textPrimary,
+    textAlign: 'right',
   },
   typeBadge: {
     paddingHorizontal: 12,

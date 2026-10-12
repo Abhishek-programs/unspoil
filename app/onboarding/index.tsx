@@ -8,6 +8,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -15,6 +16,7 @@ import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors } from '@/constants/colors'
 import { usePlaybookStore } from '@/store/playbook'
+import { startImportBackupFlow } from '@/lib/import-backup-flow'
 
 export default function OnboardingInfoScreen() {
   const [name, setName] = useState('')
@@ -28,6 +30,26 @@ export default function OnboardingInfoScreen() {
     router.push('/onboarding/money')
   }
 
+  const handleImportBackup = () => {
+    startImportBackupFlow({
+      introTitle: 'Import backup',
+      introMessage:
+        'Moving from another install? Choose the .json file you exported. This replaces anything already on this phone.',
+      onSuccess: result => {
+        if (result.isOnboarded) {
+          router.replace('/(tabs)')
+          return
+        }
+        Alert.alert(
+          'Import complete',
+          result.userName
+            ? `Welcome back, ${result.userName}. Finish setup if anything still looks empty.`
+            : 'Backup restored. Continue setup below.',
+        )
+      },
+    })
+  }
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -39,7 +61,7 @@ export default function OnboardingInfoScreen() {
             <Ionicons name="sparkles" size={32} color={colors.green} />
           </View>
           <Text style={styles.title}>What should I call you?</Text>
-          <Text style={styles.subtitle}>Let's personalize your SpendSense experience.</Text>
+          <Text style={styles.subtitle}>Know what's safe to spend.</Text>
         </Animated.View>
 
         <Animated.View entering={FadeInDown.duration(800).delay(400)} style={styles.inputContainer}>
@@ -68,6 +90,9 @@ export default function OnboardingInfoScreen() {
         >
           <Text style={styles.buttonText}>Next</Text>
           <Ionicons name="arrow-forward" size={20} color="#fff" />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.importLink} onPress={handleImportBackup} hitSlop={8}>
+          <Text style={styles.importLinkText}>Import a backup instead</Text>
         </TouchableOpacity>
       </Animated.View>
     </KeyboardAvoidingView>
@@ -139,5 +164,14 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: 'Inter_600SemiBold',
     color: '#fff',
+  },
+  importLink: {
+    alignItems: 'center',
+    paddingTop: 16,
+  },
+  importLinkText: {
+    fontSize: 14,
+    fontFamily: 'Inter_500Medium',
+    color: colors.textMuted,
   },
 })

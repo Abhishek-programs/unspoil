@@ -112,6 +112,17 @@ export function computeMonthMetrics(
   }
 }
 
+export function entryCashDelta(entry: LendBorrowEntry, allEntries: LendBorrowEntry[]): number {
+  if (entry.type === 'lend') return -entry.amount
+  if (entry.type === 'borrow') return entry.amount
+  if (entry.type === 'settle') {
+    const before = balanceBeforeEntry(entry.contactId, allEntries, entry.id)
+    if (before > 0) return entry.amount
+    if (before < 0) return -entry.amount
+  }
+  return 0
+}
+
 export function computeTotalNetBalance(
   contacts: Contact[],
   entries: LendBorrowEntry[],

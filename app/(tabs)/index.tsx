@@ -23,7 +23,8 @@ import {
   type ChecklistItem,
 } from "@/components/home/MonthStartChecklist";
 import { usePlaybookStore } from "@/store/playbook";
-import { useTransactionsStore, INCOME_BUCKET_ID } from "@/store/transactions";
+import { useTransactionsStore, INCOME_BUCKET_ID, SALARY_BUCKET_ID } from "@/store/transactions";
+import { isSalaryTxn } from "@/lib/txn-kind";
 import { useBucketsStore } from "@/store/buckets";
 import { useGoalsStore } from "@/store/goals";
 import { useAccountsStore } from "@/store/accounts";
@@ -35,11 +36,26 @@ import {
   EF_BUCKET_ID,
   PERSONAL_BUCKET_ID,
 } from "@/constants/defaults";
-import { currentMonthKey, effectiveCap } from "@/lib/bucket-balance";
+import {
+  currentMonthKey,
+  effectiveCap,
+  runMonthRollover,
+} from "@/lib/bucket-balance";
 import { isPersonalAtCap } from "@/lib/personal-cap";
 import { checkAndCompleteGoals } from "@/lib/goals/completion";
 import { PersonalCapPrompt } from "@/components/home/PersonalCapPrompt";
 import { LentBorrowRow } from "@/components/home/LentBorrowRow";
+import { useLendingStore } from "@/store/lending";
+import {
+  getDaysUntilNextRegularStart,
+  getMonthRange,
+  toLocalDateKey,
+} from "@/lib/month";
+import { runSurplusRollover } from "@/lib/month-surplus";
+import { computeMonthMetrics } from "@/lib/lending/balance";
+import { movedIntoNewPeriodAdjust } from "@/lib/your-money";
+import { formatMoney } from "@/lib/format";
+import { applySchemaPatches, restoreWipedSpendingCeilings } from "@/db/client";
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -50,22 +66,31 @@ function getGreeting(): string {
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const { transactions, deleteTransaction } = useTransactionsStore();
-  const { buckets } = useBucketsStore();
+  const { transactions, allTransactions, deleteTransaction, loadTransactions } =
+    useTransactionsStore();
+  const { buckets, loadBuckets } = useBucketsStore();
   const { goals, loadGoals } = useGoalsStore();
   const {
     userName,
     monthStartDay,
+    earlyMonthStartDate,
     monthlyIncome,
     lastChecklistMonth,
+    lastChecklistPromptMonth,
     efFloor,
+    personalRecoveryDebt,
+    lastBalanceRolloverMonth,
+    lastSurplusRolloverMonth,
+    loadPlaybook,
     updatePlaybook,
   } = usePlaybookStore();
+  const { loadEntries } = useLendingStore();
   const {
     totalIncome,
     effectiveIncome,
     safeToSpend,
     yourMoney,
+    bankPile,
     stillInBank,
     monthRemainingBalance,
     carriedForwardBalance,
@@ -94,33 +119,53 @@ export default function HomeScreen() {
     moneyAccounts,
   } = usePulseData();
 
-  const { seedFromYourMoney, reconcileToYourMoney } = useAccountsStore();
+  const { seedFromYourMoney, syncBankToPile } = useAccountsStore();
 
   useEffect(() => {
     void (async () => {
-      await seedFromYourMoney(yourMoney);
-      await reconcileToYourMoney(yourMoney);
+      await seedFromYourMoney(bankPile);
+      await syncBankToPile(bankPile);
     })();
-  }, [yourMoney, seedFromYourMoney, reconcileToYourMoney]);
+  }, [bankPile, seedFromYourMoney, syncBankToPile]);
 
   const [promptVisible, setPromptVisible] = useState(false);
   const [checklistVisible, setChecklistVisible] = useState(false);
   const [shareSheetVisible, setShareSheetVisible] = useState(false);
   const [shareBucketId, setShareBucketId] = useState<string | null>(null);
+  const [shareConfirmAmount, setShareConfirmAmount] = useState<number | null>(
+    null,
+  );
   const [capPromptVisible, setCapPromptVisible] = useState(false);
-  const [capPromptMode, setCapPromptMode] = useState<
-    "cap_hit" | "idle_rebalance"
-  >("cap_hit");
+  const [startingMonthEarly, setStartingMonthEarly] = useState(false);
 
   const flagged = transactions.filter((t) => t.isFlagged);
 
-  const monthKey = currentMonthKey(monthStartDay);
+  const monthKey = currentMonthKey(monthStartDay, earlyMonthStartDate);
 
   // Determine which checklist items are already completed this month
   // by checking if matching transactions exist
-  const hasSalaryThisMonth = transactions.some(
-    (t) => t.remarks === "__salary__" && t.type === "income",
+  const hasSalaryThisMonth = transactions.some((t) => isSalaryTxn(t));
+  const sipBucket = savingsBuckets.find((b) => b.id === SIP_BUCKET_ID);
+  const sipConfirmedPrincipal = transactions
+    .filter(
+      (t) =>
+        t.bucketId === SIP_BUCKET_ID &&
+        t.type === "expense" &&
+        !t.isFlagged &&
+        !t.isRecurringDraft,
+    )
+    .reduce((sum, t) => sum + t.amount, 0);
+  const sipRemaining = Math.max(
+    0,
+    (sipBucket?.monthlyAmount ?? 0) - sipConfirmedPrincipal,
   );
+  const sipChunks = useMemo(() => {
+    const chunks: number[] = [];
+    for (let remaining = sipRemaining; remaining > 0; remaining -= 5000) {
+      chunks.push(Math.min(5000, remaining));
+    }
+    return chunks;
+  }, [sipRemaining]);
 
   const checklistItems: ChecklistItem[] = useMemo(() => {
     const items: ChecklistItem[] = [
@@ -139,6 +184,7 @@ export default function HomeScreen() {
         amount: b.monthlyAmount,
         bucketId: b.id,
         completed: confirmedSavingIds.has(b.id),
+        chunks: b.id === SIP_BUCKET_ID ? sipChunks : undefined,
       });
     });
     return items;
@@ -148,16 +194,29 @@ export default function HomeScreen() {
     hasSalaryThisMonth,
     confirmedSavingIds,
     goals,
+    sipChunks,
   ]);
 
   const checklistAllDone = checklistItems.every((i) => i.completed);
   const checklistPending = lastChecklistMonth !== monthKey && !checklistAllDone;
+  const daysUntilRegularStart = getDaysUntilNextRegularStart(monthStartDay);
+  const canStartMonthEarly =
+    !earlyMonthStartDate &&
+    hasSalaryThisMonth &&
+    daysUntilRegularStart >= 1 &&
+    daysUntilRegularStart <= 7;
 
   useEffect(() => {
-    if (lastChecklistMonth !== monthKey && !checklistAllDone) {
+    if (lastChecklistPromptMonth !== monthKey && !checklistAllDone) {
       setChecklistVisible(true);
+      void updatePlaybook({ lastChecklistPromptMonth: monthKey });
     }
-  }, [lastChecklistMonth, monthKey]);
+  }, [
+    lastChecklistPromptMonth,
+    monthKey,
+    checklistAllDone,
+    updatePlaybook,
+  ]);
 
   useEffect(() => {
     if (checklistAllDone && lastChecklistMonth !== monthKey) {
@@ -174,10 +233,9 @@ export default function HomeScreen() {
         amount: monthlyIncome,
         description: "Salary received",
         merchant: "Salary",
-        bucketId: INCOME_BUCKET_ID,
+        bucketId: SALARY_BUCKET_ID,
         date: txnDate,
         source: "manual",
-        remarks: "__salary__",
         fundedFromBucketId: null,
         parsedTxnId: null,
         isFlagged: false,
@@ -186,6 +244,10 @@ export default function HomeScreen() {
     } else {
       const bucket = savingsBuckets.find((b) => b.id === id);
       if (!bucket) return;
+      if (bucket.id === SIP_BUCKET_ID) {
+        handleConfirmSavings(bucket.id);
+        return;
+      }
       await addTransaction({
         type: "expense",
         amount: bucket.monthlyAmount,
@@ -194,7 +256,6 @@ export default function HomeScreen() {
         bucketId: bucket.id,
         date: txnDate,
         source: "manual",
-        remarks: "__savings_confirm__",
         fundedFromBucketId: null,
         parsedTxnId: null,
         isFlagged: false,
@@ -215,6 +276,11 @@ export default function HomeScreen() {
 
     if (isEditable) {
       setShareBucketId(bucketId);
+      setShareConfirmAmount(
+        bucket.id === SIP_BUCKET_ID
+          ? Math.min(5000, sipRemaining)
+          : bucket.monthlyAmount,
+      );
       setShareSheetVisible(true);
       return;
     }
@@ -227,7 +293,6 @@ export default function HomeScreen() {
       bucketId: bucket.id,
       date: new Date().toISOString(),
       source: "manual",
-      remarks: "__savings_confirm__",
       fundedFromBucketId: null,
       parsedTxnId: null,
       isFlagged: false,
@@ -235,25 +300,26 @@ export default function HomeScreen() {
     });
   };
 
-  const handleShareConfirm = async (amount: number) => {
+  const handleShareConfirm = async (amount: number, feeAmount: number) => {
     if (!shareBucketId) return;
     const bucket = savingsBuckets.find((b) => b.id === shareBucketId);
     if (!bucket) return;
     await addTransaction({
       type: "expense",
       amount,
+      feeAmount,
       description: bucket.name,
       merchant: bucket.name,
       bucketId: bucket.id,
       date: new Date().toISOString(),
       source: "manual",
-      remarks: "__savings_confirm__",
       fundedFromBucketId: null,
       parsedTxnId: null,
       isFlagged: false,
       isRecurringDraft: false,
     });
     setShareBucketId(null);
+    setShareConfirmAmount(null);
   };
 
   const shareBucket = shareBucketId
@@ -267,9 +333,9 @@ export default function HomeScreen() {
 
   const progressByBucket = useMemo(() => {
     const cumulativeConfirmed = (bucketId: string) =>
-      transactions
+      allTransactions
         .filter(
-          (t) => t.bucketId === bucketId && t.remarks === "__savings_confirm__",
+          (t) => t.bucketId === bucketId && t.type === "expense",
         )
         .reduce((s, t) => s + t.amount, 0);
 
@@ -303,7 +369,7 @@ export default function HomeScreen() {
       }
     }
     return map;
-  }, [goalGroups, standaloneBuckets, transactions, goals, efValue, efFloor]);
+  }, [goalGroups, standaloneBuckets, allTransactions, goals, efValue, efFloor]);
 
   const personalBucket = buckets.find((b) => b.id === PERSONAL_BUCKET_ID);
   const personalBalance = personalBucket
@@ -314,21 +380,20 @@ export default function HomeScreen() {
     if (!personalBucket) return;
     isPersonalAtCap(personalBucket).then((atCap) => {
       if (atCap && !personalBucket.capOverride) {
-        setCapPromptMode("cap_hit");
         setCapPromptVisible(true);
       }
     });
   }, [personalBucket?.id, personalBalance]);
 
   useEffect(() => {
-    checkAndCompleteGoals(goals, transactions).then((completed) => {
+    checkAndCompleteGoals(goals, allTransactions).then((completed) => {
       if (completed.length > 0) {
         loadGoals();
         useBucketsStore.getState().loadBuckets();
         const last = completed[completed.length - 1];
         Alert.alert(
           "Goal completed!",
-          `"${last.goal.name}" is fully funded. Create a new big spend goal and redirect NPR ${last.freedMonthlyAmount.toLocaleString()}/mo?`,
+          `"${last.goal.name}" is fully funded. Create a new big spend goal and redirect ${formatMoney(last.freedMonthlyAmount)}/mo?`,
           [
             { text: "Later", style: "cancel" },
             {
@@ -339,7 +404,7 @@ export default function HomeScreen() {
         );
       }
     });
-  }, [transactions, goals]);
+  }, [allTransactions, goals]);
 
   const handleUndoChecklistItem = (id: string) => {
     Alert.alert(
@@ -353,14 +418,134 @@ export default function HomeScreen() {
           onPress: async () => {
             if (id === "income") {
               const txn = transactions.find(
-                (t) => t.remarks === "__salary__" && t.type === "income",
+                (t) => isSalaryTxn(t),
               );
               if (txn) await deleteTransaction(txn.id);
             } else {
               const txn = transactions.find(
-                (t) => t.bucketId === id && t.remarks === "__savings_confirm__",
+                (t) => t.bucketId === id && t.type === "expense",
               );
               if (txn) await deleteTransaction(txn.id);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleStartMonthEarly = () => {
+    Alert.alert(
+      "Start new month today?",
+      `Closes this month, logs ${formatMoney(monthlyIncome)} salary, and counts spending from today in the new month. Your regular start day stays ${monthStartDay}.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Start month",
+          onPress: async () => {
+            if (startingMonthEarly) return;
+            setStartingMonthEarly(true);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const earlyStartKey = toLocalDateKey(today);
+            try {
+              applySchemaPatches();
+              const beforeCeilings = useBucketsStore
+                .getState()
+                .buckets.filter((b) => b.type === "spending" && b.isActive)
+                .map((b) => ({ id: b.id, monthlyAmount: b.monthlyAmount }));
+              // Carry is the cash pile on the card now. Today's paid bills stay
+              // in the new period, so add them back (and drop today's borrow)
+              // or they would be deducted twice.
+              const todayEnd = new Date(today);
+              todayEnd.setHours(23, 59, 59, 999);
+              await useLendingStore.getState().loadAllEntries();
+              const lendingState = useLendingStore.getState();
+              const lendingRows =
+                lendingState.allEntries.length > 0
+                  ? lendingState.allEntries
+                  : lendingState.entries;
+              const lendToday = computeMonthMetrics(
+                lendingRows,
+                today,
+                todayEnd,
+              ).lendBorrowCashAdjust;
+              const cashNow = Math.max(
+                0,
+                bankPile +
+                  movedIntoNewPeriodAdjust(
+                    useTransactionsStore.getState().transactions,
+                    lendToday,
+                    today,
+                  ),
+              );
+              const surplusKey = await runSurplusRollover(
+                monthStartDay,
+                lastSurplusRolloverMonth,
+                earlyStartKey,
+                { cashOnHand: cashNow },
+              );
+              const balanceKey = await runMonthRollover(
+                monthStartDay,
+                lastBalanceRolloverMonth,
+                earlyStartKey,
+              );
+              await loadPlaybook();
+              await updatePlaybook({
+                earlyMonthStartDate: earlyStartKey,
+                lastBalanceRolloverMonth: balanceKey,
+                lastSurplusRolloverMonth: surplusKey,
+              });
+              await loadBuckets();
+              restoreWipedSpendingCeilings();
+              await loadBuckets();
+
+              const { start, end } = getMonthRange(
+                monthStartDay,
+                earlyStartKey,
+                today,
+              );
+              await Promise.all([
+                loadTransactions(start, end),
+                loadEntries(start, end),
+              ]);
+              await addTransaction({
+                type: "income",
+                amount: monthlyIncome,
+                description: "Salary received",
+                merchant: "Salary",
+                bucketId: SALARY_BUCKET_ID,
+                date: start.toISOString(),
+                source: "manual",
+                fundedFromBucketId: null,
+                parsedTxnId: null,
+                isFlagged: false,
+                isRecurringDraft: false,
+              });
+              await loadBuckets();
+
+              // Guard: Paid early must never wipe Living ceilings.
+              const after = useBucketsStore.getState().buckets;
+              const wiped = beforeCeilings.filter((b) => {
+                if (!b.monthlyAmount || b.monthlyAmount <= 0) return false;
+                const next = after.find((x) => x.id === b.id);
+                return !next || !next.monthlyAmount;
+              });
+              if (wiped.length > 0) {
+                for (const b of wiped) {
+                  await useBucketsStore
+                    .getState()
+                    .updateBucket(b.id, { monthlyAmount: b.monthlyAmount });
+                }
+                await loadBuckets();
+              }
+              setChecklistVisible(true);
+            } catch (error) {
+              Alert.alert(
+                "Could not start month",
+                error instanceof Error ? error.message : "Please try again.",
+              );
+            } finally {
+              setStartingMonthEarly(false);
             }
           },
         },
@@ -483,6 +668,10 @@ export default function HomeScreen() {
           daysRemaining={daysRemaining}
           weeklyRate={weeklyRate}
           flaggedAmount={flaggedAmount}
+          onStartMonthEarly={
+            canStartMonthEarly ? handleStartMonthEarly : undefined
+          }
+          startingMonthEarly={startingMonthEarly}
         />
 
         <LentBorrowRow
@@ -494,6 +683,7 @@ export default function HomeScreen() {
           buckets={spendingBuckets}
           spentByBucket={spentByBucket}
           bucketBalances={bucketBalances}
+          personalRecoveryDebt={personalRecoveryDebt}
         />
 
         {/* Future — Savings checklist */}
@@ -502,6 +692,7 @@ export default function HomeScreen() {
           standaloneBuckets={standaloneBuckets}
           confirmedBucketIds={confirmedSavingIds}
           progressByBucket={progressByBucket}
+          chunksByBucket={{ [SIP_BUCKET_ID]: sipChunks }}
           efBucketId={EF_BUCKET_ID}
           showPlaceholder={!hasBigSpendGoal}
           onConfirm={handleConfirmSavings}
@@ -520,11 +711,16 @@ export default function HomeScreen() {
       <ShareConfirmSheet
         visible={shareSheetVisible}
         bucketName={shareBucket?.name ?? "Direct Shares"}
-        defaultAmount={shareBucket?.monthlyAmount ?? 0}
+        amountEditable={shareBucket?.id !== SIP_BUCKET_ID}
+        showFeeByDefault={shareBucket?.id === SIP_BUCKET_ID}
+        defaultAmount={
+          shareConfirmAmount ?? shareBucket?.monthlyAmount ?? 0
+        }
         onConfirm={handleShareConfirm}
         onClose={() => {
           setShareSheetVisible(false);
           setShareBucketId(null);
+          setShareConfirmAmount(null);
         }}
       />
 
@@ -541,12 +737,7 @@ export default function HomeScreen() {
           visible={capPromptVisible}
           balance={personalBalance}
           defaultCap={personalBucket.accumulationCap ?? 20000}
-          mode={capPromptMode}
           onClose={() => setCapPromptVisible(false)}
-          onRebalance={() => {
-            setCapPromptVisible(false);
-            router.push("/(tabs)/goals");
-          }}
         />
       )}
     </View>

@@ -10,7 +10,7 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { colors } from '@/constants/colors'
-import { formatNPRShort } from '@/lib/format'
+import { formatMoney, formatMoneyShort } from '@/lib/format'
 import { raisePersonalCap } from '@/lib/personal-cap'
 import { useBucketsStore } from '@/store/buckets'
 
@@ -18,18 +18,14 @@ interface PersonalCapPromptProps {
   visible: boolean
   balance: number
   defaultCap: number
-  mode: 'cap_hit' | 'idle_rebalance'
   onClose: () => void
-  onRebalance?: () => void
 }
 
 export function PersonalCapPrompt({
   visible,
   balance,
   defaultCap,
-  mode,
   onClose,
-  onRebalance,
 }: PersonalCapPromptProps) {
   const [purchaseAmount, setPurchaseAmount] = useState('')
   const { loadBuckets } = useBucketsStore()
@@ -57,50 +53,34 @@ export function PersonalCapPrompt({
         <View style={styles.card}>
           <View style={styles.header}>
             <Ionicons
-              name={mode === 'cap_hit' ? 'alert-circle' : 'swap-horizontal'}
+              name="alert-circle"
               size={22}
-              color={mode === 'cap_hit' ? colors.amber : colors.green}
+              color={colors.amber}
             />
-            <Text style={styles.title}>
-              {mode === 'cap_hit' ? 'Personal fund at cap' : 'Consider rebalancing'}
-            </Text>
+            <Text style={styles.title}>Personal fund at cap</Text>
           </View>
 
           <Text style={styles.body}>
-            {mode === 'cap_hit'
-              ? `Cap reached at NPR ${formatNPRShort(balance)}. Allocate some to savings/investment, or raise the cap for a specific purchase?`
-              : `Your Personal fund is full (NPR ${formatNPRShort(balance)}). Consider moving some to savings or investment.`}
+            Cap reached at {formatMoneyShort(balance)}. Raise the cap temporarily
+            or for a specific purchase?
           </Text>
 
-          {mode === 'cap_hit' && (
-            <>
-              <TouchableOpacity style={styles.option} onPress={onRebalance}>
-                <Text style={styles.optionText}>Move to savings / investment</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.option} onPress={handleRaiseGeneral}>
-                <Text style={styles.optionText}>Raise cap one-time (+NPR 5,000)</Text>
-              </TouchableOpacity>
-              <View style={styles.purchaseRow}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Purchase amount"
-                  keyboardType="numeric"
-                  value={purchaseAmount}
-                  onChangeText={setPurchaseAmount}
-                  placeholderTextColor={colors.textMuted}
-                />
-                <TouchableOpacity style={styles.raiseBtn} onPress={handleRaisePurchase}>
-                  <Text style={styles.raiseBtnText}>Raise for purchase</Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          )}
-
-          {mode === 'idle_rebalance' && onRebalance && (
-            <TouchableOpacity style={styles.primaryBtn} onPress={onRebalance}>
-              <Text style={styles.primaryBtnText}>Review options</Text>
+          <TouchableOpacity style={styles.option} onPress={handleRaiseGeneral}>
+            <Text style={styles.optionText}>Raise cap one-time (+{formatMoney(5000)})</Text>
+          </TouchableOpacity>
+          <View style={styles.purchaseRow}>
+            <TextInput
+              style={styles.input}
+              placeholder="Purchase amount"
+              keyboardType="numeric"
+              value={purchaseAmount}
+              onChangeText={setPurchaseAmount}
+              placeholderTextColor={colors.textMuted}
+            />
+            <TouchableOpacity style={styles.raiseBtn} onPress={handleRaisePurchase}>
+              <Text style={styles.raiseBtnText}>Raise for purchase</Text>
             </TouchableOpacity>
-          )}
+          </View>
 
           <TouchableOpacity style={styles.dismiss} onPress={onClose}>
             <Text style={styles.dismissText}>Not now</Text>
@@ -178,18 +158,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontFamily: 'Inter_600SemiBold',
     fontSize: 13,
-  },
-  primaryBtn: {
-    backgroundColor: colors.green,
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  primaryBtnText: {
-    color: '#fff',
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 15,
   },
   dismiss: {
     alignItems: 'center',

@@ -10,6 +10,7 @@ export const colors = {
   amber: '#F59E0B',
   amberFill: '#FEF3C7',
   red: '#DC2626',
+  redDark: '#991B1B',
   purple: '#7C3AED',
   textPrimary: '#1A1C1E',
   textSecond: '#6B7280',

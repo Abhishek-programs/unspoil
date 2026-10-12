@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { CurrencyPrefix } from '@/components/ui/CurrencyPrefix'
 import {
   Modal,
   View,
@@ -13,14 +14,16 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { colors } from '@/constants/colors'
-import { formatNPR } from '@/lib/format'
+import { formatMoney } from '@/lib/format'
 import { useKeyboardHeight } from '@/hooks/useKeyboardHeight'
 
 interface ShareConfirmSheetProps {
   visible: boolean
   bucketName: string
   defaultAmount: number
-  onConfirm: (amount: number) => void
+  amountEditable?: boolean
+  showFeeByDefault?: boolean
+  onConfirm: (amount: number, feeAmount: number) => void
   onClose: () => void
 }
 
@@ -28,23 +31,32 @@ export function ShareConfirmSheet({
   visible,
   bucketName,
   defaultAmount,
+  amountEditable = true,
+  showFeeByDefault = false,
   onConfirm,
   onClose,
 }: ShareConfirmSheetProps) {
   const insets = useSafeAreaInsets()
   const keyboardHeight = useKeyboardHeight(visible)
   const [amount, setAmount] = useState(String(defaultAmount))
+  const [feeAmount, setFeeAmount] = useState('')
+  const [showFee, setShowFee] = useState(showFeeByDefault)
 
   useEffect(() => {
-    if (visible) setAmount(String(defaultAmount))
-  }, [visible, defaultAmount])
+    if (visible) {
+      setAmount(String(defaultAmount))
+      setFeeAmount('')
+      setShowFee(showFeeByDefault)
+    }
+  }, [visible, defaultAmount, showFeeByDefault])
 
   const parsed = parseFloat(amount) || 0
+  const parsedFee = Math.max(0, parseFloat(feeAmount) || 0)
   const valid = parsed > 0
 
   const handleConfirm = () => {
     if (!valid) return
-    onConfirm(parsed)
+    onConfirm(parsed, parsedFee)
     onClose()
   }
 
@@ -66,21 +78,46 @@ export function ShareConfirmSheet({
               <View style={styles.handle} />
               <Text style={styles.title}>Confirm {bucketName}</Text>
               <Text style={styles.subtitle}>
-                Enter the amount you invested this month. SIP uses a fixed amount; shares can vary.
+                {amountEditable
+                  ? 'Enter the amount you invested and any transaction fee.'
+                  : 'Confirm this SIP chunk and enter the fee charged for it.'}
               </Text>
 
               <View style={styles.inputRow}>
-                <Text style={styles.prefix}>NPR</Text>
+                <CurrencyPrefix style={styles.prefix} />
                 <TextInput
                   style={styles.input}
                   value={amount}
                   onChangeText={setAmount}
                   keyboardType="numeric"
-                  autoFocus
+                  autoFocus={amountEditable}
+                  editable={amountEditable}
                 />
               </View>
 
-              <Text style={styles.hint}>Suggested: NPR {formatNPR(defaultAmount)}</Text>
+              <Text style={styles.hint}>Suggested: {formatMoney(defaultAmount)}</Text>
+              <TouchableOpacity
+                style={[styles.feeChip, showFee && styles.feeChipActive]}
+                onPress={() => setShowFee(v => !v)}
+              >
+                <Text style={[styles.feeChipText, showFee && styles.feeChipTextActive]}>
+                  + Fee
+                </Text>
+              </TouchableOpacity>
+              {showFee && (
+                <View style={styles.feeRow}>
+                  <Text style={styles.feePrefix}>Fee <CurrencyPrefix /></Text>
+                  <TextInput
+                    style={styles.feeInput}
+                    value={feeAmount}
+                    onChangeText={setFeeAmount}
+                    placeholder="0"
+                    placeholderTextColor={colors.textMuted}
+                    keyboardType="decimal-pad"
+                    autoFocus={!amountEditable}
+                  />
+                </View>
+              )}
 
               <TouchableOpacity
                 style={[styles.confirmBtn, !valid && styles.confirmBtnDisabled]}
@@ -164,7 +201,49 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Inter_400Regular',
     color: colors.textMuted,
-    marginBottom: 24,
+    marginBottom: 12,
+  },
+  feeChip: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 12,
+  },
+  feeChipActive: {
+    borderColor: colors.amber,
+    backgroundColor: colors.amberFill,
+  },
+  feeChipText: {
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+    color: colors.textMuted,
+  },
+  feeChipTextActive: {
+    color: colors.amber,
+  },
+  feeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.amber,
+    marginBottom: 20,
+  },
+  feePrefix: {
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+    color: colors.textMuted,
+  },
+  feeInput: {
+    flex: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    textAlign: 'right',
+    fontSize: 18,
+    fontFamily: 'Inter_600SemiBold',
+    color: colors.textPrimary,
   },
   confirmBtn: {
     backgroundColor: colors.green,

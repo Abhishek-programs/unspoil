@@ -103,6 +103,25 @@ function withPaymentWatch(config) {
       })
     }
 
+    if (!manifest.manifest.queries) manifest.manifest.queries = []
+    const hasLauncherQuery = manifest.manifest.queries.some((query) =>
+      query.intent?.some((intent) =>
+        intent.action?.some(
+          (action) => action.$['android:name'] === 'android.intent.action.MAIN',
+        ),
+      ),
+    )
+    if (!hasLauncherQuery) {
+      manifest.manifest.queries.push({
+        intent: [
+          {
+            action: [{ $: { 'android:name': 'android.intent.action.MAIN' } }],
+            category: [{ $: { 'android:name': 'android.intent.category.LAUNCHER' } }],
+          },
+        ],
+      })
+    }
+
     const app = AndroidConfig.Manifest.getMainApplicationOrThrow(manifest)
     if (!app.service) app.service = []
     if (!app.receiver) app.receiver = []
@@ -151,6 +170,18 @@ function withPaymentWatch(config) {
             ],
           },
         ],
+      })
+    }
+
+    if (!app.activity) app.activity = []
+    if (!app.activity.some((a) => a.$['android:name'] === '.paymentwatch.PaymentWatchPickActivity')) {
+      app.activity.push({
+        $: {
+          'android:name': '.paymentwatch.PaymentWatchPickActivity',
+          'android:exported': 'false',
+          'android:theme': '@android:style/Theme.DeviceDefault.Light.Dialog.NoActionBar',
+          'android:excludeFromRecents': 'true',
+        },
       })
     }
 

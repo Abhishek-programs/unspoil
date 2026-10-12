@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons'
 
 import { colors } from '@/constants/colors'
 
-import { formatNPR, formatNPRShort } from '@/lib/format'
+import { formatMoney, formatNPR, formatNPRShort, formatMoneyShort } from '@/lib/format'
 
 
 
@@ -60,19 +60,21 @@ export function NetWorthCard({
 
           <Text style={styles.label}>Your money</Text>
 
-          <Text style={styles.value}>{formatNPR(availableBalance)}</Text>
+          <Text style={styles.value}>{formatMoney(availableBalance)}</Text>
 
           <Text style={styles.sub}>
 
+            {carriedForwardBalance > 0
+
+              ? `Includes ${formatMoneyShort(carriedForwardBalance)} carried forward`
+
+              : 'Cash on you right now'}
+
             {stillInBank > 0
 
-              ? `Includes NPR ${formatNPRShort(stillInBank)} not yet confirmed`
+              ? ` · ${formatMoneyShort(stillInBank)} not yet confirmed to Future`
 
-              : carriedForwardBalance > 0
-
-                ? `Includes NPR ${formatNPRShort(carriedForwardBalance)} carried forward`
-
-                : 'Cash on you right now'}
+              : ''}
 
           </Text>
 
@@ -97,22 +99,6 @@ export function NetWorthCard({
         <View style={styles.breakdown}>
 
           <View style={styles.divider} />
-
-
-
-          <View style={styles.breakdownRow}>
-
-            <View>
-
-              <Text style={styles.breakdownLabel}>Remaining this month</Text>
-
-              <Text style={styles.rolloverNote}>Rolls forward at month end</Text>
-
-            </View>
-
-            <Text style={styles.breakdownValue}>{formatNPRShort(monthRemainingBalance)}</Text>
-
-          </View>
 
 
 
@@ -142,7 +128,7 @@ export function NetWorthCard({
 
                 <Text style={styles.breakdownLabel}>Not yet confirmed</Text>
 
-                <Text style={styles.rolloverNote}>Still in bank — confirm in Future</Text>
+                <Text style={styles.rolloverNote}>Already in the total — confirm in Future</Text>
 
               </View>
 

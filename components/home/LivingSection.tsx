@@ -8,7 +8,7 @@ import {
   MISC_BUCKET_ID,
 } from '@/constants/defaults'
 import { colors } from '@/constants/colors'
-import { formatNPR } from '@/lib/format'
+import { formatMoney } from '@/lib/format'
 import { effectiveCap } from '@/lib/bucket-balance'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import type { Bucket } from '@/store/buckets'
@@ -25,15 +25,35 @@ interface LivingSectionProps {
   buckets: Bucket[]
   spentByBucket: Record<string, number>
   bucketBalances: Record<string, number>
+  personalRecoveryDebt?: number
 }
 
-export function LivingSection({ buckets, spentByBucket, bucketBalances }: LivingSectionProps) {
+export function LivingSection({
+  buckets,
+  spentByBucket,
+  bucketBalances,
+  personalRecoveryDebt = 0,
+}: LivingSectionProps) {
   const regularBuckets = buckets.filter(b => !b.accumulates)
   const fundBuckets = buckets.filter(b => b.accumulates)
 
   const renderRegularRow = (bucket: Bucket, i: number) => {
     const spent = spentByBucket[bucket.id] ?? 0
-    const ratio = bucket.monthlyAmount > 0 ? spent / bucket.monthlyAmount : 0
+    const ceiling = bucket.monthlyAmount
+    const over = Math.max(0, spent - ceiling)
+    let segments: { green: number; red: number; darkRed?: number }
+    if (over > 0 && spent > 0) {
+      segments = {
+        green: 0,
+        red: ceiling / spent,
+        darkRed: over / spent,
+      }
+    } else {
+      segments = {
+        green: ceiling > 0 ? Math.max(0, (ceiling - spent) / ceiling) : 1,
+        red: ceiling > 0 ? Math.min(1, spent / ceiling) : 0,
+      }
+    }
     return (
       <Animated.View
         key={bucket.id}
@@ -50,16 +70,16 @@ export function LivingSection({ buckets, spentByBucket, bucketBalances }: Living
           </View>
           <Text style={styles.amounts}>
             <Text style={styles.spentLabel}>Spent </Text>
-            {formatNPR(spent)}
+            {formatMoney(spent)}
           </Text>
         </View>
         <View style={styles.barWrap}>
-          {spent === 0 ? (
-            <Text style={styles.noTxnHint}>No transactions yet this month</Text>
-          ) : (
-            <ProgressBar value={ratio} height={4} />
-          )}
-          <Text style={styles.ceilingHint}>ceiling NPR {formatNPR(bucket.monthlyAmount)}</Text>
+          <ProgressBar value={0} height={4} segments={segments} />
+          <Text style={[styles.ceilingHint, over > 0 && { color: colors.redDark }]}>
+            {over > 0
+              ? `${formatMoney(over)} over · ceiling ${formatMoney(ceiling)}`
+              : `ceiling ${formatMoney(ceiling)}`}
+          </Text>
         </View>
       </Animated.View>
     )
@@ -67,10 +87,13 @@ export function LivingSection({ buckets, spentByBucket, bucketBalances }: Living
 
   const renderFundRow = (bucket: Bucket, showDivider: boolean, i: number) => {
     const spent = spentByBucket[bucket.id] ?? 0
-    const balance = bucketBalances[bucket.id] ?? 0
-    const cap = effectiveCap(bucket) ?? bucket.monthlyAmount * 4
+    const balance = Math.max(0, bucketBalances[bucket.id] ?? 0)
+    const cap = Math.max(effectiveCap(bucket) ?? bucket.monthlyAmount * 4, 1)
     const topUp = bucket.monthlyAmount
-    const ratio = topUp > 0 ? spent / topUp : 0
+    const green = Math.min(1, balance / cap)
+    const red = Math.min(1, spent / cap)
+    const grey = Math.max(0, 1 - green - red)
+    const emptyAndSpent = balance <= 0 && spent > 0
 
     return (
       <Animated.View
@@ -88,17 +111,18 @@ export function LivingSection({ buckets, spentByBucket, bucketBalances }: Living
           </View>
           <Text style={styles.amounts}>
             <Text style={styles.spentLabel}>Spent </Text>
-            {formatNPR(spent)}
+            {formatMoney(spent)}
           </Text>
         </View>
         <View style={styles.barWrap}>
-          {spent === 0 ? (
-            <Text style={styles.noTxnHint}>No draws yet this month</Text>
-          ) : (
-            <ProgressBar value={ratio} height={4} />
-          )}
-          <Text style={styles.fundHint}>
-            Fund NPR {formatNPR(balance)} / {formatNPR(cap)} · +{formatNPR(topUp)}/mo · rolls over
+          <ProgressBar value={0} height={4} segments={{ green, red, grey }} />
+          <Text style={[styles.fundHint, emptyAndSpent && { color: colors.redDark }]}>
+            {emptyAndSpent
+              ? `Fund empty · draws from Your money`
+              : `Fund ${formatMoney(balance)} / ${formatMoney(cap)} · +${formatMoney(topUp)}/mo · rolls over`}
+            {personalRecoveryDebt > 0
+              ? ` · recovering ${formatMoney(personalRecoveryDebt)}`
+              : ''}
           </Text>
         </View>
       </Animated.View>
@@ -110,8 +134,10 @@ export function LivingSection({ buckets, spentByBucket, bucketBalances }: Living
   return (
     <Animated.View style={styles.section} entering={FadeIn.duration(300)}>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>Living</Text>
-        <Text style={styles.subtitle}>Ceilings & personal fund</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title}>Living</Text>
+          <Text style={styles.subtitle}>Ceilings & personal fund</Text>
+        </View>
       </View>
       <View style={styles.card}>
         {regularBuckets.map((bucket, i) => renderRegularRow(bucket, i))}
@@ -136,6 +162,8 @@ const styles = StyleSheet.create({
   },
   headerRow: {
     marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
   },
   title: {
     fontSize: 18,
@@ -191,10 +219,6 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontVariant: ['tabular-nums'],
   },
-  amountsMuted: {
-    color: colors.textMuted,
-    fontFamily: 'Inter_400Regular',
-  },
   spentLabel: {
     fontFamily: 'Inter_400Regular',
     color: colors.textMuted,
@@ -213,12 +237,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     color: colors.textMuted,
     marginTop: 6,
-  },
-  noTxnHint: {
-    fontSize: 12,
-    fontFamily: 'Inter_400Regular',
-    color: colors.textMuted,
-    fontStyle: 'italic',
   },
   empty: {
     paddingVertical: 16,

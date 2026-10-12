@@ -1,6 +1,6 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import { colors } from '@/constants/colors'
-import { formatNPR, formatDate } from '@/lib/format'
+import { formatDate, formatMoney } from '@/lib/format'
 import type { LendBorrowEntry } from '@/lib/lending/balance'
 
 interface LendingRowProps {
@@ -34,7 +34,7 @@ export function LendingRow({ entry, personName, onPress }: LendingRowProps) {
         {entry.note ? <Text style={styles.sub}>{entry.note}</Text> : null}
         <Text style={styles.date}>{formatDate(entry.date)}</Text>
       </View>
-      <Text style={[styles.amount, { color: accent }]}>NPR {formatNPR(entry.amount)}</Text>
+      <Text style={[styles.amount, { color: accent }]}>{formatMoney(entry.amount)}</Text>
     </TouchableOpacity>
   )
 }

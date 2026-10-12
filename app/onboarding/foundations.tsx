@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { CurrencyPrefix } from '@/components/ui/CurrencyPrefix'
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -6,7 +7,8 @@ import Animated, { FadeInDown } from 'react-native-reanimated'
 import { colors } from '@/constants/colors'
 import { usePlaybookStore } from '@/store/playbook'
 import { useBucketsStore } from '@/store/buckets'
-import { formatNPR } from '@/lib/format'
+import { formatMoney } from '@/lib/format'
+import { currencyByCode } from '@/constants/currencies'
 import { EF_MULTIPLIER, CORE_LIVING_BUCKET_ID } from '@/constants/defaults'
 import { OnboardingBack } from '@/components/onboarding/OnboardingBack'
 import { OnboardingShell, useOnboardingFieldScroll } from '@/components/onboarding/OnboardingShell'
@@ -31,6 +33,7 @@ function FoundationsFields({
   suggestedFloor: number
 }) {
   const { bindField } = useOnboardingFieldScroll()
+  const currency = usePlaybookStore(s => s.currency)
   const coreField = bindField('core')
   const efFloorField = bindField('efFloor')
   const efBalanceField = bindField('efBalance')
@@ -47,10 +50,18 @@ function FoundationsFields({
       </Animated.View>
 
       <Animated.View entering={FadeInDown.duration(500).delay(100)} style={styles.formArea}>
+        <TouchableOpacity style={styles.inputGroup} onPress={() => router.push('/currency')}>
+          <Text style={styles.label}>CURRENCY</Text>
+          <View style={styles.inputWrapper}>
+            <CurrencyPrefix style={styles.prefix} />
+            <Text style={styles.input}>{currencyByCode(currency).name}</Text>
+          </View>
+        </TouchableOpacity>
+
         <View style={styles.inputGroup}>
           <Text style={styles.label}>CORE LIVING (MONTHLY)</Text>
           <View style={styles.inputWrapper}>
-            <Text style={styles.prefix}>NPR</Text>
+            <CurrencyPrefix style={styles.prefix} />
             <TextInput
               style={styles.input}
               value={coreLiving}
@@ -71,14 +82,14 @@ function FoundationsFields({
         <View style={styles.suggestionCard}>
           <Ionicons name="sparkles" size={18} color={colors.green} />
           <Text style={styles.suggestionText}>
-            EF target: NPR {formatNPR(suggestedFloor)} ({EF_MULTIPLIER}× core living)
+            EF target: {formatMoney(suggestedFloor)} ({EF_MULTIPLIER}× core living)
           </Text>
         </View>
 
         <View style={styles.inputGroup}>
           <Text style={styles.label}>EF TARGET (FLOOR)</Text>
           <View style={styles.inputWrapper}>
-            <Text style={styles.prefix}>NPR</Text>
+            <CurrencyPrefix style={styles.prefix} />
             <TextInput
               style={styles.input}
               value={efFloor}
@@ -94,7 +105,7 @@ function FoundationsFields({
         <View style={styles.inputGroup}>
           <Text style={styles.label}>CURRENT EF BALANCE</Text>
           <View style={styles.inputWrapper}>
-            <Text style={styles.prefix}>NPR</Text>
+            <CurrencyPrefix style={styles.prefix} />
             <TextInput
               style={styles.input}
               value={efBalance}

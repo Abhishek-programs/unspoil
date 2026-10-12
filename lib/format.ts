@@ -1,38 +1,80 @@
-// Formats amount in Indian lakh notation: 150000 → "1,50,000"
-// Keeps up to 3 decimals when present (150.5 → "150.5", 150.125 → "150.125"); omits .00
-export function formatNPR(amount: number): string {
-  if (amount < 0) return '-' + formatNPR(-amount)
-  // Cap at 3 dp so float noise doesn't invent extra digits
-  const scaled = Math.round(amount * 1000)
-  const intPart = Math.floor(scaled / 1000)
-  const fracPart = scaled % 1000
-  const str = intPart.toString()
-  let formatted: string
-  if (str.length <= 3) {
-    formatted = str
-  } else {
-    const last3 = str.slice(-3)
-    const rest = str.slice(0, -3)
-    const grouped = rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',')
-    formatted = grouped + ',' + last3
-  }
-  if (fracPart > 0) {
-    formatted += '.' + fracPart.toString().padStart(3, '0').replace(/0+$/, '')
-  }
-  return formatted
+import { currencyByCode } from '@/constants/currencies'
+
+/** NPR paisa — two decimal places. */
+export function roundPaisa(amount: number): number {
+  return Math.round(amount * 100) / 100
 }
 
-// Compact format: 150000 → "1.50L", 1000 → "1.00K"
+let activeCurrency = 'NPR'
+
+export function setActiveCurrency(code: string) {
+  const next = currencyByCode(code).code
+  activeCurrency = next
+}
+
+export function getActiveCurrency(): string {
+  return activeCurrency
+}
+
+function groupSouthAsian(intPart: number): string {
+  const str = String(intPart)
+  if (str.length <= 3) return str
+  const last3 = str.slice(-3)
+  const rest = str.slice(0, -3)
+  return rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + ',' + last3
+}
+
+function groupWestern(intPart: number): string {
+  return String(intPart).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+}
+
+/** Number only, in the active currency's grouping. Omits trailing zeros. */
+export function formatAmount(amount: number, code = activeCurrency): string {
+  if (amount < 0) return '-' + formatAmount(-amount, code)
+  const currency = currencyByCode(code)
+  const digits = currency.decimals
+  const factor = 10 ** digits
+  const scaled = Math.round(amount * factor)
+  const intPart = Math.floor(scaled / factor)
+  const fracPart = scaled % factor
+  const grouped = currency.southAsian ? groupSouthAsian(intPart) : groupWestern(intPart)
+  if (digits === 0 || fracPart === 0) return grouped
+  const frac = fracPart.toString().padStart(digits, '0').replace(/0+$/, '')
+  return `${grouped}.${frac}`
+}
+
+export function formatNPR(amount: number): string {
+  return formatAmount(amount)
+}
+
+export function formatAmountShort(amount: number, code = activeCurrency): string {
+  const currency = currencyByCode(code)
+  const sign = amount < 0 ? '-' : ''
+  const abs = Math.abs(amount)
+  if (currency.southAsian) {
+    if (abs >= 100000) return sign + (abs / 100000).toFixed(2) + 'L'
+    if (abs >= 1000) return sign + (abs / 1000).toFixed(2) + 'K'
+    return sign + formatAmount(abs, code)
+  }
+  if (abs >= 1_000_000) return sign + (abs / 1_000_000).toFixed(2) + 'M'
+  if (abs >= 1000) return sign + (abs / 1000).toFixed(2) + 'K'
+  return sign + formatAmount(abs, code)
+}
+
 export function formatNPRShort(amount: number): string {
-  if (amount >= 100000) {
-    const lakhs = amount / 100000
-    return lakhs.toFixed(2) + 'L'
-  }
-  if (amount >= 1000) {
-    const k = amount / 1000
-    return k.toFixed(2) + 'K'
-  }
-  return amount.toFixed(2)
+  return formatAmountShort(amount)
+}
+
+export function formatMoney(amount: number, code = activeCurrency): string {
+  const currency = currencyByCode(code).code
+  if (amount < 0) return `-${currency} ${formatAmount(-amount, currency)}`
+  return `${currency} ${formatAmount(amount, currency)}`
+}
+
+export function formatMoneyShort(amount: number, code = activeCurrency): string {
+  const currency = currencyByCode(code).code
+  if (amount < 0) return `-${currency} ${formatAmountShort(-amount, currency)}`
+  return `${currency} ${formatAmountShort(amount, currency)}`
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']

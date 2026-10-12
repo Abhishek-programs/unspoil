@@ -3,7 +3,16 @@ import { eq } from 'drizzle-orm'
 import { db } from '@/db/client'
 import { goals } from '@/db/schema'
 import type { PaymentMode } from '@/lib/goals/plan'
-import { createGoalWithBuckets, setGoalEnabled, updateGoalPaymentPlan } from '@/lib/goals/actions'
+import {
+  createGoalWithBuckets,
+  deleteGoalWithLinkedBuckets,
+  setGoalEnabled,
+  updateGoalPaymentPlan,
+} from '@/lib/goals/actions'
+import { useBucketsStore } from '@/store/buckets'
+import { useTransactionsStore } from '@/store/transactions'
+import { getMonthRange } from '@/lib/month'
+import { usePlaybookStore } from '@/store/playbook'
 
 export interface Goal {
   id: string
@@ -94,6 +103,11 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
   updateGoalPaymentPlan: async (goalId, patch) => {
     await updateGoalPaymentPlan(goalId, patch)
     await get().loadGoals()
+    await useBucketsStore.getState().loadBuckets()
+    const pb = usePlaybookStore.getState()
+    const { start, end } = getMonthRange(pb.monthStartDay, pb.earlyMonthStartDate)
+    await useTransactionsStore.getState().loadAllTransactions()
+    await useTransactionsStore.getState().loadTransactions(start, end)
   },
 
   updateGoal: async (id, patch) => {
@@ -115,7 +129,8 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
   },
 
   deleteGoal: async (id) => {
-    await db.delete(goals).where(eq(goals.id, id))
+    await deleteGoalWithLinkedBuckets(id)
     await get().loadGoals()
+    await useBucketsStore.getState().loadBuckets()
   },
 }))

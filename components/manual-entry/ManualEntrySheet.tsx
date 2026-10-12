@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { CurrencyPrefix } from '@/components/ui/CurrencyPrefix'
 import {
   Modal,
   View,
@@ -17,8 +18,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import DateTimePicker from '@react-native-community/datetimepicker'
 import { colors } from '@/constants/colors'
-import { formatNPR, formatDate } from '@/lib/format'
-import { categorize } from '@/lib/categorize'
+import { formatDate, formatMoney } from '@/lib/format'
 import { useBucketsStore } from '@/store/buckets'
 import { usePlaybookStore } from '@/store/playbook'
 import { useTransactionsStore, INCOME_BUCKET_ID } from '@/store/transactions'
@@ -26,6 +26,7 @@ import { useLendingStore } from '@/store/lending'
 import { LendBorrowForm } from '@/components/lending/LendBorrowForm'
 import { useAccountsStore } from '@/store/accounts'
 import { BANK_ACCOUNT_ID, defaultAccountId } from '@/constants/accounts'
+import { PERSONAL_BUCKET_ID } from '@/constants/defaults'
 
 const SAVE_BUTTON_HEIGHT = 56
 const FOOTER_PAD_TOP = 16
@@ -41,9 +42,8 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
   const amountRef = useRef<TextInput>(null)
   const insets = useSafeAreaInsets()
 
-  const { getSpendingBuckets, getSavingsBuckets, keywordMappings, sureShotMerchants, buckets } =
-    useBucketsStore()
-  const { fallbackBucketId } = usePlaybookStore()
+  const { getSpendingBuckets, getSavingsBuckets, buckets } = useBucketsStore()
+  const { startPersonalRecovery } = usePlaybookStore()
   const { addTransaction } = useTransactionsStore()
   const { addEntry: addLendEntry } = useLendingStore()
   const { accounts: moneyAccounts } = useAccountsStore()
@@ -53,6 +53,8 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
   const allBuckets = [...spendingBuckets, ...savingsBuckets]
 
   const [amount, setAmount] = useState('')
+  const [feeAmount, setFeeAmount] = useState('')
+  const [showFee, setShowFee] = useState(false)
   const [entryType, setEntryType] = useState<EntryType>('expense')
   const isIncome = entryType === 'income'
   const isLendBorrow = entryType === 'lend_borrow'
@@ -61,7 +63,6 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
   const [accountId, setAccountId] = useState(defaultAccountId())
   const [description, setDescription] = useState('')
   const [merchant, setMerchant] = useState('')
-  const [remarks, setRemarks] = useState('')
   const [date, setDate] = useState(new Date())
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [isRecurring, setIsRecurring] = useState(false)
@@ -86,13 +87,14 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
   useEffect(() => {
     if (!visible) return
     setAmount('')
+    setFeeAmount('')
+    setShowFee(false)
     setEntryType('expense')
     setSelectedBucketId(null)
     setFundedFromBucketId(null)
     setAccountId(defaultAccountId())
     setDescription('')
     setMerchant('')
-    setRemarks('')
     setDate(new Date())
     setShowDatePicker(false)
     setIsRecurring(false)
@@ -101,6 +103,7 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
   }, [visible])
 
   const parsedAmount = Math.round((parseFloat(amount.replace(/,/g, '')) || 0) * 1000) / 1000
+  const parsedFee = Math.round((parseFloat(feeAmount.replace(/,/g, '')) || 0) * 100) / 100
   const canSave = parsedAmount > 0 && (isIncome || selectedBucketId !== null)
 
   const handleSave = async () => {
@@ -115,10 +118,9 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
           amount: parsedAmount,
           description: description.trim() || null,
           merchant: merchant.trim() || null,
-          bucketId: INCOME_BUCKET_ID,
+          bucketId: selectedBucketId ?? INCOME_BUCKET_ID,
           date: date.toISOString(),
           source: 'manual',
-          remarks: remarks.trim() || null,
           fundedFromBucketId: null,
           accountId,
           parsedTxnId: null,
@@ -131,43 +133,26 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
           !!destBucket && (destBucket.type === 'savings' || destBucket.type === 'investment')
 
         let finalBucketId = selectedBucketId
-        let finalFlagged = false
-        let txnRemarks: string | null = remarks.trim() || null
         let fundedFrom: string | null = null
 
         if (isSavingsDest && selectedBucketId) {
           finalBucketId = selectedBucketId
-          txnRemarks = '__savings_confirm__'
           fundedFrom = fundedFromBucketId
-        } else {
-          const result = categorize({
-            description: description.trim() || null,
-            remarks: remarks.trim() || null,
-            merchant: merchant.trim() || null,
-            keywords: keywordMappings.map(k => ({ keyword: k.keyword, bucketId: k.bucketId })),
-            sureShotMerchants: sureShotMerchants.map(m => ({
-              merchantName: m.merchantName,
-              bucketId: m.bucketId,
-            })),
-            fallbackBucketId: fallbackBucketId ?? allBuckets[0]?.id ?? '',
-          })
-          finalBucketId = selectedBucketId ?? result.bucketId
-          finalFlagged = selectedBucketId ? false : result.isFlagged
         }
 
         const { overspent } = await addTransaction({
           type: 'expense',
           amount: parsedAmount,
+          feeAmount: parsedFee,
           description: description.trim() || null,
           merchant: merchant.trim() || (isSavingsDest ? destBucket?.name ?? null : null),
           bucketId: finalBucketId!,
           date: date.toISOString(),
           source: 'manual',
-          remarks: txnRemarks,
           fundedFromBucketId: fundedFrom,
           accountId,
           parsedTxnId: null,
-          isFlagged: finalFlagged,
+          isFlagged: false,
           isRecurringDraft: isRecurring,
         })
 
@@ -175,9 +160,12 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
           ? buckets.find(b => b.id === fundedFrom)
           : buckets.find(b => b.id === finalBucketId)
         if (overspent && overspendBucket?.accumulates) {
+          if (overspendBucket.id === PERSONAL_BUCKET_ID) {
+            await startPersonalRecovery(overspent, overspendBucket.monthlyAmount)
+          }
           Alert.alert(
             'Personal fund empty',
-            `Personal fund empty — NPR ${formatNPR(overspent)} overspent.`,
+            `Personal fund empty — ${formatMoney(overspent)} from Your money. Top-up drops to ${formatMoney(1000)}/mo until recovered.`,
           )
         }
       }
@@ -237,6 +225,8 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
                 style={[styles.typeButton, entryType === 'income' && styles.typeButtonActiveIncome]}
                 onPress={() => {
                   setEntryType('income')
+                  const picked = allBuckets.find(b => b.id === selectedBucketId)
+                  if (picked && picked.type !== 'spending') setSelectedBucketId(null)
                   Keyboard.dismiss()
                 }}
               >
@@ -287,7 +277,7 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
             ) : (
               <>
                 <View style={styles.amountContainer}>
-                  <Text style={[styles.currencyLabel, isIncome && { color: colors.green }]}>NPR</Text>
+                  <CurrencyPrefix style={[styles.currencyLabel, isIncome && { color: colors.green }]} />
                   <TextInput
                     ref={amountRef}
                     style={[styles.amountInput, isIncome && { color: colors.green }]}
@@ -299,7 +289,30 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
                     returnKeyType="done"
                     onSubmitEditing={() => Keyboard.dismiss()}
                   />
+                  {!isIncome && (
+                    <TouchableOpacity
+                      style={[styles.feeChip, showFee && styles.feeChipActive]}
+                      onPress={() => setShowFee(v => !v)}
+                    >
+                      <Text style={[styles.feeChipText, showFee && styles.feeChipTextActive]}>
+                        + Fee
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
+                {!isIncome && showFee && (
+                  <View style={styles.feeInputRow}>
+                    <Text style={styles.feePrefix}>Fee <CurrencyPrefix /></Text>
+                    <TextInput
+                      style={styles.feeInput}
+                      value={feeAmount}
+                      onChangeText={setFeeAmount}
+                      placeholder="0"
+                      placeholderTextColor={colors.textMuted}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                )}
 
                 <View style={styles.section}>
                   <Text style={styles.label}>
@@ -347,6 +360,69 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
                     })}
                   </ScrollView>
                 </View>
+
+                {isIncome && (
+                  <View style={styles.section}>
+                    <Text style={styles.label}>Put back into</Text>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.chipRow}
+                    >
+                      <TouchableOpacity
+                        style={[
+                          styles.bucketChip,
+                          selectedBucketId === null && {
+                            backgroundColor: colors.greenFill,
+                            borderColor: colors.green,
+                          },
+                        ]}
+                        onPress={() => {
+                          Keyboard.dismiss()
+                          setSelectedBucketId(null)
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.bucketChipText,
+                            selectedBucketId === null && { color: colors.green },
+                          ]}
+                        >
+                          None
+                        </Text>
+                      </TouchableOpacity>
+                      {spendingBuckets.map(bucket => {
+                        const selected = selectedBucketId === bucket.id
+                        return (
+                          <TouchableOpacity
+                            key={bucket.id}
+                            style={[
+                              styles.bucketChip,
+                              selected && {
+                                backgroundColor: bucket.color + '22',
+                                borderColor: bucket.color,
+                              },
+                            ]}
+                            onPress={() => {
+                              Keyboard.dismiss()
+                              setSelectedBucketId(bucket.id)
+                            }}
+                          >
+                            <Text style={{ fontSize: 14, marginRight: 4 }}>{bucket.icon}</Text>
+                            <Text
+                              style={[
+                                styles.bucketChipText,
+                                selected && { color: bucket.color },
+                              ]}
+                            >
+                              {bucket.name}
+                            </Text>
+                          </TouchableOpacity>
+                        )
+                      })}
+                    </ScrollView>
+                  </View>
+                )}
 
                 {!isIncome && (
                   <View style={styles.section}>
@@ -445,7 +521,7 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
                     style={styles.textInput}
                     value={description}
                     onChangeText={setDescription}
-                    placeholder="e.g. Outing with friends, momo"
+                    placeholder={isIncome ? 'e.g. Ankeet share, leftover' : 'e.g. Outing with friends, momo'}
                     placeholderTextColor={colors.textMuted}
                   />
                 </View>
@@ -460,19 +536,6 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
                     placeholderTextColor={colors.textMuted}
                   />
                 </View>
-
-                {!isSavingsDestination && (
-                  <View style={styles.section}>
-                    <Text style={styles.label}>Notes (optional)</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      value={remarks}
-                      onChangeText={setRemarks}
-                      placeholder="Anything else to remember"
-                      placeholderTextColor={colors.textMuted}
-                    />
-                  </View>
-                )}
 
                 <View style={styles.section}>
                   <Text style={styles.label}>Date</Text>
@@ -623,6 +686,49 @@ const styles = StyleSheet.create({
     minWidth: 80,
     textAlign: 'center',
     padding: 0,
+  },
+  feeChip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    alignSelf: 'center',
+  },
+  feeChipActive: {
+    borderColor: colors.amber,
+    backgroundColor: colors.amberFill,
+  },
+  feeChipText: {
+    fontSize: 11,
+    fontFamily: 'Inter_600SemiBold',
+    color: colors.textMuted,
+  },
+  feeChipTextActive: {
+    color: colors.amber,
+  },
+  feeInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.amber,
+    marginTop: -16,
+    marginBottom: 24,
+  },
+  feePrefix: {
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+    color: colors.textMuted,
+  },
+  feeInput: {
+    minWidth: 72,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    textAlign: 'right',
+    fontSize: 16,
+    fontFamily: 'Inter_600SemiBold',
+    color: colors.textPrimary,
   },
   section: {
     marginBottom: 20,

@@ -1,9 +1,11 @@
 import { db } from '@/db/client'
-import { buckets, goals } from '@/db/schema'
-import { eq } from 'drizzle-orm'
+import { buckets, goals, transactions } from '@/db/schema'
+import { eq, inArray } from 'drizzle-orm'
+import { buildGoalBucketTransactionMigration } from './bucket-migration'
 import { GOAL_BUCKET_COLOR, GOAL_BUCKET_ICON } from '@/constants/defaults'
 import {
   type PaymentMode,
+  type GoalBucketRole,
   computeGoalPlan,
   parseTargetDate,
   bucketDisplayName,
@@ -123,14 +125,22 @@ export async function updateGoalPaymentPlan(
   const existingBuckets = await db.select().from(buckets)
 
   if (plan.buckets.length !== linkedIds.length || paymentMode !== existing.paymentMode) {
-    for (const id of linkedIds) {
-      await db.delete(buckets).where(eq(buckets.id, id))
-    }
+    const oldBucketRows =
+      linkedIds.length > 0
+        ? await db.select().from(buckets).where(inArray(buckets.id, linkedIds))
+        : []
+
     const newLinkedIds: string[] = []
     const baseSort = existingBuckets.length
+    const newBucketSpecs = plan.buckets.map(b => ({
+      id: `goal-${goalId}-${b.role}`,
+      role: b.role,
+      monthlyAmount: b.monthlyAmount,
+    }))
+
     for (let i = 0; i < plan.buckets.length; i++) {
       const b = plan.buckets[i]
-      const bucketId = `goal-${goalId}-${b.role}`
+      const bucketId = newBucketSpecs[i].id
       newLinkedIds.push(bucketId)
       await db.insert(buckets).values({
         id: bucketId,
@@ -146,6 +156,23 @@ export async function updateGoalPaymentPlan(
         goalBucketRole: b.role,
       })
     }
+
+    const migration = buildGoalBucketTransactionMigration(
+      oldBucketRows.map(r => ({
+        id: r.id,
+        goalBucketRole: (r.goalBucketRole as GoalBucketRole | null) ?? null,
+      })),
+      newBucketSpecs.map(s => ({ id: s.id, role: s.role })),
+    )
+    for (const [fromId, toId] of migration) {
+      if (fromId === toId) continue
+      await db.update(transactions).set({ bucketId: toId }).where(eq(transactions.bucketId, fromId))
+    }
+
+    for (const id of linkedIds) {
+      await db.delete(buckets).where(eq(buckets.id, id))
+    }
+
     linkedIds.length = 0
     linkedIds.push(...newLinkedIds)
   } else {
@@ -175,6 +202,19 @@ export async function updateGoalPaymentPlan(
 }
 
 /** Wipe goals + linked buckets before re-saving onboarding drafts (back-nav safe). */
+export async function deleteGoalWithLinkedBuckets(goalId: string): Promise<void> {
+  const rows = await db.select().from(goals).where(eq(goals.id, goalId)).limit(1)
+  if (rows.length === 0) return
+  const linkedIds: string[] = JSON.parse(rows[0].linkedBucketIds || '[]')
+  for (const bucketId of linkedIds) {
+    await db
+      .update(buckets)
+      .set({ isActive: false, linkedGoalId: null })
+      .where(eq(buckets.id, bucketId))
+  }
+  await db.delete(goals).where(eq(goals.id, goalId))
+}
+
 export async function clearAllGoalsForOnboarding(): Promise<void> {
   const allGoals = await db.select().from(goals)
   for (const g of allGoals) {

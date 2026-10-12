@@ -11,7 +11,7 @@ import { usePlaybookStore } from '@/store/playbook'
 import { GoalCard } from '@/components/goals/GoalCard'
 import { GoalDetailSheet } from '@/components/goals/GoalDetailSheet'
 import { AddGoalSheet } from '@/components/goals/AddGoalSheet'
-import { formatNPR } from '@/lib/format'
+import { formatMoney } from '@/lib/format'
 import { EF_BUCKET_ID, SIP_BUCKET_ID } from '@/constants/defaults'
 import { suggestSipTarget } from '@/lib/sip-target'
 
@@ -20,7 +20,8 @@ const EF_PSEUDO_ID = '__ef_goal__'
 export default function GoalsScreen() {
   const insets = useSafeAreaInsets()
   const { goals } = useGoalsStore()
-  const { transactions } = useTransactionsStore()
+  // Goal progress is lifetime, not this period — a new month must not reset it.
+  const { allTransactions: transactions } = useTransactionsStore()
   const { buckets } = useBucketsStore()
   const { efFloor, efStartBalance, userAge, monthlyIncome } = usePlaybookStore()
 
@@ -38,7 +39,7 @@ export default function GoalsScreen() {
     // EF pseudo-goal: derived from playbook efFloor + savings confirm transactions for EF bucket
     if (efBucket && efFloor > 0) {
       const efContributed = transactions
-        .filter(t => t.bucketId === efBucket.id && t.remarks === '__savings_confirm__')
+        .filter(t => t.bucketId === efBucket.id && t.type === 'expense')
         .reduce((sum, t) => sum + t.amount, 0)
 
       result.push({
@@ -62,13 +63,13 @@ export default function GoalsScreen() {
       })
     }
 
-    // User-created goals: only count __savings_confirm__ transactions as contributions
+    // User-created goals: expenses on the linked savings/investment buckets
     goals.forEach(goal => {
       if (goal.completedAt) return
       const contributed = transactions
         .filter(t =>
           goal.linkedBucketIds.includes(t.bucketId) &&
-          t.remarks === '__savings_confirm__'
+          t.type === 'expense'
         )
         .reduce((sum, t) => sum + t.amount, 0)
 
@@ -91,7 +92,7 @@ export default function GoalsScreen() {
         const contributed = transactions
           .filter(
             t =>
-              goal.linkedBucketIds.includes(t.bucketId) && t.remarks === '__savings_confirm__',
+              goal.linkedBucketIds.includes(t.bucketId) && t.type === 'expense',
           )
           .reduce((sum, t) => sum + t.amount, 0)
         const bucket = buckets.find(b => goal.linkedBucketIds.includes(b.id))
@@ -148,7 +149,7 @@ export default function GoalsScreen() {
         <View style={styles.summaryCard}>
           <Text style={styles.summaryLabel}>Total Saved</Text>
           <Text style={styles.summaryValue}>
-            NPR {formatNPR(totalSaved)}
+            {formatMoney(totalSaved)}
           </Text>
           <View style={styles.summaryMeta}>
             <Text style={styles.summaryMetaText}>
@@ -156,7 +157,7 @@ export default function GoalsScreen() {
             </Text>
             <Text style={styles.summaryDot}>  ·  </Text>
             <Text style={styles.summaryMetaText}>
-              NPR {formatNPR(totalMonthlyCommitment)}/mo committed
+              {formatMoney(totalMonthlyCommitment)}/mo committed
             </Text>
           </View>
         </View>

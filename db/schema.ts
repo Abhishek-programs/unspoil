@@ -3,18 +3,23 @@ import { int, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 export const playbook = sqliteTable('playbook', {
   id: integer('id').primaryKey(),
   userName: text('user_name'),
+  currency: text('currency').notNull().default('NPR'),
   monthlyIncome: real('monthly_income').notNull().default(125000),
   monthStartDay: integer('month_start_day').notNull().default(1),
+  earlyMonthStartDate: text('early_month_start_date'), // local YYYY-MM-DD
   fallbackBucketId: text('fallback_bucket_id'),
   efFloor: real('ef_floor').notNull().default(150000),
   efStartBalance: real('ef_start_balance').notNull().default(0),
   isOnboarded: integer('is_onboarded', { mode: 'boolean' }).notNull().default(false),
   lastChecklistMonth: text('last_checklist_month'), // format YYYY-MM
+  lastChecklistPromptMonth: text('last_checklist_prompt_month'), // format YYYY-MM
   lastBalanceRolloverMonth: text('last_balance_rollover_month'), // format YYYY-MM
   userAge: integer('user_age'),
   carriedForwardBalance: real('carried_forward_balance').default(0),
   lastSurplusRolloverMonth: text('last_surplus_rollover_month'),
   lastPersonalRebalancePromptMonth: text('last_personal_rebalance_prompt_month'),
+  personalRecoveryDebt: real('personal_recovery_debt').default(0),
+  personalNormalTopUp: real('personal_normal_top_up'),
 })
 
 export const buckets = sqliteTable('buckets', {
@@ -22,6 +27,7 @@ export const buckets = sqliteTable('buckets', {
   name: text('name').notNull(),
   type: text('type', { enum: ['spending', 'savings', 'investment'] }).notNull(),
   monthlyAmount: real('monthly_amount').notNull(),
+  lastMonthlyAmount: real('last_monthly_amount'),
   color: text('color').notNull().default('#16A34A'),
   icon: text('icon').notNull().default('💰'),
   sortOrder: integer('sort_order').notNull().default(0),
@@ -59,12 +65,12 @@ export const transactions = sqliteTable('transactions', {
   id: text('id').primaryKey(),
   type: text('type', { enum: ['expense', 'income'] }).notNull().default('expense'),
   amount: real('amount').notNull(),
+  feeAmount: real('fee_amount').notNull().default(0),
   merchant: text('merchant'),
   description: text('description'),
   bucketId: text('bucket_id').notNull(),
   date: text('date').notNull(), // ISO string
   source: text('source', { enum: ['manual', 'ocr', 'overlay', 'notification'] }).notNull().default('manual'),
-  remarks: text('remarks'),
   fundedFromBucketId: text('funded_from_bucket_id'),
   accountId: text('account_id'),
   parsedTxnId: text('parsed_txn_id'),

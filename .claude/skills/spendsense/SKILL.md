@@ -16,9 +16,9 @@ Read **[AGENTS.md](../../../AGENTS.md)** before making changes. It is the single
 ## Hard rules (summary)
 
 - NPR via `lib/format.ts`. Colors in `constants/colors.ts`. Light theme only.
-- Categorization: keyword word match (description / remarks / merchant) → sure-shot merchant → fallback + flag.
+- Categorization is parked (user picks a bucket). Restore: `docs/superpowers/specs/2026-09-29-keyword-and-sureshot-restore.md`.
 - EF target = Core Living × `EF_MULTIPLIER` — not income.
-- Safe to spend unlocks after salary confirmed this month (`__salary__` txn).
+- Safe to spend unlocks after salary confirmed this month (income on `_salary`).
 - `[+]` opens `ManualEntrySheet` — not a tab. Manual entry only (no OCR / share).
 - No tests, no drive-by refactors, no extra scope.
 

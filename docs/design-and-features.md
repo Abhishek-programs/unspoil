@@ -23,13 +23,14 @@ Headers use safe-area inset (`insets.top + 12`) on all tabs.
 ### Your money card (collapsed default)
 | Collapsed | Expanded |
 |-----------|----------|
-| **Your money** — cash on you now | Remaining this month · carried-forward · not-yet-confirmed (still in bank) |
+| **Your money** — cash on you now | Carry + this period’s cash flow · wallets (Bank / eSewa / Cash) |
 | | **Net worth** — confirmed EF, goals, SIP, shares |
 
 Net worth accordion: **Lent out** (asset) · **You owe** (liability).
 
 ### Hero ring
 - **Center:** Safe to spend (locked until salary confirmed this month)
+- **Paid early? pill:** visible during the 7 days before the configured month start when the current salary is already confirmed. Confirmation closes the old period and starts the new plan today without changing the configured day.
 - **Arcs:** green available · red spent · purple lent out (this month) · teal savings (confirmed + unconfirmed)
 - **Stroke:** uniform width on all arcs; unconfirmed savings use lower opacity (not a thicker stroke)
 - **Orbit chips** (compact, color-only numbers on ring edge, subtle float animation): `{days}d` · spent · saved (saved only when > 0)
@@ -40,6 +41,8 @@ Net worth accordion: **Lent out** (asset) · **You owe** (liability).
 - Compact row below ring: net balance, tap → `/lending` person list
 - FAB third toggle: Lend/Borrow (person, direction, note, date)
 - Settle up reduces balance without logging income/expense
+- Lending entries can be edited/deleted; deleting a person removes their history
+- Paid settlements leave Your money; received settlements add to it
 - Ledger **Lending** filter shows lend/borrow/settle history
 
 ### Living
@@ -50,7 +53,7 @@ Plain emoji icon column — no tinted icon background. Rows stagger in with `Fad
 Savings checklist at the bottom of Home — **EF lives here** (no separate EF card above the ring).
 
 Each row shows:
-- Monthly amount + tappable check-off (`__savings_confirm__`; same logic as month-start checklist)
+- Monthly amount + tappable check-off (expense to that Future bucket; same logic as month-start checklist)
 - Thin progress bar + `NPR current / target · %` (EF uses blue accent + shield icon)
 - EF + goal buckets: fixed confirm · SIP/Shares: editable amount in detail flows
 - Placeholder CTA when no big-spend goal yet
@@ -76,8 +79,8 @@ Goal cards use softened shadows; list rows stagger in with `FadeInDown`.
 
 ## Manual Entry
 
-Field order: **Amount** (auto-focus) → Bucket → **Funded from (optional)** when bucket is savings/investment → **Title** → Description (optional) → Notes (hidden for savings confirms) → Date.  
-Modes: Expense / Income / Lend-Borrow. Savings/investment destinations save as `__savings_confirm__`; optional funded-from debits that Living ceiling or Personal fund.
+Field order: **Amount** (auto-focus) + optional **Fee** chip → Paid from / Lands in → Bucket (expense) or **Put back into** (optional income) → **Funded from (optional)** when bucket is savings/investment → **Title** → Description (optional) → Date. Fees debit cash but do not count toward bucket spend or investment principal.  
+Modes: Expense / Income / Lend-Borrow. Savings/investment destinations are Future contributions; optional funded-from debits that Living ceiling or Personal fund. Income can put back into a spending bucket so that bar comes down. Transaction details show and edit the wallet.
 
 ---
 
@@ -90,7 +93,7 @@ Personal: balance vs cap. Section subtitle: **Ceilings & personal fund**.
 
 ## Settings
 
-Playbook (income, month start, EF floor, age) · buckets · keywords · sure-shot merchants · **payment helper** (eSewa / nBank) · notifications · CSV export · reset all data
+Playbook (income, month start, EF floor, age) · buckets (Living / Future headers show the sum of those monthly amounts) · Payment helper (delay + watched apps + log notification) · nudge notifications · Share for Claude (on-demand markdown snapshot) · CSV export · reset all data. Keyword / sure-shot Settings UI is parked — see `docs/superpowers/specs/2026-09-29-keyword-and-sureshot-restore.md`.
 
 ---
 
@@ -109,13 +112,18 @@ Playbook (income, month start, EF floor, age) · buckets · keywords · sure-sho
 
 ```
 effectiveIncome      = salary txn amount if confirmed this month else 0
-safeToSpend          = spendingPlan - lifestyleSpent - personalDraws + max(0, effectiveIncome - totalAllocations)
-availableBalance     = max(0, safeToSpend) + carriedForwardBalance
-yourMoney            = availableBalance + stillInBank
+safeToSpend          = spendingPlan - lifestyleSpent - personalDraws + max(0, effectiveIncome - totalAllocations) + lendingCashAdjust - fees
+bankPile             = max(0, carriedForward + periodIncome - periodExpenses - fees + lendingCashAdjust + foundThisPeriod)
+yourMoney            = bankPile + eSewa + Cash
 stillInBank          = salary confirmed ? max(0, plannedSavings - confirmedSavedInvested) : 0
 efFloor              = coreLiving × 6
 suggestSipTarget     = income × 12 × max(10, 60 - age) × 0.15  (when age set)
+nextCarry            = bank pile on the card at close + today’s expenses − today’s income − today’s lending-in (those stay in the new period; Cash is not folded into Bank)
 ```
+
+SIP confirms are shown in NPR 5,000 chunks (last chunk may be smaller); each chunk accepts its own fee. The Month Start Ritual auto-opens only once per playbook month while its pending banner remains available.
+
+Living overspend never reallocates or changes other bucket ceilings.
 
 ---
 
@@ -139,4 +147,5 @@ suggestSipTarget     = income × 12 × max(10, 60 - age) × 0.15  (when age set)
 | Description field + word categorize | Shipped |
 | Manual entry (expense / income / lend-borrow) | Shipped |
 | Payment helper (usage access + reply notification) | Shipped (dev client) |
+| Share for Claude (local markdown snapshot) | Shipped (local) |
 | Recurring drafts | Not shipped |

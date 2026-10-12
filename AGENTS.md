@@ -96,17 +96,11 @@ Home  |  Transactions  |  [+]  |  Goals  |  Settings
 
 ## Business rules (do not break)
 
-**Auto-categorization** (`lib/categorize.ts`) — strict priority:
-
-1. Keyword appears in description, remarks, or merchant text → mapped bucket
-2. Sure-shot merchant list (Settings)  
-3. Fallback bucket + `is_flagged = true`
-
-Never auto-memorize ambiguous merchants.
+**Auto-categorization** is parked. Users pick a bucket. Restore: `docs/superpowers/specs/2026-09-29-keyword-and-sureshot-restore.md`.
 
 **Month boundaries:** user `month_start_day` from playbook — not calendar month (`lib/month.ts`).
 
-**Safe to spend:** unlocks only after salary is confirmed this month (`__salary__` income txn). Ring and safe-to-spend exclude carried-forward balance (`hooks/usePulseData.ts`).
+**Safe to spend:** unlocks only after salary is confirmed this month (income on `_salary`). Ring and safe-to-spend exclude carried-forward balance (`hooks/usePulseData.ts`).
 
 **EF target:** `EF_MULTIPLIER` × Core Living monthly amount (`constants/defaults.ts`, onboarding Foundations).
 
@@ -118,7 +112,7 @@ Never auto-memorize ambiguous merchants.
 
 **Payment helper:** Optional. Usage access + amount notification while eSewa / nBank is in the foreground; after Log, a second notification with spending-bucket chips for that txn. No screenshot, overlay, or Accessibility. See `docs/superpowers/specs/2026-08-19-payment-watch-notification-design.md`.
 
-**Funded-from savings:** When logging a contribution to a savings/investment bucket, optional `fundedFromBucketId` uses that Living/Personal ceiling or fund; destination still gets `__savings_confirm__`. See `docs/superpowers/specs/2026-07-26-living-ceilings-funded-from-design.md`.
+**Funded-from savings:** When logging a contribution to a savings/investment bucket, optional `fundedFromBucketId` uses that Living/Personal ceiling or fund. See `docs/superpowers/specs/2026-07-26-living-ceilings-funded-from-design.md`.
 
 ---
 

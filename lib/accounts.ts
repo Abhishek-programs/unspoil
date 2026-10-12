@@ -2,11 +2,12 @@ import { eq } from 'drizzle-orm'
 import { db } from '@/db/client'
 import { accounts } from '@/db/schema'
 import { BANK_ACCOUNT_ID, defaultAccountId } from '@/constants/accounts'
+import { roundPaisa } from '@/lib/format'
 
 export async function setAccountBalance(accountId: string, balance: number): Promise<void> {
   await db
     .update(accounts)
-    .set({ balance: Math.round(balance * 1000) / 1000 })
+    .set({ balance: roundPaisa(balance) })
     .where(eq(accounts.id, accountId))
 }
 
@@ -56,10 +57,7 @@ export async function creditSplit(
   if (fromBank > 0) await creditAccount(BANK_ACCOUNT_ID, fromBank)
 }
 
-/** Force Bank so Bank + eSewa + Cash === yourMoney. */
-export async function reconcileAccountsToYourMoney(yourMoney: number): Promise<void> {
-  const rows = await db.select().from(accounts)
-  const nonBank = rows.filter(r => r.id !== BANK_ACCOUNT_ID).reduce((s, r) => s + r.balance, 0)
-  const bankTarget = Math.round((yourMoney - nonBank) * 1000) / 1000
-  await setAccountBalance(BANK_ACCOUNT_ID, bankTarget)
+/** Bank is the leftover pile. Do not subtract Cash / eSewa from it. */
+export async function syncBankToPile(bankPile: number): Promise<void> {
+  await setAccountBalance(BANK_ACCOUNT_ID, bankPile)
 }

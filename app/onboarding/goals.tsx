@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import { CurrencyPrefix } from '@/components/ui/CurrencyPrefix'
 import {
   View,
   Text,
@@ -15,7 +16,7 @@ import { addMonths, format } from 'date-fns'
 import { colors } from '@/constants/colors'
 import { useGoalsStore } from '@/store/goals'
 import { useBucketsStore } from '@/store/buckets'
-import { formatNPR } from '@/lib/format'
+import { formatMoney } from '@/lib/format'
 import { DEFAULT_MACBOOK_GOAL, GOAL_POOL_BUCKET_ID } from '@/constants/defaults'
 import { OnboardingBack } from '@/components/onboarding/OnboardingBack'
 import { OnboardingShell, useOnboardingFieldScroll } from '@/components/onboarding/OnboardingShell'
@@ -151,7 +152,7 @@ function GoalDraftCard({
       <View style={styles.inputGroup}>
         <Text style={styles.label}>TARGET AMOUNT</Text>
         <View style={styles.inputWrapper}>
-          <Text style={styles.prefix}>NPR</Text>
+          <CurrencyPrefix style={styles.prefix} />
           <TextInput
             style={styles.input}
             value={draft.targetAmount}
@@ -165,7 +166,7 @@ function GoalDraftCard({
       <View style={styles.inputGroup}>
         <Text style={styles.label}>MONTHLY FROM POOL</Text>
         <View style={styles.inputWrapper}>
-          <Text style={styles.prefix}>NPR</Text>
+          <CurrencyPrefix style={styles.prefix} />
           <TextInput
             style={styles.input}
             value={draft.shareMonthly}
@@ -178,7 +179,7 @@ function GoalDraftCard({
       <View style={styles.inputGroup}>
         <Text style={styles.label}>ALREADY SAVED</Text>
         <View style={styles.inputWrapper}>
-          <Text style={styles.prefix}>NPR</Text>
+          <CurrencyPrefix style={styles.prefix} />
           <TextInput
             style={styles.input}
             value={draft.alreadySaved}
@@ -215,7 +216,7 @@ function GoalDraftCard({
       {draft.paymentChoice === 'upfront_emi' && target > 0 && (
         <View style={styles.emiBlock}>
           <Text style={styles.label}>HOW MUCH UPFRONT?</Text>
-          <Text style={styles.upfrontValue}>NPR {formatNPR(draft.upfrontAmount)}</Text>
+          <Text style={styles.upfrontValue}>{formatMoney(draft.upfrontAmount)}</Text>
           <Slider
             minimumValue={Math.round(target * 0.1)}
             maximumValue={Math.round(target * 0.9)}
@@ -227,7 +228,7 @@ function GoalDraftCard({
             thumbTintColor={colors.green}
           />
           <Text style={styles.emiRemainder}>
-            Remainder for EMI: NPR {formatNPR(Math.max(0, target - draft.upfrontAmount))}
+            Remainder for EMI: {formatMoney(Math.max(0, target - draft.upfrontAmount))}
           </Text>
           <View style={styles.inputGroup}>
             <Text style={styles.label}>EMI TENURE (MONTHS)</Text>
@@ -245,7 +246,7 @@ function GoalDraftCard({
 
       <View style={styles.calcCard}>
         <Text style={styles.calcLabel}>This goal's share</Text>
-        <Text style={styles.calcValue}>NPR {formatNPR(share)}/mo</Text>
+        <Text style={styles.calcValue}>{formatMoney(share)}/mo</Text>
         <Text style={styles.calcHint}>
           {share > 0 && target > saved
             ? `At this pace, reach around ${projectedDateLabel}`
@@ -257,7 +258,7 @@ function GoalDraftCard({
           <View style={styles.splitPreview}>
             {plan.buckets.map(b => (
               <Text key={b.role} style={styles.splitLine}>
-                {GOAL_BUCKET_LABELS[b.role].title}: NPR {formatNPR(b.monthlyAmount)}/mo
+                {GOAL_BUCKET_LABELS[b.role].title}: {formatMoney(b.monthlyAmount)}/mo
               </Text>
             ))}
           </View>
@@ -379,8 +380,8 @@ export default function OnboardingGoalsScreen() {
         <Text style={styles.title}>Goals</Text>
         <Text style={styles.subtitle}>
           {poolAmt > 0
-            ? `Split NPR ${formatNPR(poolAmt)}/mo across your big purchases.`
-            : 'No monthly set aside — you can skip or add goals with NPR 0/mo.'}
+            ? `Split ${formatMoney(poolAmt)}/mo across your big purchases.`
+            : `No monthly set aside — you can skip or add goals with ${formatMoney(0)}/mo.`}
         </Text>
         {poolAmt > 0 && (
           <Text
@@ -392,8 +393,8 @@ export default function OnboardingGoalsScreen() {
             {remaining === 0
               ? 'Pool fully assigned'
               : remaining > 0
-                ? `NPR ${formatNPR(remaining)} left to assign`
-                : `NPR ${formatNPR(Math.abs(remaining))} over the pool`}
+                ? `${formatMoney(remaining)} left to assign`
+                : `${formatMoney(Math.abs(remaining))} over the pool`}
           </Text>
         )}
       </Animated.View>

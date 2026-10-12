@@ -15,7 +15,7 @@ export function getGoalCurrent(
 ): number {
   const contributed = transactions
     .filter(
-      t => goal.linkedBucketIds.includes(t.bucketId) && t.remarks === '__savings_confirm__',
+      t => goal.linkedBucketIds.includes(t.bucketId) && t.type === 'expense',
     )
     .reduce((sum, t) => sum + t.amount, 0)
   return goal.startBalance + contributed

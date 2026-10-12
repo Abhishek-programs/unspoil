@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
+import { CurrencyPrefix } from '@/components/ui/CurrencyPrefix'
 import {
   View,
   Text,
@@ -17,7 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors } from '@/constants/colors'
 import { useBucketsStore, Bucket } from '@/store/buckets'
 import { usePlaybookStore } from '@/store/playbook'
-import { formatNPR } from '@/lib/format'
+import { formatMoney } from '@/lib/format'
 import {
   isNonRemovableBucket,
   SIP_BUCKET_ID,
@@ -246,7 +247,7 @@ export default function OnboardingBucketsScreen() {
       <View style={styles.fundField}>
         <Text style={styles.fundFieldLabel}>Monthly top-up</Text>
         <View style={styles.amountRow}>
-          <Text style={styles.prefix}>NPR</Text>
+          <CurrencyPrefix style={styles.prefix} />
           <TextInput
             style={[styles.amountInput, !draft.isActive && styles.textDisabled]}
             value={draft.monthlyAmount}
@@ -260,7 +261,7 @@ export default function OnboardingBucketsScreen() {
       <View style={styles.fundField}>
         <Text style={styles.fundFieldLabel}>Max balance</Text>
         <View style={styles.amountRow}>
-          <Text style={styles.prefix}>NPR</Text>
+          <CurrencyPrefix style={styles.prefix} />
           <TextInput
             style={[styles.amountInput, !draft.isActive && styles.textDisabled]}
             value={draft.accumulationCap}
@@ -289,7 +290,7 @@ export default function OnboardingBucketsScreen() {
           <Text style={styles.bucketHint}>{draft.name}</Text>
         )}
         <View style={styles.amountRow}>
-          <Text style={styles.prefix}>NPR</Text>
+          <CurrencyPrefix style={styles.prefix} />
           <TextInput
             style={[styles.amountInput, !draft.isActive && styles.textDisabled]}
             value={draft.monthlyAmount}
@@ -328,16 +329,16 @@ export default function OnboardingBucketsScreen() {
         </View>
         <View style={styles.meterRow}>
           <Text style={styles.meterLabel}>Take-home</Text>
-          <Text style={styles.meterValue}>NPR {formatNPR(takeHome)}</Text>
+          <Text style={styles.meterValue}>{formatMoney(takeHome)}</Text>
         </View>
         <View style={styles.meterRow}>
           <Text style={styles.meterLabel}>Allocated</Text>
-          <Text style={styles.meterValue}>NPR {formatNPR(allocated)}</Text>
+          <Text style={styles.meterValue}>{formatMoney(allocated)}</Text>
         </View>
         <View style={styles.meterRow}>
           <Text style={styles.meterLabel}>Remaining</Text>
           <Text style={[styles.meterValue, overAllocated ? styles.meterOver : styles.meterOk]}>
-            NPR {formatNPR(Math.abs(remaining))}
+            {formatMoney(Math.abs(remaining))}
             {overAllocated ? ' over' : ''}
           </Text>
         </View>
