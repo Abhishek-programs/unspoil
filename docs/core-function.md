@@ -28,7 +28,7 @@ Monthly take-home (playbook)
 
 **Buckets** — monthly amounts, types (`spending` | `savings` | `investment`). Regular spending resets each month. **Personal** accumulates with top-up + cap.
 
-**Transactions** — amount, date, bucket, **description** (user label), merchant (OCR place name), remarks (OCR notes), source, optional flag.
+**Transactions** — amount, date, bucket, **title** (user label), optional description, remarks, source, optional flag.
 
 **Goals** — targets with linked savings bucket(s); can complete and archive.
 
@@ -37,7 +37,7 @@ Monthly take-home (playbook)
 ## Core loops
 
 ### 1. Capture → categorize → inform
-1. Log via **Manual Entry** (center FAB), **gallery OCR**, or **scan bubble** (dev client — Kotlin overlay + headless JS OCR)
+1. Log via **Manual Entry** (center FAB), or optional **payment helper** notification (eSewa / nBank; amount only, flagged until you assign a bucket)
 2. **Categorization** (priority):
    - Keyword word match in description / remarks / merchant
    - Sure-shot merchant (Settings)
@@ -53,9 +53,9 @@ Monthly take-home (playbook)
 
 | Concept | Meaning |
 |---------|---------|
-| **Safe to spend** (ring) | Lifestyle budgets remaining + unallocated income, after salary confirmed. Excludes carry-forward. |
-| **Available balance** (Your money, collapsed) | max(0, safe to spend) + carried-forward |
-| **Intentional savings** (Your money, expanded) | EF + goals + SIP + shares (not bank cash) |
+| **Your money** (collapsed) | Cash on you right now: remaining this month + carried-forward + planned Future not yet confirmed. Confirming a save moves that amount to net worth. |
+| **Safe to spend** (ring) | Lifestyle budgets remaining + unallocated income, after salary confirmed. Excludes carry-forward and unconfirmed Future. |
+| **Net worth** (Your money, expanded) | Confirmed EF + goals + SIP + shares only |
 
 ---
 
@@ -100,13 +100,13 @@ Separate from buckets and the transaction ledger's income/expense flow:
 - **Settle** — partial or full repayment; not income or expense
 - Per-person net balance; home row shows total net across all people
 
-### Scan bubble (Android)
+### Payment helper (Android)
 
-Separate capture path from manual entry and gallery OCR:
+Optional Settings toggle. Usage access (`UsageStatsManager`) plus a reply notification while eSewa or nBank is in the foreground. Amount-only expense is saved flagged (`source: notification`). No screenshot, overlay, or Accessibility.
 
-- Foreground Kotlin service with draggable overlay; visible only on whitelisted apps (`UsageStatsManager`)
-- Tap hides bubble → `MediaProjection` screenshot → Headless JS → `processReceiptImage` → same categorize/save rules as OCR
-- Transaction `source: 'overlay'`
+### Scan bubble (removed)
+
+Screenshot overlay / MediaProjection is out of scope.
 
 ---
 

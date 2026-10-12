@@ -18,6 +18,7 @@ export const FUN_BUCKET_ID = 'fun'
 /** @deprecated Removed bucket — kept for legacy DB rows only */
 export const FOOD_BUCKET_ID = 'food'
 export const PERSONAL_BUCKET_ID = 'personal'
+export const MISC_BUCKET_ID = 'misc'
 export const SIP_BUCKET_ID = 'sip'
 export const SHARES_BUCKET_ID = 'shares'
 export const GOAL_POOL_BUCKET_ID = 'goal-pool'
@@ -28,13 +29,14 @@ export const BIGEXPENSE_DEBT_BUCKET_ID = 'bigexpense-debt'
 export const GOAL_BUCKET_COLOR = '#EC4899'
 export const GOAL_BUCKET_ICON = '🎯'
 
-export const NON_REMOVABLE_BUCKET_IDS = [CORE_LIVING_BUCKET_ID, EF_BUCKET_ID]
+export const NON_REMOVABLE_BUCKET_IDS = [CORE_LIVING_BUCKET_ID, EF_BUCKET_ID, MISC_BUCKET_ID]
 
 export function isNonRemovableBucket(bucket: { id: string; name: string }): boolean {
   return (
     NON_REMOVABLE_BUCKET_IDS.includes(bucket.id) ||
     bucket.name === 'Core Living' ||
-    bucket.name === 'Emergency Fund'
+    bucket.name === 'Emergency Fund' ||
+    bucket.name === 'Misc'
   )
 }
 
@@ -52,6 +54,7 @@ export const DEFAULT_BUCKETS: DefaultBucket[] = [
     accumulates: true,
     accumulationCap: 20000,
   },
+  { id: MISC_BUCKET_ID, name: 'Misc', type: 'spending', monthlyAmount: 3000, color: '#64748B', icon: '📦' },
   { id: EF_BUCKET_ID, name: 'Emergency Fund', type: 'savings', monthlyAmount: 15000, color: '#3B82F6', icon: '🛡️' },
   {
     id: GOAL_POOL_BUCKET_ID,
@@ -76,6 +79,7 @@ export const DEFAULT_KEYWORD_MAPPINGS = [
   { keyword: 'fun', bucketName: 'Fun' },
   { keyword: 'date', bucketName: 'Dates' },
   { keyword: 'personal', bucketName: 'Personal' },
+  { keyword: 'misc', bucketName: 'Misc' },
   { keyword: 'ef', bucketName: 'Emergency Fund' },
   { keyword: 'sip', bucketName: 'SIPs' },
 ]

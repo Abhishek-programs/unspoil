@@ -100,7 +100,7 @@ export function SettleUpSheet({
                 style={styles.input}
                 value={amount}
                 onChangeText={setAmount}
-                keyboardType="numeric"
+                keyboardType="decimal-pad"
                 placeholder="0"
                 placeholderTextColor={colors.textMuted}
               />

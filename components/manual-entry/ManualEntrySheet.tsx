@@ -24,6 +24,8 @@ import { usePlaybookStore } from '@/store/playbook'
 import { useTransactionsStore, INCOME_BUCKET_ID } from '@/store/transactions'
 import { useLendingStore } from '@/store/lending'
 import { LendBorrowForm } from '@/components/lending/LendBorrowForm'
+import { useAccountsStore } from '@/store/accounts'
+import { BANK_ACCOUNT_ID, defaultAccountId } from '@/constants/accounts'
 
 const SAVE_BUTTON_HEIGHT = 56
 const FOOTER_PAD_TOP = 16
@@ -44,6 +46,7 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
   const { fallbackBucketId } = usePlaybookStore()
   const { addTransaction } = useTransactionsStore()
   const { addEntry: addLendEntry } = useLendingStore()
+  const { accounts: moneyAccounts } = useAccountsStore()
 
   const spendingBuckets = getSpendingBuckets()
   const savingsBuckets = getSavingsBuckets()
@@ -55,6 +58,7 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
   const isLendBorrow = entryType === 'lend_borrow'
   const [selectedBucketId, setSelectedBucketId] = useState<string | null>(null)
   const [fundedFromBucketId, setFundedFromBucketId] = useState<string | null>(null)
+  const [accountId, setAccountId] = useState(defaultAccountId())
   const [description, setDescription] = useState('')
   const [merchant, setMerchant] = useState('')
   const [remarks, setRemarks] = useState('')
@@ -85,6 +89,7 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
     setEntryType('expense')
     setSelectedBucketId(null)
     setFundedFromBucketId(null)
+    setAccountId(defaultAccountId())
     setDescription('')
     setMerchant('')
     setRemarks('')
@@ -95,7 +100,7 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
     setTimeout(() => amountRef.current?.focus(), 100)
   }, [visible])
 
-  const parsedAmount = parseFloat(amount.replace(/,/g, '')) || 0
+  const parsedAmount = Math.round((parseFloat(amount.replace(/,/g, '')) || 0) * 1000) / 1000
   const canSave = parsedAmount > 0 && (isIncome || selectedBucketId !== null)
 
   const handleSave = async () => {
@@ -115,6 +120,7 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
           source: 'manual',
           remarks: remarks.trim() || null,
           fundedFromBucketId: null,
+          accountId,
           parsedTxnId: null,
           isFlagged: false,
           isRecurringDraft: isRecurring,
@@ -159,6 +165,7 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
           source: 'manual',
           remarks: txnRemarks,
           fundedFromBucketId: fundedFrom,
+          accountId,
           parsedTxnId: null,
           isFlagged: finalFlagged,
           isRecurringDraft: isRecurring,
@@ -288,10 +295,57 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
                     onChangeText={setAmount}
                     placeholder="0"
                     placeholderTextColor={colors.textMuted}
-                    keyboardType="numeric"
+                    keyboardType="decimal-pad"
                     returnKeyType="done"
                     onSubmitEditing={() => Keyboard.dismiss()}
                   />
+                </View>
+
+                <View style={styles.section}>
+                  <Text style={styles.label}>
+                    {isIncome ? 'Lands in' : 'Paid from'}
+                  </Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.chipRow}
+                  >
+                    {(moneyAccounts.length > 0
+                      ? moneyAccounts
+                      : [
+                          { id: BANK_ACCOUNT_ID, name: 'Bank' },
+                          { id: 'esewa', name: 'eSewa' },
+                          { id: 'cash', name: 'Cash' },
+                        ]
+                    ).map(acc => {
+                      const selected = accountId === acc.id
+                      return (
+                        <TouchableOpacity
+                          key={acc.id}
+                          style={[
+                            styles.bucketChip,
+                            selected && {
+                              backgroundColor: colors.greenFill,
+                              borderColor: colors.green,
+                            },
+                          ]}
+                          onPress={() => {
+                            Keyboard.dismiss()
+                            setAccountId(acc.id)
+                          }}
+                        >
+                          <Text
+                            style={[
+                              styles.bucketChipText,
+                              selected && { color: colors.green },
+                            ]}
+                          >
+                            {acc.name}
+                          </Text>
+                        </TouchableOpacity>
+                      )
+                    })}
+                  </ScrollView>
                 </View>
 
                 {!isIncome && (
@@ -386,7 +440,7 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
                 )}
 
                 <View style={styles.section}>
-                  <Text style={styles.label}>Description</Text>
+                  <Text style={styles.label}>Title</Text>
                   <TextInput
                     style={styles.textInput}
                     value={description}
@@ -397,12 +451,12 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
                 </View>
 
                 <View style={styles.section}>
-                  <Text style={styles.label}>Merchant (optional)</Text>
+                  <Text style={styles.label}>Description (optional)</Text>
                   <TextInput
                     style={styles.textInput}
                     value={merchant}
                     onChangeText={setMerchant}
-                    placeholder="e.g. Bhat-Bhateni, NTC"
+                    placeholder="Extra detail if you want"
                     placeholderTextColor={colors.textMuted}
                   />
                 </View>

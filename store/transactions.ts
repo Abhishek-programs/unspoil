@@ -10,6 +10,8 @@ import {
 } from '@/lib/bucket-balance'
 import { clearPersonalCapOverrideIfNeeded } from '@/lib/personal-cap'
 import { useBucketsStore } from '@/store/buckets'
+import { useAccountsStore } from '@/store/accounts'
+import { defaultAccountId } from '@/constants/accounts'
 
 export const INCOME_BUCKET_ID = '_income'
 
@@ -21,9 +23,10 @@ export interface Transaction {
   description: string | null
   bucketId: string
   date: string
-  source: 'manual' | 'ocr' | 'overlay'
+  source: 'manual' | 'ocr' | 'overlay' | 'notification'
   remarks: string | null
   fundedFromBucketId: string | null
+  accountId: string | null
   parsedTxnId: string | null
   isFlagged: boolean
   isRecurringDraft: boolean
@@ -35,7 +38,9 @@ interface TransactionsState {
   flaggedTransactions: Transaction[]
   isLoaded: boolean
   loadTransactions: (monthStart: Date, monthEnd: Date) => Promise<void>
-  addTransaction: (txn: Omit<Transaction, 'id' | 'createdAt'>) => Promise<{ overspent?: number }>
+  addTransaction: (
+    txn: Omit<Transaction, 'id' | 'createdAt' | 'accountId'> & { accountId?: string | null },
+  ) => Promise<{ overspent?: number }>
   updateTransaction: (id: string, patch: Partial<Transaction>) => Promise<void>
   deleteTransaction: (id: string) => Promise<void>
   getSpentByBucket: (bucketId: string) => number
@@ -118,10 +123,25 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     const row = {
       ...txn,
       fundedFromBucketId: txn.fundedFromBucketId ?? null,
+      accountId: txn.accountId ?? defaultAccountId(),
       id,
       createdAt: now,
     }
     await db.insert(transactions).values(row)
+
+    if (!txn.isRecurringDraft) {
+      const accounts = useAccountsStore.getState()
+      if (txn.type === 'income') {
+        if (txn.remarks === '__salary__') {
+          await accounts.applyIncome(row.accountId, txn.amount)
+        } else {
+          // Non-salary income increases Your money (found/extra) into the chosen account
+          await accounts.addFoundMoney(row.accountId || defaultAccountId(), txn.amount, 'Income')
+        }
+      } else if (txn.type === 'expense' && !txn.isFlagged) {
+        await accounts.applyExpense(row.accountId, txn.amount)
+      }
+    }
 
     let overspent: number | undefined
     const bucket = useBucketsStore.getState().buckets.find(b => b.id === txn.bucketId)
@@ -167,6 +187,7 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     if (patch.fundedFromBucketId !== undefined) {
       updateData.fundedFromBucketId = patch.fundedFromBucketId
     }
+    if (patch.accountId !== undefined) updateData.accountId = patch.accountId
     if (patch.isFlagged !== undefined) updateData.isFlagged = patch.isFlagged
     if (patch.type !== undefined) updateData.type = patch.type
     if (patch.date !== undefined) updateData.date = patch.date
@@ -183,6 +204,30 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
       await applyFundedFromDebit(next.fundedFromBucketId, next.amount)
     }
 
+    const accounts = useAccountsStore.getState()
+    const wasFlaggedExpense = existing.type === 'expense' && existing.isFlagged && !existing.isRecurringDraft
+    const nowUnflagged = next.type === 'expense' && !next.isFlagged && !next.isRecurringDraft
+
+    // First-time categorize of a flagged payment: debit account
+    if (wasFlaggedExpense && nowUnflagged && existing.isFlagged && patch.isFlagged === false) {
+      await accounts.applyExpense(next.accountId ?? defaultAccountId(), next.amount)
+    } else if (
+      !existing.isRecurringDraft &&
+      !existing.isFlagged &&
+      (patch.amount !== undefined || patch.accountId !== undefined || patch.type !== undefined)
+    ) {
+      if (existing.type === 'income') {
+        await accounts.applyExpense(existing.accountId, existing.amount)
+      } else if (existing.type === 'expense') {
+        await accounts.applyIncome(existing.accountId, existing.amount)
+      }
+      if (next.type === 'income') {
+        await accounts.applyIncome(next.accountId ?? defaultAccountId(), next.amount)
+      } else if (next.type === 'expense' && !next.isFlagged) {
+        await accounts.applyExpense(next.accountId ?? defaultAccountId(), next.amount)
+      }
+    }
+
     const state = get()
     const updated = state.transactions.map(t =>
       t.id === id ? { ...t, ...patch } : t
@@ -196,6 +241,19 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     await db.delete(transactions).where(eq(transactions.id, id))
 
     if (txn) {
+      if (!txn.isRecurringDraft && !(txn.type === 'expense' && txn.isFlagged)) {
+        const accounts = useAccountsStore.getState()
+        if (txn.type === 'income') {
+          if (txn.remarks === '__salary__') {
+            await accounts.applyExpense(txn.accountId, txn.amount)
+          } else {
+            await accounts.addFoundMoney(txn.accountId || defaultAccountId(), -txn.amount, 'Income reversed')
+          }
+        } else if (txn.type === 'expense') {
+          await accounts.applyIncome(txn.accountId, txn.amount)
+        }
+      }
+
       const bucket = useBucketsStore.getState().buckets.find(b => b.id === txn.bucketId)
       if (
         bucket?.accumulates &&
@@ -224,10 +282,15 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
 
   getSpentByBucket: (bucketId: string) => {
     const bucket = useBucketsStore.getState().buckets.find(b => b.id === bucketId)
-    if (bucket?.accumulates) return 0
     return get()
       .transactions.filter(t => {
         if (t.isFlagged || t.isRecurringDraft || t.type !== 'expense') return false
+        if (bucket?.accumulates) {
+          return (
+            (t.bucketId === bucketId && (!t.remarks || !t.remarks.startsWith('__'))) ||
+            (t.fundedFromBucketId === bucketId && t.remarks === '__savings_confirm__')
+          )
+        }
         if (t.bucketId === bucketId) return true
         return t.fundedFromBucketId === bucketId && t.remarks === '__savings_confirm__'
       })
@@ -288,6 +351,7 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
       source: 'manual',
       remarks: '__salary__',
       fundedFromBucketId: null,
+      accountId: defaultAccountId(),
       parsedTxnId: null,
       isFlagged: false,
       isRecurringDraft: false,

@@ -77,7 +77,7 @@ export function LendBorrowForm({
           onChangeText={setAmount}
           placeholder="0"
           placeholderTextColor={colors.textMuted}
-          keyboardType="numeric"
+          keyboardType="decimal-pad"
         />
       </View>
 

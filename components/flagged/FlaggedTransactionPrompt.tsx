@@ -52,8 +52,11 @@ export function FlaggedTransactionPrompt({
       })
 
       // Add to sure-shot merchants if toggled and merchant exists
-      if (alwaysUse && currentTxn.merchant) {
-        await addSureShotMerchant(currentTxn.merchant, bucketId)
+      if (alwaysUse) {
+        const label = transactionTitle(currentTxn)
+        if (label && label !== 'Unknown') {
+          await addSureShotMerchant(label, bucketId)
+        }
       }
 
       // Reset for next
@@ -160,10 +163,10 @@ export function FlaggedTransactionPrompt({
             </ScrollView>
 
             {/* Always use toggle */}
-            {currentTxn.merchant && (
+            {transactionTitle(currentTxn) !== 'Unknown' && (
               <View style={styles.alwaysRow}>
                 <Text style={styles.alwaysText} numberOfLines={2}>
-                  Always use this bucket for "{currentTxn.merchant}"
+                  Always use this bucket for "{transactionTitle(currentTxn)}"
                 </Text>
                 <Switch
                   value={alwaysUse}

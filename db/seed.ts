@@ -5,8 +5,8 @@ import {
   DEFAULT_INCOME,
   DEFAULT_EF_FLOOR,
   DEFAULT_KEYWORD_MAPPINGS,
-  CORE_LIVING_BUCKET_ID,
   PERSONAL_BUCKET_ID,
+  MISC_BUCKET_ID,
 } from '@/constants/defaults'
 import { ensureBalanceRow } from '@/lib/bucket-balance'
 
@@ -33,7 +33,7 @@ export async function seedDefaults() {
     await ensureBalanceRow(PERSONAL_BUCKET_ID)
   }
 
-  const fallbackBucket = bucketInserts.find(b => b.id === CORE_LIVING_BUCKET_ID)
+  const fallbackBucket = bucketInserts.find(b => b.id === MISC_BUCKET_ID)
   await db.insert(playbook).values({
     id: 1,
     monthlyIncome: DEFAULT_INCOME,

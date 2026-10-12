@@ -1,13 +1,25 @@
 // Formats amount in Indian lakh notation: 150000 → "1,50,000"
+// Keeps up to 3 decimals when present (150.5 → "150.5", 150.125 → "150.125"); omits .00
 export function formatNPR(amount: number): string {
   if (amount < 0) return '-' + formatNPR(-amount)
-  const str = Math.round(amount).toString()
-  if (str.length <= 3) return str
-  const last3 = str.slice(-3)
-  const rest = str.slice(0, -3)
-  // Apply lakh grouping (groups of 2) to the rest
-  const grouped = rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',')
-  return grouped + ',' + last3
+  // Cap at 3 dp so float noise doesn't invent extra digits
+  const scaled = Math.round(amount * 1000)
+  const intPart = Math.floor(scaled / 1000)
+  const fracPart = scaled % 1000
+  const str = intPart.toString()
+  let formatted: string
+  if (str.length <= 3) {
+    formatted = str
+  } else {
+    const last3 = str.slice(-3)
+    const rest = str.slice(0, -3)
+    const grouped = rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',')
+    formatted = grouped + ',' + last3
+  }
+  if (fracPart > 0) {
+    formatted += '.' + fracPart.toString().padStart(3, '0').replace(/0+$/, '')
+  }
+  return formatted
 }
 
 // Compact format: 150000 → "1.50L", 1000 → "1.00K"

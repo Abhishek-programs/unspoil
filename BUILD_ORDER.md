@@ -20,6 +20,7 @@ What's shipped and what's next. For stack and rules see [AGENTS.md](./AGENTS.md)
 | **Manual entry only** (expense / income / lend-borrow) via center [+] | Done |
 | Transactions ledger + charts + detail sheet | Done |
 | Settings — playbook, buckets, keywords, notifications, CSV export | Done |
+| Payment helper (eSewa / nBank usage access + amount notification) | Done — needs `npx expo run:android` |
 
 **Removed from scope (for now):** OCR / gallery scan, share-to-app, scan bubble overlay.
 

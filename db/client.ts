@@ -7,7 +7,21 @@ import { migrations } from './migrations'
 const sqlite = openDatabaseSync('spendsense.db', { enableChangeListener: true })
 export const db = drizzle(sqlite, { schema })
 
-const APP_TABLES = ['bucket_balances', 'buckets', 'contacts', 'goals', 'keyword_mappings', 'lend_borrow_entries', 'net_worth_snapshots', 'playbook', 'sure_shot_merchants', 'transactions']
+const APP_TABLES = [
+  'account_adjustments',
+  'account_transfers',
+  'accounts',
+  'bucket_balances',
+  'buckets',
+  'contacts',
+  'goals',
+  'keyword_mappings',
+  'lend_borrow_entries',
+  'net_worth_snapshots',
+  'playbook',
+  'sure_shot_merchants',
+  'transactions',
+]
 
 type TableInfoRow = { name: string }
 
@@ -81,6 +95,30 @@ export function applySchemaPatches() {
         `INSERT INTO \`keyword_mappings\` (\`keyword\`, \`bucket_id\`) VALUES ('personal', '${personalId}')`
       )
     }
+
+    const miscBucket = sqlite.getFirstSync<{ id: string }>(
+      `SELECT id FROM buckets WHERE id = 'misc' OR name = 'Misc' LIMIT 1`
+    )
+    if (!miscBucket) {
+      sqlite.execSync(
+        `INSERT INTO \`buckets\` (\`id\`, \`name\`, \`type\`, \`monthly_amount\`, \`color\`, \`icon\`, \`sort_order\`, \`is_active\`, \`show_on_home\`, \`accumulates\`)
+         VALUES ('misc', 'Misc', 'spending', 3000, '#64748B', '📦', 5, 1, 1, 0)`
+      )
+    }
+    const miscId = miscBucket?.id ?? 'misc'
+    const miscKeyword = sqlite.getFirstSync(
+      `SELECT id FROM keyword_mappings WHERE keyword = 'misc' LIMIT 1`
+    )
+    if (!miscKeyword) {
+      sqlite.execSync(
+        `INSERT INTO \`keyword_mappings\` (\`keyword\`, \`bucket_id\`) VALUES ('misc', '${miscId}')`
+      )
+    }
+    // Default catch-all: move fallback off Core Living onto Misc when still on the old default
+    sqlite.execSync(
+      `UPDATE \`playbook\` SET \`fallback_bucket_id\` = '${miscId}'
+       WHERE \`fallback_bucket_id\` IS NULL OR \`fallback_bucket_id\` = 'core-living'`
+    )
   }
 
   const playbookTable = sqlite.getFirstSync(
@@ -154,6 +192,79 @@ export function applySchemaPatches() {
   }
   if (transactionsExists && !hasColumn('transactions', 'funded_from_bucket_id')) {
     sqlite.execSync(`ALTER TABLE \`transactions\` ADD COLUMN \`funded_from_bucket_id\` text`)
+  }
+  if (transactionsExists && !hasColumn('transactions', 'account_id')) {
+    sqlite.execSync(`ALTER TABLE \`transactions\` ADD COLUMN \`account_id\` text`)
+  }
+
+  const accountsTable = sqlite.getFirstSync(
+    `SELECT name FROM sqlite_master WHERE type='table' AND name='accounts'`,
+  )
+  if (!accountsTable) {
+    sqlite.execSync(
+      `CREATE TABLE \`accounts\` (
+        \`id\` text PRIMARY KEY NOT NULL,
+        \`name\` text NOT NULL,
+        \`kind\` text NOT NULL,
+        \`balance\` real DEFAULT 0 NOT NULL,
+        \`sort_order\` integer DEFAULT 0 NOT NULL,
+        \`is_system\` integer DEFAULT 1 NOT NULL
+      )`,
+    )
+  }
+  const bank = sqlite.getFirstSync(`SELECT id FROM accounts WHERE id = 'bank' LIMIT 1`)
+  if (!bank) {
+    sqlite.execSync(
+      `INSERT INTO \`accounts\` (\`id\`, \`name\`, \`kind\`, \`balance\`, \`sort_order\`, \`is_system\`)
+       VALUES ('bank', 'Bank', 'bank', 0, 0, 1)`,
+    )
+  }
+  const esewa = sqlite.getFirstSync(`SELECT id FROM accounts WHERE id = 'esewa' LIMIT 1`)
+  if (!esewa) {
+    sqlite.execSync(
+      `INSERT INTO \`accounts\` (\`id\`, \`name\`, \`kind\`, \`balance\`, \`sort_order\`, \`is_system\`)
+       VALUES ('esewa', 'eSewa', 'esewa', 0, 1, 1)`,
+    )
+  }
+  const cash = sqlite.getFirstSync(`SELECT id FROM accounts WHERE id = 'cash' LIMIT 1`)
+  if (!cash) {
+    sqlite.execSync(
+      `INSERT INTO \`accounts\` (\`id\`, \`name\`, \`kind\`, \`balance\`, \`sort_order\`, \`is_system\`)
+       VALUES ('cash', 'Cash', 'cash', 0, 2, 1)`,
+    )
+  }
+
+  const transfersTable = sqlite.getFirstSync(
+    `SELECT name FROM sqlite_master WHERE type='table' AND name='account_transfers'`,
+  )
+  if (!transfersTable) {
+    sqlite.execSync(
+      `CREATE TABLE \`account_transfers\` (
+        \`id\` text PRIMARY KEY NOT NULL,
+        \`from_account_id\` text NOT NULL,
+        \`to_account_id\` text NOT NULL,
+        \`amount\` real NOT NULL,
+        \`note\` text,
+        \`date\` text NOT NULL,
+        \`created_at\` text NOT NULL
+      )`,
+    )
+  }
+
+  const adjustmentsTable = sqlite.getFirstSync(
+    `SELECT name FROM sqlite_master WHERE type='table' AND name='account_adjustments'`,
+  )
+  if (!adjustmentsTable) {
+    sqlite.execSync(
+      `CREATE TABLE \`account_adjustments\` (
+        \`id\` text PRIMARY KEY NOT NULL,
+        \`account_id\` text NOT NULL,
+        \`amount\` real NOT NULL,
+        \`note\` text,
+        \`date\` text NOT NULL,
+        \`created_at\` text NOT NULL
+      )`,
+    )
   }
 
   const contactsTable = sqlite.getFirstSync(

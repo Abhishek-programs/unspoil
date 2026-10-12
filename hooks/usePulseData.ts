@@ -3,6 +3,7 @@ import { useBucketsStore } from '@/store/buckets'
 import { useTransactionsStore } from '@/store/transactions'
 import { useGoalsStore } from '@/store/goals'
 import { useLendingStore } from '@/store/lending'
+import { useAccountsStore } from '@/store/accounts'
 import { getMonthRange, getDaysRemaining } from '@/lib/month'
 import { computeMonthMetrics } from '@/lib/lending/balance'
 import { EF_BUCKET_ID, SIP_BUCKET_ID, SHARES_BUCKET_ID } from '@/constants/defaults'
@@ -122,8 +123,11 @@ export function usePulseData() {
   const lentOutstandingThisMonth = lendBorrowMonth.lentOutstandingThisMonth
 
   const unconfirmedSavingsThisMonth = Math.max(0, plannedSavings - confirmedSavedInvested)
+  const stillInBank = hasSalaryThisMonth ? unconfirmedSavingsThisMonth : 0
 
   const availableBalance = Math.max(0, adjustedSafeToSpend) + carriedForwardBalance
+  const { foundMoneyTotal, accounts: moneyAccounts } = useAccountsStore()
+  const yourMoney = availableBalance + stillInBank + foundMoneyTotal
   const monthRemainingBalance = Math.max(0, adjustedSafeToSpend)
 
   const daysRemaining = getDaysRemaining(monthStartDay)
@@ -198,6 +202,8 @@ export function usePulseData() {
     effectiveIncome,
     hasSalaryThisMonth,
     availableBalance,
+    yourMoney,
+    stillInBank,
     safeToSpend: adjustedSafeToSpend,
     rawSafeToSpend: safeToSpend,
     monthRemainingBalance,
@@ -253,5 +259,7 @@ export function usePulseData() {
     efStartBalance,
     sipInvested: sipLifetime,
     sharesInvested: sharesLifetime,
+    moneyAccounts,
+    foundMoneyTotal,
   }
 }

@@ -177,7 +177,55 @@ CREATE TABLE \`lend_borrow_entries\` (
 
 const m0010 = `ALTER TABLE \`transactions\` ADD COLUMN \`funded_from_bucket_id\` text;`
 
+const m0011 = `ALTER TABLE \`transactions\` ADD COLUMN \`account_id\` text;
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS \`accounts\` (
+\`id\` text PRIMARY KEY NOT NULL,
+\`name\` text NOT NULL,
+\`kind\` text NOT NULL,
+\`balance\` real DEFAULT 0 NOT NULL,
+\`sort_order\` integer DEFAULT 0 NOT NULL,
+\`is_system\` integer DEFAULT 1 NOT NULL
+);
+--> statement-breakpoint
+INSERT OR IGNORE INTO \`accounts\` (\`id\`, \`name\`, \`kind\`, \`balance\`, \`sort_order\`, \`is_system\`) VALUES
+  ('bank', 'Bank', 'bank', 0, 0, 1),
+  ('esewa', 'eSewa', 'esewa', 0, 1, 1),
+  ('cash', 'Cash', 'cash', 0, 2, 1);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS \`account_transfers\` (
+\`id\` text PRIMARY KEY NOT NULL,
+\`from_account_id\` text NOT NULL,
+\`to_account_id\` text NOT NULL,
+\`amount\` real NOT NULL,
+\`note\` text,
+\`date\` text NOT NULL,
+\`created_at\` text NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS \`account_adjustments\` (
+\`id\` text PRIMARY KEY NOT NULL,
+\`account_id\` text NOT NULL,
+\`amount\` real NOT NULL,
+\`note\` text,
+\`date\` text NOT NULL,
+\`created_at\` text NOT NULL
+);`
+
 export const migrations = {
   journal,
-  migrations: { m0000, m0001, m0002, m0003, m0004, m0005, m0006, m0007, m0008, m0009, m0010 },
+  migrations: {
+    m0000,
+    m0001,
+    m0002,
+    m0003,
+    m0004,
+    m0005,
+    m0006,
+    m0007,
+    m0008,
+    m0009,
+    m0010,
+    m0011,
+  },
 }

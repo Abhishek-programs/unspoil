@@ -5,6 +5,7 @@ import {
   DATES_BUCKET_ID,
   FUN_BUCKET_ID,
   PERSONAL_BUCKET_ID,
+  MISC_BUCKET_ID,
 } from '@/constants/defaults'
 import { colors } from '@/constants/colors'
 import { formatNPR } from '@/lib/format'
@@ -17,6 +18,7 @@ const BUCKET_HINTS: Record<string, string> = {
   [DATES_BUCKET_ID]: 'All date spending',
   [FUN_BUCKET_ID]: 'Social & eating out',
   [PERSONAL_BUCKET_ID]: 'One-off buys · rolls over',
+  [MISC_BUCKET_ID]: "Doesn't fit elsewhere",
 }
 
 interface LivingSectionProps {
@@ -24,8 +26,6 @@ interface LivingSectionProps {
   spentByBucket: Record<string, number>
   bucketBalances: Record<string, number>
 }
-
-const PERSONAL_LOW_BALANCE = 3000
 
 export function LivingSection({ buckets, spentByBucket, bucketBalances }: LivingSectionProps) {
   const regularBuckets = buckets.filter(b => !b.accumulates)
@@ -66,11 +66,11 @@ export function LivingSection({ buckets, spentByBucket, bucketBalances }: Living
   }
 
   const renderFundRow = (bucket: Bucket, showDivider: boolean, i: number) => {
+    const spent = spentByBucket[bucket.id] ?? 0
     const balance = bucketBalances[bucket.id] ?? 0
     const cap = effectiveCap(bucket) ?? bucket.monthlyAmount * 4
-    const ratio = cap > 0 ? balance / cap : 0
-    const barColor =
-      balance <= 0 ? colors.red : balance < PERSONAL_LOW_BALANCE ? colors.amber : colors.green
+    const topUp = bucket.monthlyAmount
+    const ratio = topUp > 0 ? spent / topUp : 0
 
     return (
       <Animated.View
@@ -87,14 +87,18 @@ export function LivingSection({ buckets, spentByBucket, bucketBalances }: Living
             </Text>
           </View>
           <Text style={styles.amounts}>
-            NPR {formatNPR(balance)}
-            <Text style={styles.amountsMuted}> / {formatNPR(cap)}</Text>
+            <Text style={styles.spentLabel}>Spent </Text>
+            {formatNPR(spent)}
           </Text>
         </View>
         <View style={styles.barWrap}>
-          <ProgressBar value={ratio} height={4} mode="fill" color={barColor} />
+          {spent === 0 ? (
+            <Text style={styles.noTxnHint}>No draws yet this month</Text>
+          ) : (
+            <ProgressBar value={ratio} height={4} />
+          )}
           <Text style={styles.fundHint}>
-            +{formatNPR(bucket.monthlyAmount)}/mo top-up · rolls over
+            Fund NPR {formatNPR(balance)} / {formatNPR(cap)} · +{formatNPR(topUp)}/mo · rolls over
           </Text>
         </View>
       </Animated.View>
@@ -131,7 +135,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   headerRow: {
-    paddingHorizontal: 16,
     marginBottom: 10,
   },
   title: {
@@ -150,8 +153,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: colors.border,
-    marginHorizontal: 16,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
   },
   divider: {
     height: 1,

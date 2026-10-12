@@ -153,9 +153,9 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
               </View>
             </View>
 
-            {/* Description */}
+            {/* Title */}
             <View style={styles.section}>
-              <Text style={styles.label}>Description</Text>
+              <Text style={styles.label}>Title</Text>
               {isIncome ? (
                 <Text style={styles.valueText}>{transactionTitle(transaction)}</Text>
               ) : (
@@ -169,14 +169,14 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
               )}
             </View>
 
-            {/* Merchant */}
+            {/* Description (stored as merchant) */}
             <View style={styles.section}>
-              <Text style={styles.label}>Merchant</Text>
+              <Text style={styles.label}>Description</Text>
               <TextInput
                 style={styles.textInput}
                 value={merchant}
                 onChangeText={setMerchant}
-                placeholder="Place name from receipt (optional)"
+                placeholder="Optional extra detail"
                 placeholderTextColor={colors.textMuted}
                 editable={!isIncome || transaction.source !== 'manual'}
               />
@@ -248,7 +248,13 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
             <View style={styles.section}>
               <Text style={styles.label}>Source</Text>
               <View style={styles.sourceBadge}>
-                <Text style={styles.sourceBadgeText}>Manual entry</Text>
+                <Text style={styles.sourceBadgeText}>
+                  {transaction.source === 'notification'
+                    ? 'Payment helper'
+                    : transaction.source === 'manual'
+                      ? 'Manual entry'
+                      : transaction.source}
+                </Text>
               </View>
             </View>
 

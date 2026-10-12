@@ -63,12 +63,41 @@ export const transactions = sqliteTable('transactions', {
   description: text('description'),
   bucketId: text('bucket_id').notNull(),
   date: text('date').notNull(), // ISO string
-  source: text('source', { enum: ['manual', 'ocr', 'overlay'] }).notNull().default('manual'),
+  source: text('source', { enum: ['manual', 'ocr', 'overlay', 'notification'] }).notNull().default('manual'),
   remarks: text('remarks'),
   fundedFromBucketId: text('funded_from_bucket_id'),
+  accountId: text('account_id'),
   parsedTxnId: text('parsed_txn_id'),
   isFlagged: integer('is_flagged', { mode: 'boolean' }).notNull().default(false),
   isRecurringDraft: integer('is_recurring_draft', { mode: 'boolean' }).notNull().default(false),
+  createdAt: text('created_at').notNull(),
+})
+
+export const accounts = sqliteTable('accounts', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  kind: text('kind', { enum: ['bank', 'esewa', 'cash'] }).notNull(),
+  balance: real('balance').notNull().default(0),
+  sortOrder: integer('sort_order').notNull().default(0),
+  isSystem: integer('is_system', { mode: 'boolean' }).notNull().default(true),
+})
+
+export const accountTransfers = sqliteTable('account_transfers', {
+  id: text('id').primaryKey(),
+  fromAccountId: text('from_account_id').notNull(),
+  toAccountId: text('to_account_id').notNull(),
+  amount: real('amount').notNull(),
+  note: text('note'),
+  date: text('date').notNull(),
+  createdAt: text('created_at').notNull(),
+})
+
+export const accountAdjustments = sqliteTable('account_adjustments', {
+  id: text('id').primaryKey(),
+  accountId: text('account_id').notNull(),
+  amount: real('amount').notNull(),
+  note: text('note'),
+  date: text('date').notNull(),
   createdAt: text('created_at').notNull(),
 })
 

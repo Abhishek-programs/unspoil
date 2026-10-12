@@ -68,7 +68,9 @@ components/
 
 store/                  Zustand — playbook, buckets, transactions, goals, lending
 db/                     schema.ts, client.ts, migrations/, seed.ts
-lib/                    format, categorize, projection, goals/, …
+lib/                    format, categorize, projection, goals/, payment-watch
+native/android/         Kotlin copied in by Expo config plugins on prebuild
+plugins/                withPaymentWatch.js
 constants/              colors.ts, defaults.ts
 components/onboarding/  OnboardingBack (subtle chevron)
 hooks/                  usePulseData.ts
@@ -114,13 +116,15 @@ Never auto-memorize ambiguous merchants.
 
 **Nudges:** max 1/day, quiet 10pm–8am (`lib/notifications.ts`).
 
+**Payment helper:** Optional. Usage access + amount notification while eSewa / nBank is in the foreground; after Log, a second notification with spending-bucket chips for that txn. No screenshot, overlay, or Accessibility. See `docs/superpowers/specs/2026-08-19-payment-watch-notification-design.md`.
+
 **Funded-from savings:** When logging a contribution to a savings/investment bucket, optional `fundedFromBucketId` uses that Living/Personal ceiling or fund; destination still gets `__savings_confirm__`. See `docs/superpowers/specs/2026-07-26-living-ceilings-funded-from-design.md`.
 
 ---
 
 ## V1 scope (short)
 
-**In:** manual entry, auto-categorize, home dashboard (Your money + Hero ring + Living/Future), lent & borrowed, transactions + charts, goals/Vault, settings/playbook, 6-step onboarding, month checklist, nudges, CSV export.
+**In:** manual entry, auto-categorize, home dashboard (Your money + Hero ring + Living/Future), lent & borrowed, transactions + charts, goals/Vault, settings/playbook, 6-step onboarding, month checklist, nudges, CSV export, optional eSewa/nBank payment-helper notification (dev client).
 
 **Out:** OCR / receipt scan, share intent, bubble overlay, SMS/email, dark mode, AI chat, iOS, cloud sync.
 

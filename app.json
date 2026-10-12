@@ -2,8 +2,15 @@
   "expo": {
     "name": "SpendSense",
     "slug": "SpendSense",
+    "owner": "abhishek-programs",
     "scheme": "spendsense",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/9aee28c7-b0d7-4d65-95e1-a8763d6362bf"
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -11,7 +18,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#16A34A"
     },
     "ios": {
       "supportsTablet": true,
@@ -20,7 +27,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#16A34A"
       },
       "softwareKeyboardLayoutMode": "resize",
       "edgeToEdgeEnabled": true,
@@ -42,15 +49,16 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/icon.png",
+          "icon": "./assets/notification-icon.png",
           "color": "#16A34A"
         }
-      ]
+      ],
+      "./plugins/withPaymentWatch.js"
     ],
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "71e180a4-ed5f-4425-ae85-fc444bbfd69e"
+        "projectId": "9aee28c7-b0d7-4d65-95e1-a8763d6362bf"
       }
     }
   }

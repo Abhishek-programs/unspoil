@@ -36,10 +36,12 @@ export function categorize(opts: {
     }
   }
 
-  if (merchant) {
-    const merchantLower = merchant.toLowerCase().trim()
+  const sureShotKeys = [merchant, description]
+    .map(t => t?.toLowerCase().trim())
+    .filter((t): t is string => !!t)
+  for (const key of sureShotKeys) {
     const sureShot = sureShotMerchants.find(
-      m => m.merchantName.toLowerCase().trim() === merchantLower,
+      m => m.merchantName.toLowerCase().trim() === key,
     )
     if (sureShot) {
       return { bucketId: sureShot.bucketId, isFlagged: false }
