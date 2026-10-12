@@ -1,0 +1,1085 @@
+<style>
+    * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+    }
+
+    body {
+        font-family: var(--font-sans);
+        background: transparent;
+    }
+
+    .wrap {
+        display: flex;
+        gap: 2rem;
+        justify-content: center;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        padding: 1rem 0;
+    }
+
+    .phone {
+        width: 320px;
+        background: #1a1a1a;
+        border-radius: 36px;
+        padding: 10px;
+        flex-shrink: 0;
+    }
+
+    .screen {
+        background: #F8FAFB;
+        border-radius: 28px;
+        overflow: hidden;
+        height: 620px;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+    }
+
+    .status {
+        padding: 12px 20px 4px;
+        display: flex;
+        justify-content: space-between;
+    }
+
+    .status span {
+        font-size: 11px;
+        color: #6B7280;
+    }
+
+    .content {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0 16px 80px;
+        scrollbar-width: none;
+    }
+
+    .content::-webkit-scrollbar {
+        display: none;
+    }
+
+    .nav {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: rgba(255, 255, 255, 0.92);
+        border-top: 1px solid #E2E8F0;
+        padding: 8px 0 12px;
+        display: flex;
+        justify-content: space-around;
+        align-items: center;
+        border-bottom-left-radius: 28px;
+        border-bottom-right-radius: 28px;
+    }
+
+    .nav-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        cursor: pointer;
+        padding: 0 8px;
+    }
+
+    .nav-lbl {
+        font-size: 9px;
+        color: #9CA3AF;
+    }
+
+    .nav-lbl.act {
+        color: #16A34A;
+    }
+
+    .fab {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: #16A34A;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 4px;
+        cursor: pointer;
+    }
+
+    .fab svg {
+        width: 20px;
+        height: 20px;
+    }
+
+    .greeting {
+        padding: 14px 0 8px;
+    }
+
+    .greeting p {
+        font-size: 11px;
+        color: #9CA3AF;
+    }
+
+    .greeting h2 {
+        font-size: 20px;
+        font-weight: 500;
+        color: #1A1C1E;
+        margin-top: 1px;
+    }
+
+    .ring-wrap {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin: 8px 0 16px;
+    }
+
+    .ring-sub {
+        font-size: 11px;
+        color: #9CA3AF;
+        margin-top: 6px;
+        text-align: center;
+    }
+
+    .ring-center {
+        position: absolute;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .ring-lbl {
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: .5px;
+        text-transform: uppercase;
+        color: #9CA3AF;
+    }
+
+    .ring-amt {
+        font-size: 26px;
+        font-weight: 700;
+        color: #1A1C1E;
+        font-variant-numeric: tabular-nums;
+        line-height: 1.1;
+    }
+
+    .ring-amt.red {
+        color: #DC2626;
+    }
+
+    .amber-toast {
+        background: #FEF3C7;
+        border-radius: 8px;
+        padding: 10px 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+        cursor: pointer;
+    }
+
+    .amber-toast span {
+        font-size: 12px;
+        color: #92400E;
+    }
+
+    .amber-toast .rev {
+        font-size: 11px;
+        font-weight: 600;
+        color: #92400E;
+    }
+
+    .sec-lbl {
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: .6px;
+        text-transform: uppercase;
+        color: #9CA3AF;
+        margin: 12px 0 6px;
+    }
+
+    .card {
+        background: #fff;
+        border-radius: 12px;
+        border: 1px solid #E2E8F0;
+        padding: 12px;
+        margin-bottom: 8px;
+    }
+
+    .bucket-row {
+        display: flex;
+        align-items: center;
+        padding: 8px 0;
+        border-bottom: 1px solid #F0F2F5;
+    }
+
+    .bucket-row:last-child {
+        border-bottom: none;
+    }
+
+    .bk-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 7px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        margin-right: 10px;
+    }
+
+    .bk-info {
+        flex: 1;
+    }
+
+    .bk-name {
+        font-size: 13px;
+        font-weight: 500;
+        color: #1A1C1E;
+    }
+
+    .bk-bar {
+        height: 3px;
+        border-radius: 99px;
+        background: #E2E8F0;
+        margin-top: 4px;
+        overflow: hidden;
+    }
+
+    .bk-fill {
+        height: 3px;
+        border-radius: 99px;
+    }
+
+    .bk-right {
+        text-align: right;
+    }
+
+    .bk-amt {
+        font-size: 13px;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .bk-limit {
+        font-size: 10px;
+        color: #9CA3AF;
+    }
+
+    .sav-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 0;
+        border-bottom: 1px solid #F0F2F5;
+    }
+
+    .sav-row:last-child {
+        border-bottom: none;
+    }
+
+    .chk {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .chk.done {
+        background: #DCFCE7;
+        border: 1.5px solid #16A34A;
+    }
+
+    .chk.pend {
+        border: 1.5px solid #D1D5DB;
+    }
+
+    .sav-info {
+        flex: 1;
+    }
+
+    .sav-name {
+        font-size: 12px;
+        font-weight: 500;
+        color: #1A1C1E;
+    }
+
+    .sav-sub {
+        font-size: 10px;
+        color: #9CA3AF;
+    }
+
+    .sav-amt {
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .sav-amt.done {
+        color: #16A34A;
+    }
+
+    .sav-amt.pend {
+        color: #9CA3AF;
+    }
+
+    .nudge {
+        background: #FDE68A;
+        border-radius: 8px;
+        padding: 10px 12px;
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+    }
+
+    .nudge-icon {
+        width: 14px;
+        height: 14px;
+        flex-shrink: 0;
+        margin-top: 1px;
+    }
+
+    .nudge p {
+        font-size: 11px;
+        color: #78350F;
+        line-height: 1.4;
+    }
+
+    .sheet-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.3);
+        display: flex;
+        align-items: flex-end;
+        border-radius: 28px;
+        z-index: 10;
+    }
+
+    .sheet {
+        background: #fff;
+        border-top-left-radius: 20px;
+        border-top-right-radius: 20px;
+        padding: 0 16px 20px;
+        width: 100%;
+    }
+
+    .sheet-handle {
+        width: 36px;
+        height: 4px;
+        background: #E2E8F0;
+        border-radius: 99px;
+        margin: 10px auto 14px;
+    }
+
+    .sheet-title {
+        font-size: 16px;
+        font-weight: 500;
+        color: #1A1C1E;
+        margin-bottom: 12px;
+    }
+
+    .txn-card {
+        background: #F8FAFB;
+        border-radius: 8px;
+        padding: 10px;
+        margin-bottom: 12px;
+    }
+
+    .txn-merchant {
+        font-size: 14px;
+        font-weight: 500;
+        color: #1A1C1E;
+    }
+
+    .txn-meta {
+        font-size: 11px;
+        color: #9CA3AF;
+        margin-top: 2px;
+    }
+
+    .txn-amt {
+        font-size: 18px;
+        font-weight: 700;
+        color: #1A1C1E;
+        margin-top: 4px;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 14px;
+    }
+
+    .chip {
+        padding: 6px 12px;
+        border-radius: 99px;
+        font-size: 12px;
+        cursor: pointer;
+        border: 1px solid #E2E8F0;
+        background: #F8FAFB;
+        color: #6B7280;
+    }
+
+    .chip.sel {
+        background: #DCFCE7;
+        border-color: #16A34A;
+        color: #15803D;
+        font-weight: 500;
+    }
+
+    .btn-primary {
+        background: #16A34A;
+        border-radius: 8px;
+        padding: 12px;
+        text-align: center;
+        color: #fff;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        margin-bottom: 8px;
+    }
+
+    .btn-skip {
+        text-align: center;
+        font-size: 12px;
+        color: #9CA3AF;
+        cursor: pointer;
+    }
+
+    .ledger-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 0;
+        border-bottom: 1px solid #F0F2F5;
+        cursor: pointer;
+    }
+
+    .ledger-row:last-child {
+        border-bottom: none;
+    }
+
+    .ledger-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 9px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        font-size: 13px;
+    }
+
+    .ledger-info {
+        flex: 1;
+    }
+
+    .ledger-name {
+        font-size: 13px;
+        font-weight: 500;
+        color: #1A1C1E;
+    }
+
+    .ledger-tag {
+        display: inline-block;
+        font-size: 9px;
+        font-weight: 600;
+        padding: 2px 6px;
+        border-radius: 99px;
+        margin-top: 2px;
+    }
+
+    .ledger-right {
+        text-align: right;
+    }
+
+    .ledger-amt {
+        font-size: 13px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .ledger-time {
+        font-size: 10px;
+        color: #9CA3AF;
+        margin-top: 1px;
+    }
+
+    .date-group {
+        font-size: 10px;
+        font-weight: 600;
+        color: #9CA3AF;
+        text-transform: uppercase;
+        letter-spacing: .5px;
+        padding: 8px 0 4px;
+    }
+
+    .filter-row {
+        display: flex;
+        gap: 6px;
+        overflow-x: auto;
+        padding: 8px 0;
+        scrollbar-width: none;
+        margin-bottom: 4px;
+    }
+
+    .filter-row::-webkit-scrollbar {
+        display: none;
+    }
+
+    .fc {
+        padding: 5px 12px;
+        border-radius: 99px;
+        font-size: 11px;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+
+    .fc.on {
+        background: #DCFCE7;
+        color: #15803D;
+        font-weight: 600;
+        border: 1px solid #16A34A;
+    }
+
+    .fc.off {
+        background: #F0F2F5;
+        color: #6B7280;
+    }
+
+    .vault-goal {
+        background: #fff;
+        border-radius: 12px;
+        border: 1px solid #E2E8F0;
+        padding: 12px;
+        margin-bottom: 8px;
+    }
+
+    .vg-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 8px;
+    }
+
+    .vg-name {
+        font-size: 14px;
+        font-weight: 500;
+        color: #1A1C1E;
+    }
+
+    .vg-badge {
+        font-size: 9px;
+        font-weight: 600;
+        padding: 2px 7px;
+        border-radius: 99px;
+    }
+
+    .vg-track {
+        height: 6px;
+        border-radius: 99px;
+        background: #F0F2F5;
+        overflow: hidden;
+        margin-bottom: 6px;
+    }
+
+    .vg-fill {
+        height: 6px;
+        border-radius: 99px;
+        background: #16A34A;
+    }
+
+    .vg-stats {
+        display: flex;
+        justify-content: space-between;
+    }
+
+    .vg-stat {
+        font-size: 10px;
+        color: #9CA3AF;
+    }
+
+    .vg-stat span {
+        color: #1A1C1E;
+        font-weight: 500;
+    }
+
+    .toggle-wrap {
+        display: flex;
+        background: #F0F2F5;
+        border-radius: 99px;
+        padding: 3px;
+        margin-bottom: 12px;
+    }
+
+    .tog {
+        flex: 1;
+        text-align: center;
+        padding: 6px;
+        border-radius: 99px;
+        font-size: 12px;
+        cursor: pointer;
+    }
+
+    .tog.on {
+        background: #fff;
+        font-weight: 600;
+        color: #1A1C1E;
+    }
+
+    .tog.off {
+        color: #9CA3AF;
+    }
+</style>
+
+<div class="wrap">
+    <div style="display:flex;flex-direction:column;gap:8px;width:180px;">
+        <div
+            style="font-size:11px;font-weight:500;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">
+            Screens</div>
+        <button onclick="show('pulse')" id="btn-pulse"
+            style="text-align:left;padding:8px 12px;border-radius:8px;border:1px solid #16A34A;background:#DCFCE7;color:#15803D;font-size:13px;font-weight:500;cursor:pointer;">Pulse
+            (home)</button>
+        <button onclick="show('ledger')" id="btn-ledger"
+            style="text-align:left;padding:8px 12px;border-radius:8px;border:1px solid #E2E8F0;background:#fff;color:#6B7280;font-size:13px;cursor:pointer;">Ledger</button>
+        <button onclick="show('vault')" id="btn-vault"
+            style="text-align:left;padding:8px 12px;border-radius:8px;border:1px solid #E2E8F0;background:#fff;color:#6B7280;font-size:13px;cursor:pointer;">Vault
+            (goals)</button>
+        <button onclick="show('cat')" id="btn-cat"
+            style="text-align:left;padding:8px 12px;border-radius:8px;border:1px solid #E2E8F0;background:#fff;color:#6B7280;font-size:13px;cursor:pointer;">Categorize</button>
+        <button onclick="show('manual')" id="btn-manual"
+            style="text-align:left;padding:8px 12px;border-radius:8px;border:1px solid #E2E8F0;background:#fff;color:#6B7280;font-size:13px;cursor:pointer;">Manual
+            entry</button>
+        <div
+            style="font-size:11px;font-weight:500;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:.5px;margin-top:8px;margin-bottom:4px;">
+            Ring states</div>
+        <button onclick="setRing('normal')"
+            style="text-align:left;padding:8px 12px;border-radius:8px;border:1px solid #E2E8F0;background:#fff;color:#6B7280;font-size:12px;cursor:pointer;">Normal</button>
+        <button onclick="setRing('amber')"
+            style="text-align:left;padding:8px 12px;border-radius:8px;border:1px solid #E2E8F0;background:#fff;color:#6B7280;font-size:12px;cursor:pointer;">+
+            Uncategorized</button>
+        <button onclick="setRing('over')"
+            style="text-align:left;padding:8px 12px;border-radius:8px;border:1px solid #E2E8F0;background:#fff;color:#6B7280;font-size:12px;cursor:pointer;">Overspent</button>
+    </div>
+
+    <div class="phone">
+        <div class="screen">
+            <div class="status"><span>9:41</span><span>●●●</span></div>
+
+            <div class="content" id="screen-pulse">
+                <div class="greeting">
+                    <p>Good morning</p>
+                    <h2>Abhishek</h2>
+                </div>
+                <div id="amber-toast" class="amber-toast" onclick="show('cat')" style="display:none;">
+                    <span>2 transactions need a category</span>
+                    <span class="rev">Review →</span>
+                </div>
+                <div class="ring-wrap">
+                    <div style="position:relative;width:180px;height:180px;">
+                        <svg width="180" height="180" id="ring-svg" style="transform:rotate(-90deg);">
+                            <circle cx="90" cy="90" r="74" fill="none" stroke="#E2E8F0" stroke-width="16" />
+                            <circle id="arc-green" cx="90" cy="90" r="74" fill="none" stroke="#16A34A" stroke-width="16"
+                                stroke-linecap="round" stroke-dasharray="465" stroke-dashoffset="325" />
+                            <circle id="arc-amber" cx="90" cy="90" r="74" fill="none" stroke="#F59E0B" stroke-width="16"
+                                stroke-linecap="round" stroke-dasharray="465" stroke-dashoffset="465"
+                                style="display:none;" />
+                        </svg>
+                        <div class="ring-center" style="inset:0;position:absolute;">
+                            <span class="ring-lbl">SAFE TO SPEND</span>
+                            <span class="ring-amt" id="ring-amt">42,500</span>
+                            <span style="font-size:9px;color:#9CA3AF;margin-top:1px;" id="ring-sub2"></span>
+                        </div>
+                    </div>
+                    <div class="ring-sub" id="ring-sub">2.1 weeks left · NPR 8,333/week</div>
+                </div>
+                <div class="sec-lbl">Monthly Readiness</div>
+                <div class="card">
+                    <div class="sav-row">
+                        <div class="chk done"><svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                                <polyline points="1.5,5 4,7.5 8.5,2.5" stroke="#16A34A" stroke-width="1.5"
+                                    stroke-linecap="round" />
+                            </svg></div>
+                        <div class="sav-info">
+                            <div class="sav-name">Emergency Fund</div>
+                            <div class="sav-sub">Safety Net · 45,000 / 1,50,000</div>
+                        </div>
+                        <div class="sav-amt done">15,000</div>
+                    </div>
+                    <div class="sav-row">
+                        <div class="chk pend"></div>
+                        <div class="sav-info">
+                            <div class="sav-name">SIPs</div>
+                            <div class="sav-sub">Kumari · NIBL · Nabil</div>
+                        </div>
+                        <div class="sav-amt pend">6,000</div>
+                    </div>
+                    <div class="sav-row">
+                        <div class="chk done"><svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                                <polyline points="1.5,5 4,7.5 8.5,2.5" stroke="#16A34A" stroke-width="1.5"
+                                    stroke-linecap="round" />
+                            </svg></div>
+                        <div class="sav-info">
+                            <div class="sav-name">Shares</div>
+                            <div class="sav-sub">This month confirmed</div>
+                        </div>
+                        <div class="sav-amt done">15,000</div>
+                    </div>
+                    <div class="sav-row">
+                        <div class="chk pend"></div>
+                        <div class="sav-info">
+                            <div class="sav-name">BigExpense</div>
+                            <div class="sav-sub">MacBook contribution</div>
+                        </div>
+                        <div class="sav-amt pend">24,000</div>
+                    </div>
+                </div>
+                <div class="sec-lbl">Lifestyle caps</div>
+                <div class="card">
+                    <div class="bucket-row">
+                        <div class="bk-icon" style="background:#EAF3DE;"><svg width="14" height="14" viewBox="0 0 14 14"
+                                fill="none">
+                                <rect x="1" y="6" width="12" height="7" rx="1.5" stroke="#16A34A" stroke-width="1.2" />
+                                <path d="M4 6V4a3 3 0 016 0v2" stroke="#16A34A" stroke-width="1.2" />
+                            </svg></div>
+                        <div class="bk-info">
+                            <div class="bk-name">Core Living</div>
+                            <div class="bk-bar">
+                                <div class="bk-fill" style="width:72%;background:#16A34A;"></div>
+                            </div>
+                        </div>
+                        <div class="bk-right">
+                            <div class="bk-amt" style="color:#16A34A;">36,000</div>
+                            <div class="bk-limit">/ 50,000</div>
+                        </div>
+                    </div>
+                    <div class="bucket-row">
+                        <div class="bk-icon" style="background:#FEF3C7;"><svg width="14" height="14" viewBox="0 0 14 14"
+                                fill="none">
+                                <path d="M7 1l1.5 3 3.5.5-2.5 2.5.5 3.5L7 9l-3 1.5.5-3.5L2 4.5l3.5-.5z" stroke="#92400E"
+                                    stroke-width="1.2" />
+                            </svg></div>
+                        <div class="bk-info">
+                            <div class="bk-name">Dates</div>
+                            <div class="bk-bar">
+                                <div class="bk-fill" style="width:85%;background:#F59E0B;"></div>
+                            </div>
+                        </div>
+                        <div class="bk-right">
+                            <div class="bk-amt" style="color:#D97706;">8,500</div>
+                            <div class="bk-limit">/ 10,000</div>
+                        </div>
+                    </div>
+                    <div class="bucket-row">
+                        <div class="bk-icon" style="background:#F0F2F5;"><svg width="14" height="14" viewBox="0 0 14 14"
+                                fill="none">
+                                <circle cx="7" cy="7" r="5.5" stroke="#6B7280" stroke-width="1.2" />
+                                <path d="M5 7l1.5 1.5L9 5" stroke="#6B7280" stroke-width="1.2" stroke-linecap="round" />
+                            </svg></div>
+                        <div class="bk-info">
+                            <div class="bk-name">Fun</div>
+                            <div class="bk-bar">
+                                <div class="bk-fill" style="width:40%;background:#16A34A;"></div>
+                            </div>
+                        </div>
+                        <div class="bk-right">
+                            <div class="bk-amt" style="color:#16A34A;">2,000</div>
+                            <div class="bk-limit">/ 5,000</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="nudge">
+                    <svg class="nudge-icon" viewBox="0 0 14 14" fill="none">
+                        <circle cx="7" cy="7" r="6" stroke="#78350F" stroke-width="1.2" />
+                        <path d="M7 4v3l2 1" stroke="#78350F" stroke-width="1.2" stroke-linecap="round" />
+                    </svg>
+                    <p>Financial health insights will appear here as you use the app.</p>
+                </div>
+            </div>
+
+            <div class="content" id="screen-ledger" style="display:none;">
+                <div class="greeting">
+                    <p>April 2026</p>
+                    <h2>Ledger</h2>
+                </div>
+                <div class="toggle-wrap">
+                    <div class="tog on">Logs</div>
+                    <div class="tog off">Charts</div>
+                </div>
+                <div class="filter-row">
+                    <div class="fc on">All</div>
+                    <div class="fc off">Core</div>
+                    <div class="fc off">Dates</div>
+                    <div class="fc off">Fun</div>
+                    <div class="fc off">Uncategorized</div>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:6px 0;margin-bottom:4px;">
+                    <span style="font-size:11px;color:#16A34A;font-weight:500;">Income 1,25,000</span>
+                    <span style="font-size:11px;color:#DC2626;font-weight:500;">Spent 46,500</span>
+                    <span style="font-size:11px;color:#1A1C1E;font-weight:500;">Left 78,500</span>
+                </div>
+                <div class="date-group">Today · Apr 4</div>
+                <div class="card" style="padding:8px 12px;">
+                    <div class="ledger-row">
+                        <div class="ledger-icon" style="background:#EAF3DE;">🛒</div>
+                        <div class="ledger-info">
+                            <div class="ledger-name">Bhat-Bhateni</div>
+                            <span class="ledger-tag" style="background:#DCFCE7;color:#15803D;">#core</span>
+                            <span class="ledger-tag"
+                                style="background:#F0F2F5;color:#6B7280;margin-left:4px;">bubble</span>
+                        </div>
+                        <div class="ledger-right">
+                            <div class="ledger-amt" style="color:#DC2626;">− 3,200</div>
+                            <div class="ledger-time">10:15</div>
+                        </div>
+                    </div>
+                    <div class="ledger-row" onclick="show('cat')">
+                        <div class="ledger-icon" style="background:#FEF3C7;">?</div>
+                        <div class="ledger-info">
+                            <div class="ledger-name">Transfer to 9841...</div>
+                            <span class="ledger-tag" style="background:#FEF3C7;color:#92400E;">needs category</span>
+                        </div>
+                        <div class="ledger-right">
+                            <div class="ledger-amt" style="color:#DC2626;">− 1,500</div>
+                            <div class="ledger-time">09:30</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="date-group">Yesterday · Apr 3</div>
+                <div class="card" style="padding:8px 12px;">
+                    <div class="ledger-row">
+                        <div class="ledger-icon" style="background:#FEF3C7;">🍽</div>
+                        <div class="ledger-info">
+                            <div class="ledger-name">Bajeko Sekuwa</div>
+                            <span class="ledger-tag" style="background:#FEF3C7;color:#92400E;">#date</span>
+                            <span class="ledger-tag"
+                                style="background:#F0F2F5;color:#6B7280;margin-left:4px;">share</span>
+                        </div>
+                        <div class="ledger-right">
+                            <div class="ledger-amt" style="color:#DC2626;">− 3,500</div>
+                            <div class="ledger-time">19:42</div>
+                        </div>
+                    </div>
+                    <div class="ledger-row">
+                        <div class="ledger-icon" style="background:#DCFCE7;">↑</div>
+                        <div class="ledger-info">
+                            <div class="ledger-name">EF Transfer</div>
+                            <span class="ledger-tag" style="background:#DCFCE7;color:#15803D;">#ef</span>
+                            <span class="ledger-tag"
+                                style="background:#F0F2F5;color:#6B7280;margin-left:4px;">bubble</span>
+                        </div>
+                        <div class="ledger-right">
+                            <div class="ledger-amt" style="color:#16A34A;">15,000</div>
+                            <div class="ledger-time">10:00</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="content" id="screen-vault" style="display:none;">
+                <div class="greeting">
+                    <p>Your financial targets</p>
+                    <h2>Vault</h2>
+                </div>
+                <div class="sec-lbl">Safety Net</div>
+                <div class="vault-goal">
+                    <div class="vg-header">
+                        <div>
+                            <div class="vg-name">Emergency Fund</div>
+                            <div style="font-size:10px;color:#9CA3AF;margin-top:2px;">Stage 1 of 2</div>
+                        </div>
+                        <span class="vg-badge" style="background:#DCFCE7;color:#15803D;">Non-negotiable</span>
+                    </div>
+                    <div
+                        style="display:flex;justify-content:space-between;font-size:10px;color:#9CA3AF;margin-bottom:3px;">
+                        <span>0</span><span style="color:#16A34A;font-weight:500;">Stage 1:
+                            1,50,000</span><span>3,00,000</span>
+                    </div>
+                    <div class="vg-track">
+                        <div class="vg-fill" style="width:30%;"></div>
+                    </div>
+                    <div class="vg-stats">
+                        <div class="vg-stat">Saved <span>45,000</span></div>
+                        <div class="vg-stat">Monthly <span>15,000</span></div>
+                        <div class="vg-stat">ETA <span>~7 months</span></div>
+                    </div>
+                </div>
+                <div class="sec-lbl">Goals</div>
+                <div class="vault-goal">
+                    <div class="vg-header">
+                        <div>
+                            <div class="vg-name">MacBook Pro</div>
+                            <div style="font-size:10px;color:#9CA3AF;margin-top:2px;">Virtual · Dec 2027</div>
+                        </div>
+                        <span class="vg-badge" style="background:#F0F2F5;color:#6B7280;">28%</span>
+                    </div>
+                    <div class="vg-track">
+                        <div class="vg-fill" style="width:28%;"></div>
+                    </div>
+                    <div class="vg-stats">
+                        <div class="vg-stat">Saved <span>96,000</span></div>
+                        <div class="vg-stat">Monthly <span>24,000</span></div>
+                        <div class="vg-stat">ETA <span>~10 months</span></div>
+                    </div>
+                </div>
+                <div class="nudge" style="margin-top:4px;">
+                    <svg class="nudge-icon" viewBox="0 0 14 14" fill="none">
+                        <circle cx="7" cy="7" r="6" stroke="#78350F" stroke-width="1.2" />
+                        <path d="M5 5.5c0-1.1.9-2 2-2s2 .9 2 2c0 .8-.5 1.5-1.2 1.8L7 6.5V8" stroke="#78350F"
+                            stroke-width="1.2" stroke-linecap="round" />
+                        <circle cx="7" cy="10" r=".5" fill="#78350F" />
+                    </svg>
+                    <p>Add NPR 2,000/month to reach MacBook 1 month sooner.</p>
+                </div>
+            </div>
+
+            <div class="content" id="screen-cat" style="display:none;"></div>
+            <div class="content" id="screen-manual" style="display:none;"></div>
+
+            <div id="sheet-cat" class="sheet-overlay" style="display:none;">
+                <div class="sheet">
+                    <div class="sheet-handle"></div>
+                    <div class="sheet-title">Assign a category</div>
+                    <div class="txn-card">
+                        <div class="txn-merchant">Transfer to 9841...</div>
+                        <div class="txn-meta">Today · 09:30 · bubble</div>
+                        <div class="txn-amt">NPR 1,500</div>
+                    </div>
+                    <div
+                        style="font-size:11px;color:#9CA3AF;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px;font-weight:600;">
+                        Select bucket</div>
+                    <div class="chips">
+                        <div class="chip" onclick="selChip(this)">Core Living</div>
+                        <div class="chip" onclick="selChip(this)">Dates</div>
+                        <div class="chip sel" onclick="selChip(this)">Fun</div>
+                        <div class="chip" onclick="selChip(this)">Savings</div>
+                        <div class="chip" onclick="selChip(this)">+ New bucket</div>
+                    </div>
+                    <div class="btn-primary" onclick="confirmCat()">Confirm</div>
+                    <div class="btn-skip" onclick="closeCat()">Skip for now</div>
+                </div>
+            </div>
+
+            <div id="sheet-manual" class="sheet-overlay" style="display:none;">
+                <div class="sheet">
+                    <div class="sheet-handle"></div>
+                    <div style="text-align:center;margin-bottom:12px;">
+                        <div style="font-size:11px;color:#9CA3AF;margin-bottom:4px;">NPR</div>
+                        <div style="font-size:36px;font-weight:700;color:#1A1C1E;font-variant-numeric:tabular-nums;">
+                            0.00</div>
+                        <div
+                            style="font-size:11px;color:#9CA3AF;margin-top:6px;background:#F0F2F5;display:inline-block;padding:3px 10px;border-radius:99px;">
+                            Today, Apr 4</div>
+                    </div>
+                    <div
+                        style="font-size:9px;font-weight:600;color:#9CA3AF;letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;">
+                        Category Bucket</div>
+                    <div class="chips">
+                        <div class="chip sel">Core Living</div>
+                        <div class="chip">Dates</div>
+                        <div class="chip">Fun</div>
+                        <div class="chip">Savings</div>
+                    </div>
+                    <div
+                        style="font-size:9px;font-weight:600;color:#9CA3AF;letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;">
+                        Remarks</div>
+                    <div
+                        style="border:1px solid #E2E8F0;border-radius:8px;padding:10px 12px;font-size:13px;color:#9CA3AF;margin-bottom:12px;">
+                        #fun coffee with friends</div>
+                    <div class="btn-primary">Save Transaction →</div>
+                </div>
+            </div>
+
+            <div class="nav">
+                <div class="nav-item" onclick="show('pulse')">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                        <circle cx="9" cy="9" r="7.5" stroke="#16A34A" stroke-width="1.5" />
+                        <circle cx="9" cy="9" r="3" fill="#16A34A" />
+                    </svg>
+                    <span class="nav-lbl act" id="nl-pulse">Pulse</span>
+                </div>
+                <div class="nav-item" onclick="show('ledger')">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                        <rect x="2" y="2" width="14" height="14" rx="2" stroke="#9CA3AF" stroke-width="1.5" />
+                        <path d="M5 6h8M5 9h8M5 12h5" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" />
+                    </svg>
+                    <span class="nav-lbl" id="nl-ledger">Ledger</span>
+                </div>
+                <div class="fab" onclick="show('manual')">
+                    <svg viewBox="0 0 20 20" fill="none">
+                        <path d="M10 4v12M4 10h12" stroke="white" stroke-width="2" stroke-linecap="round" />
+                    </svg>
+                </div>
+                <div class="nav-item" onclick="show('vault')">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                        <rect x="3" y="7" width="12" height="9" rx="1.5" stroke="#9CA3AF" stroke-width="1.5" />
+                        <path d="M6 7V5a3 3 0 016 0v2" stroke="#9CA3AF" stroke-width="1.5" />
+                    </svg>
+                    <span class="nav-lbl" id="nl-vault">Vault</span>
+                </div>
+                <div class="nav-item">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                        <circle cx="9" cy="6" r="3" stroke="#9CA3AF" stroke-width="1.5" />
+                        <path d="M3 15c0-3.314 2.686-6 6-6s6 2.686 6 6" stroke="#9CA3AF" stroke-width="1.5"
+                            stroke-linecap="round" />
+                    </svg>
+                    <span class="nav-lbl">Settings</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const screens = ['pulse', 'ledger', 'vault', 'cat', 'manual'];
+    function show(name) {
+        screens.forEach(s => {
+            const el = document.getElementById('screen-' + s);
+            if (el) el.style.display = s === name ? 'block' : 'none';
+        });
+        document.getElementById('sheet-cat').style.display = 'none';
+        document.getElementById('sheet-manual').style.display = 'none';
+        if (name === 'cat') document.getElementById('sheet-cat').style.display = 'flex';
+        if (name === 'manual') document.getElementById('sheet-manual').style.display = 'flex';
+        ['pulse', 'ledger', 'vault'].forEach(n => {
+            const lbl = document.getElementById('nl-' + n);
+            if (lbl) lbl.className = 'nav-lbl' + (n === name ? ' act' : '');
+        });
+        ['pulse', 'ledger', 'vault', 'cat', 'manual'].forEach(b => {
+            const btn = document.getElementById('btn-' + b);
+            if (!btn) return;
+            if (b === name) { btn.style.background = '#DCFCE7'; btn.style.borderColor = '#16A34A'; btn.style.color = '#15803D'; btn.style.fontWeight = '500'; }
+            else { btn.style.background = '#fff'; btn.style.borderColor = '#E2E8F0'; btn.style.color = '#6B7280'; btn.style.fontWeight = '400'; }
+        });
+    }
+    function setRing(state) {
+        const green = document.getElementById('arc-green');
+        const amber = document.getElementById('arc-amber');
+        const amt = document.getElementById('ring-amt');
+        const sub = document.getElementById('ring-sub');
+        const sub2 = document.getElementById('ring-sub2');
+        const toast = document.getElementById('amber-toast');
+        show('pulse');
+        if (state === 'normal') {
+            green.setAttribute('stroke-dashoffset', '325'); green.setAttribute('stroke', '#16A34A');
+            amber.style.display = 'none'; amt.textContent = '42,500'; amt.className = 'ring-amt';
+            sub.textContent = '2.1 weeks left · NPR 8,333/week'; sub2.textContent = ''; toast.style.display = 'none';
+        } else if (state === 'amber') {
+            green.setAttribute('stroke-dashoffset', '325'); green.setAttribute('stroke', '#16A34A');
+            amber.style.display = 'block'; amber.setAttribute('stroke-dasharray', '60 405'); amber.setAttribute('stroke-dashoffset', '265');
+            amt.textContent = '35,000'; amt.className = 'ring-amt';
+            sub.textContent = '2.1 weeks left · NPR 6,944/week'; sub2.textContent = '2 uncategorized — tap amber'; toast.style.display = 'flex';
+        } else if (state === 'over') {
+            green.setAttribute('stroke-dashoffset', '0'); green.setAttribute('stroke', '#DC2626');
+            amber.style.display = 'none'; amt.textContent = '−5,200'; amt.className = 'ring-amt red';
+            sub.textContent = 'Overspent · carries to next month'; sub2.textContent = ''; toast.style.display = 'none';
+        }
+    }
+    function selChip(el) { document.querySelectorAll('.chip').forEach(c => c.classList.remove('sel')); el.classList.add('sel'); }
+    function confirmCat() { document.getElementById('sheet-cat').style.display = 'none'; show('pulse'); setRing('normal'); }
+    function closeCat() { document.getElementById('sheet-cat').style.display = 'none'; show('pulse'); }
+</script>
