@@ -3,6 +3,13 @@ import { eq } from 'drizzle-orm'
 import { db } from '@/db/client'
 import { playbook } from '@/db/schema'
 
+export interface NudgeToggles {
+  budgetBreach: boolean
+  savingsReminder: boolean
+  efFloorWarning: boolean
+  recurringDraft: boolean
+}
+
 interface PlaybookState {
   userName: string | null
   monthlyIncome: number
@@ -11,6 +18,8 @@ interface PlaybookState {
   efFloor: number
   isOnboarded: boolean
   lastChecklistMonth: string | null
+  nudgeToggles: NudgeToggles
+  lastNotificationDate: string | null
   isLoaded: boolean
   loadPlaybook: () => Promise<void>
   updatePlaybook: (patch: Partial<Omit<PlaybookState, 'isLoaded' | 'loadPlaybook' | 'updatePlaybook'>>) => Promise<void>
@@ -25,6 +34,13 @@ export const usePlaybookStore = create<PlaybookState>((set, get) => ({
   efFloor: 300000,
   isOnboarded: false,
   lastChecklistMonth: null,
+  nudgeToggles: {
+    budgetBreach: true,
+    savingsReminder: true,
+    efFloorWarning: true,
+    recurringDraft: true,
+  },
+  lastNotificationDate: null,
   isLoaded: false,
 
   loadPlaybook: async () => {

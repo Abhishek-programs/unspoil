@@ -1,6 +1,6 @@
-# SpendSense — Android Overlay Module Implementation Prompt
+# SpendSense — Android Overlay (V2)
 
-> **Usage:** Copy this entire file as your prompt to any LLM. It contains full context, file structure, and a precise task definition. No additional context needed.
+> Self-contained LLM prompt for the bubble overlay feature. For project context and rules see [AGENTS.md](../AGENTS.md). Copy this file as the prompt when starting overlay work.
 
 ---
 

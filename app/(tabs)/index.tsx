@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { ScrollView, View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { colors } from '@/constants/colors'
@@ -8,7 +8,7 @@ import { LivingSection } from '@/components/home/LivingSection'
 import { FutureSection } from '@/components/home/FutureSection'
 import { NetWorthCard } from '@/components/home/NetWorthCard'
 import { FlaggedTransactionPrompt } from '@/components/flagged/FlaggedTransactionPrompt'
-import { MonthStartChecklist } from '@/components/home/MonthStartChecklist'
+import { MonthStartChecklist, type ChecklistItem } from '@/components/home/MonthStartChecklist'
 import { usePlaybookStore } from '@/store/playbook'
 import { useTransactionsStore, INCOME_BUCKET_ID } from '@/store/transactions'
 
@@ -21,12 +21,12 @@ function getGreeting(): string {
 
 export default function HomeScreen() {
   const { transactions } = useTransactionsStore()
-  const { 
-    userName, 
-    monthStartDay, 
-    monthlyIncome, 
-    lastChecklistMonth, 
-    updatePlaybook 
+  const {
+    userName,
+    monthStartDay,
+    monthlyIncome,
+    lastChecklistMonth,
+    updatePlaybook
   } = usePlaybookStore()
   const {
     totalIncome,
@@ -54,10 +54,23 @@ export default function HomeScreen() {
   const [promptVisible, setPromptVisible] = useState(false)
   const [checklistVisible, setChecklistVisible] = useState(false)
 
-  // Build checklist items dynamically from savings/investment buckets
-  const buildChecklistItems = () => {
-    const items = [
-      { id: 'income', label: 'Confirm Salary Received', amount: monthlyIncome, bucketId: 'income', completed: false },
+  const flagged = transactions.filter(t => t.isFlagged)
+
+  const currentMonthKey = new Date().toISOString().slice(0, 7)
+
+  // Determine which checklist items are already completed this month
+  // by checking if matching transactions exist
+  const hasSalaryThisMonth = transactions.some(t => t.remarks === '__salary__' && t.type === 'income')
+
+  const checklistItems: ChecklistItem[] = useMemo(() => {
+    const items: ChecklistItem[] = [
+      {
+        id: 'income',
+        label: 'Confirm Salary Received',
+        amount: monthlyIncome,
+        bucketId: INCOME_BUCKET_ID,
+        completed: hasSalaryThisMonth,
+      },
     ]
     savingsBuckets.forEach(b => {
       items.push({
@@ -65,59 +78,61 @@ export default function HomeScreen() {
         label: b.name,
         amount: b.monthlyAmount,
         bucketId: b.id,
-        completed: false,
+        completed: confirmedSavingIds.has(b.id),
       })
     })
     return items
-  }
+  }, [monthlyIncome, savingsBuckets, hasSalaryThisMonth, confirmedSavingIds])
 
-  const [checklistItems, setChecklistItems] = useState(buildChecklistItems)
+  const checklistAllDone = checklistItems.every(i => i.completed)
+  const checklistPending = lastChecklistMonth !== currentMonthKey && !checklistAllDone
 
-  const flagged = transactions.filter(t => t.isFlagged)
-
-  const currentMonthKey = new Date().toISOString().slice(0, 7) // YYYY-MM
-  
+  // Show checklist on first open if month hasn't been completed
   useEffect(() => {
-    if (lastChecklistMonth !== currentMonthKey) {
+    if (lastChecklistMonth !== currentMonthKey && !checklistAllDone) {
       setChecklistVisible(true)
     }
   }, [lastChecklistMonth, currentMonthKey])
 
-  const handleCompleteChecklist = async (completedItems: any[]) => {
-    // Use the month start date (respects user's monthStartDay setting)
+  // When all items are done, mark the month as complete
+  useEffect(() => {
+    if (checklistAllDone && lastChecklistMonth !== currentMonthKey) {
+      updatePlaybook({ lastChecklistMonth: currentMonthKey })
+    }
+  }, [checklistAllDone, currentMonthKey, lastChecklistMonth])
+
+  const handleToggleChecklistItem = async (id: string) => {
     const txnDate = monthStart.toISOString()
 
-    for (const item of completedItems) {
-      if (item.id === 'income') {
-        await addTransaction({
-          type: 'income',
-          amount: item.amount || monthlyIncome,
-          merchant: 'Salary',
-          bucketId: INCOME_BUCKET_ID,
-          date: txnDate,
-          source: 'manual',
-          remarks: '__salary__',
-          parsedTxnId: null,
-          isFlagged: false,
-          isRecurringDraft: false,
-        })
-      } else {
-        await addTransaction({
-          type: 'expense',
-          amount: item.amount,
-          merchant: item.label,
-          bucketId: item.bucketId,
-          date: txnDate,
-          source: 'manual',
-          remarks: '__savings_confirm__',
-          parsedTxnId: null,
-          isFlagged: false,
-          isRecurringDraft: false,
-        })
-      }
+    if (id === 'income') {
+      await addTransaction({
+        type: 'income',
+        amount: monthlyIncome,
+        merchant: 'Salary',
+        bucketId: INCOME_BUCKET_ID,
+        date: txnDate,
+        source: 'manual',
+        remarks: '__salary__',
+        parsedTxnId: null,
+        isFlagged: false,
+        isRecurringDraft: false,
+      })
+    } else {
+      const bucket = savingsBuckets.find(b => b.id === id)
+      if (!bucket) return
+      await addTransaction({
+        type: 'expense',
+        amount: bucket.monthlyAmount,
+        merchant: bucket.name,
+        bucketId: bucket.id,
+        date: txnDate,
+        source: 'manual',
+        remarks: '__savings_confirm__',
+        parsedTxnId: null,
+        isFlagged: false,
+        isRecurringDraft: false,
+      })
     }
-    await updatePlaybook({ lastChecklistMonth: currentMonthKey })
-    setChecklistVisible(false)
   }
 
   const handleConfirmSavings = async (bucketId: string) => {
@@ -141,7 +156,7 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header (outside scroll so it stays fixed-position at top) */}
+      {/* Header */}
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>
@@ -158,9 +173,27 @@ export default function HomeScreen() {
         contentContainerStyle={styles.scrollContent}
       >
 
+        {/* Checklist Pending Banner */}
+        {checklistPending && !checklistVisible && (
+          <TouchableOpacity
+            style={styles.checklistBanner}
+            onPress={() => setChecklistVisible(true)}
+            activeOpacity={0.8}
+          >
+            <View style={styles.checklistBannerIcon}>
+              <Ionicons name="calendar-outline" size={18} color={colors.green} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.checklistBannerTitle}>Month checklist pending</Text>
+              <Text style={styles.checklistBannerSub}>Tap to confirm your monthly transfers</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+          </TouchableOpacity>
+        )}
+
         {/* Flagged Banner */}
         {flagged.length > 0 && (
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.flaggedBanner}
             onPress={() => setPromptVisible(true)}
             activeOpacity={0.8}
@@ -213,11 +246,10 @@ export default function HomeScreen() {
           onConfirm={handleConfirmSavings}
         />
 
-        {/* Bottom spacer for tab bar */}
         <View style={{ height: 80 }} />
       </ScrollView>
 
-      <FlaggedTransactionPrompt 
+      <FlaggedTransactionPrompt
         visible={promptVisible}
         flaggedTransactions={flagged}
         onClose={() => setPromptVisible(false)}
@@ -226,10 +258,7 @@ export default function HomeScreen() {
       <MonthStartChecklist
         visible={checklistVisible}
         items={checklistItems}
-        onCompleteItem={(id) => {
-          setChecklistItems(prev => prev.map(item => item.id === id ? { ...item, completed: !item.completed } : item))
-        }}
-        onConfirm={handleCompleteChecklist}
+        onToggleItem={handleToggleChecklistItem}
         onDismiss={() => setChecklistVisible(false)}
       />
     </View>
@@ -243,6 +272,61 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 16,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingTop: 64,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
+  },
+  greeting: {
+    fontSize: 22,
+    fontFamily: 'Inter_700Bold',
+    color: colors.textPrimary,
+  },
+  notifButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderCurve: 'continuous',
+  },
+  checklistBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.greenFill,
+    borderRadius: 16,
+    padding: 12,
+    marginTop: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: colors.green + '30',
+    borderCurve: 'continuous',
+  },
+  checklistBannerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  checklistBannerTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter_700Bold',
+    color: colors.textPrimary,
+  },
+  checklistBannerSub: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: colors.textSecond,
   },
   flaggedBanner: {
     flexDirection: 'row',
@@ -274,29 +358,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter_400Regular',
     color: colors.textSecond,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    paddingTop: 64,
-    paddingBottom: 12,
-    paddingHorizontal: 16,
-  },
-  greeting: {
-    fontSize: 22,
-    fontFamily: 'Inter_700Bold',
-    color: colors.textPrimary,
-  },
-  notifButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderCurve: 'continuous',
   },
 })

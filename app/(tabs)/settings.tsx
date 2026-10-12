@@ -268,13 +268,8 @@ export default function SettingsScreen() {
   const [newMerchant, setNewMerchant] = useState('')
   const [newMerchantBucketId, setNewMerchantBucketId] = useState(activeBuckets[0]?.id ?? '')
 
-  // Notification toggle state (local only for V1)
-  const [nudges, setNudges] = useState({
-    budgetBreach: true,
-    savingsReminder: true,
-    efFloorWarning: true,
-    recurringDraft: true,
-  })
+  // Notification toggles — synced to playbook store
+  const [nudges, setNudges] = useState(pb.nudgeToggles)
 
   const expandBucket = (b: Bucket) => {
     if (expandedBucketId === b.id) {
@@ -800,7 +795,11 @@ export default function SettingsScreen() {
                 <Text style={styles.editableLabel}>{item.label}</Text>
                 <Switch
                   value={nudges[item.key]}
-                  onValueChange={v => setNudges(n => ({ ...n, [item.key]: v }))}
+                  onValueChange={v => {
+                    const updated = { ...nudges, [item.key]: v }
+                    setNudges(updated)
+                    pb.updatePlaybook({ nudgeToggles: updated })
+                  }}
                   trackColor={{ false: colors.border, true: colors.greenFill }}
                   thumbColor={nudges[item.key] ? colors.green : '#f4f3f4'}
                 />
