@@ -57,7 +57,7 @@ Nav bar uses glassmorphism — white/translucent background, blurred, floated ab
 **Scrollable sections (top to bottom):**
 
 ### Header
-- Greeting: "Good morning, Abhishek"
+- Greeting: "Good morning, Abhishek" (example; uses playbook `userName`)
 - Current month label
 
 ### Flagged Transaction Banner (conditional)

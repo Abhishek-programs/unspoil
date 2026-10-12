@@ -1,9 +1,9 @@
 ---
-name: spendsense
-description: SpendSense project conventions — Nepal personal finance app on Expo SDK 54, Expo Router, NativeWind, Zustand, Drizzle. Use when working in this repo or when generic Expo advice conflicts with project rules.
+name: unspoil
+description: UnSpoil project conventions — Nepal personal finance app on Expo SDK 54, Expo Router, NativeWind, Zustand, Drizzle. Use when working in this repo or when generic Expo advice conflicts with project rules.
 ---
 
-# SpendSense
+# UnSpoil
 
 Read **[AGENTS.md](../../../AGENTS.md)** before making changes. It is the single source of truth.
 
@@ -15,7 +15,7 @@ Read **[AGENTS.md](../../../AGENTS.md)** before making changes. It is the single
 
 ## Hard rules (summary)
 
-- NPR via `lib/format.ts`. Colors in `constants/colors.ts`. Light theme only.
+- Currency via `lib/format.ts` (playbook currency, not hardcoded NPR). Colors in `constants/colors.ts`. Light theme only.
 - Categorization is parked (user picks a bucket). Restore: `docs/superpowers/specs/2026-09-29-keyword-and-sureshot-restore.md`.
 - EF target = Core Living × `EF_MULTIPLIER` — not income.
 - Safe to spend unlocks after salary confirmed this month (income on `_salary`).

@@ -1,4 +1,4 @@
-# SpendSense
+# UnSpoil
 
 Instructions for Claude Code in this repo.
 

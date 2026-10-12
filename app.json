@@ -2,14 +2,11 @@
   "expo": {
     "name": "UnSpoil",
     "slug": "unspoil",
-    "owner": "abhishek-programs",
+    "owner": "abhishekprograms",
     "scheme": "unspoil",
     "version": "1.0.0",
     "runtimeVersion": {
       "policy": "appVersion"
-    },
-    "updates": {
-      "url": "https://u.expo.dev/9aee28c7-b0d7-4d65-95e1-a8763d6362bf"
     },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -31,9 +28,6 @@
       },
       "softwareKeyboardLayoutMode": "resize",
       "edgeToEdgeEnabled": true,
-      "androidStatusBar": {
-        "barStyle": "dark-content"
-      },
       "predictiveBackGestureEnabled": false,
       "package": "app.unspoil"
     },
@@ -58,8 +52,11 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "9aee28c7-b0d7-4d65-95e1-a8763d6362bf"
+        "projectId": "17415435-3989-453e-99ce-036903973469"
       }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/17415435-3989-453e-99ce-036903973469"
     }
   }
 }

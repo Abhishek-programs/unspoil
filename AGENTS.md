@@ -1,6 +1,6 @@
-# SpendSense
+# UnSpoil
 
-Personal finance app for Android. React Native + Expo. NPR, Nepal-focused. **No backend, no auth, no cloud sync in V1.**
+Personal finance app for Android. React Native + Expo. Multi-currency (NPR-first), Nepal-focused. **No backend, no auth, no cloud sync in V1.**
 
 ## Doc map (read in this order)
 
@@ -134,13 +134,13 @@ Vendor Expo skills install to `.agents/skills/` (gitignored). Restore after clon
 npx skills experimental_install
 ```
 
-Pinned list: `skills-lock.json`. `.claude/skills/` has thin pointers to `.agents/skills/` plus the committed **`spendsense`** project skill.
+Pinned list: `skills-lock.json`. `.claude/skills/` has thin pointers to `.agents/skills/` plus the committed **`unspoil`** project skill.
 
 Cursor and Claude both discover skills under `.claude/skills/` and `.agents/skills/`.
 
 | Task | Skill |
 |---|---|
-| Project rules | `spendsense` |
+| Project rules | `unspoil` |
 | UI / Router / animations | `building-native-ui` |
 | NativeWind / Tailwind | `expo-tailwind-setup` |
 | Dev client builds | `expo-dev-client` |

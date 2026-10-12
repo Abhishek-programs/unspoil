@@ -53,7 +53,7 @@ export type ClaudeSnapshotInput = {
 }
 
 export function snapshotFilename(now = new Date()): string {
-  return `spendsense-${toLocalDateKey(now)}.md`
+  return `unspoil-${toLocalDateKey(now)}.md`
 }
 
 function inRange(iso: string, start: Date, end: Date): boolean {
