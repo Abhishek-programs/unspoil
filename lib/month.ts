@@ -17,3 +17,9 @@ export function getMonthRange(monthStartDay: number): { start: Date; end: Date }
   const end = new Date(start.getFullYear(), start.getMonth() + 1, monthStartDay - 1, 23, 59, 59, 999)
   return { start, end }
 }
+
+export function getDaysRemaining(monthStartDay: number): number {
+  const { end } = getMonthRange(monthStartDay)
+  const now = new Date()
+  return Math.max(0, Math.ceil((end.getTime() - now.getTime()) / 86400000))
+}

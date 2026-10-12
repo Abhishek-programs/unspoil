@@ -18,7 +18,7 @@ export async function seedDefaults() {
     sortOrder: i,
     isActive: true,
   }))
-  await db.insert(buckets).values(bucketInserts)
+  await db.insert(buckets).values(bucketInserts).onConflictDoNothing()
 
   // Insert default playbook row
   const fallbackBucket = bucketInserts.find(b => b.name === 'Core Living')
@@ -29,7 +29,7 @@ export async function seedDefaults() {
     fallbackBucketId: fallbackBucket?.id ?? null,
     efFloor: DEFAULT_EF_FLOOR,
     isOnboarded: false,
-  })
+  }).onConflictDoNothing()
 
   // Insert default keyword mappings
   const keywordInserts = DEFAULT_KEYWORD_MAPPINGS.map(km => {
@@ -38,6 +38,6 @@ export async function seedDefaults() {
   }).filter(Boolean) as { keyword: string; bucketId: string }[]
 
   if (keywordInserts.length > 0) {
-    await db.insert(keywordMappings).values(keywordInserts)
+    await db.insert(keywordMappings).values(keywordInserts).onConflictDoNothing()
   }
 }

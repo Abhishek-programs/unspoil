@@ -10,17 +10,17 @@ export function formatNPR(amount: number): string {
   return grouped + ',' + last3
 }
 
-// Compact format: 150000 → "1.5L", 1000 → "1K"
+// Compact format: 150000 → "1.50L", 1000 → "1.00K"
 export function formatNPRShort(amount: number): string {
   if (amount >= 100000) {
     const lakhs = amount / 100000
-    return (lakhs % 1 === 0 ? lakhs.toFixed(0) : lakhs.toFixed(1)) + 'L'
+    return lakhs.toFixed(2) + 'L'
   }
   if (amount >= 1000) {
     const k = amount / 1000
-    return (k % 1 === 0 ? k.toFixed(0) : k.toFixed(1)) + 'K'
+    return k.toFixed(2) + 'K'
   }
-  return Math.round(amount).toString()
+  return amount.toFixed(2)
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']

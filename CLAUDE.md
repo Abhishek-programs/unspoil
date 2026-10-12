@@ -113,7 +113,7 @@ export const colors = {
 
 ### Auto-categorization (3-step, priority order)
 
-1. **Remarks prefix** — remark starts with `#keyword`. Map keyword → bucket. Case-insensitive. Always wins.
+1. **Remarks suffix** — remark ends with `keyword -` (e.g. "lunch core -"). Map keyword → bucket. Case-insensitive. Always wins.
 2. **Sure-shot merchant list** — unambiguous merchants (NTC, Ncell → Core Living). User adds more in Settings.
 3. **Fallback** — save to fallback bucket (default: Core Living), set `is_flagged = true`. Next app open: `FlaggedTransactionPrompt` surfaces one at a time.
 

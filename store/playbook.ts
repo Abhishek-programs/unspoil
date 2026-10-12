@@ -4,6 +4,7 @@ import { db } from '@/db/client'
 import { playbook } from '@/db/schema'
 
 interface PlaybookState {
+  userName: string | null
   monthlyIncome: number
   monthStartDay: number
   fallbackBucketId: string | null
@@ -16,6 +17,7 @@ interface PlaybookState {
 }
 
 export const usePlaybookStore = create<PlaybookState>((set, get) => ({
+  userName: null,
   monthlyIncome: 125000,
   monthStartDay: 1,
   fallbackBucketId: null,
@@ -28,6 +30,7 @@ export const usePlaybookStore = create<PlaybookState>((set, get) => ({
     if (rows.length > 0) {
       const row = rows[0]
       set({
+        userName: row.userName ?? null,
         monthlyIncome: row.monthlyIncome,
         monthStartDay: row.monthStartDay,
         fallbackBucketId: row.fallbackBucketId ?? null,
@@ -46,12 +49,23 @@ export const usePlaybookStore = create<PlaybookState>((set, get) => ({
     const rows = await db.select().from(playbook).limit(1)
     if (rows.length > 0) {
       await db.update(playbook).set({
+        userName: state.userName,
         monthlyIncome: state.monthlyIncome,
         monthStartDay: state.monthStartDay,
         fallbackBucketId: state.fallbackBucketId,
         efFloor: state.efFloor,
         isOnboarded: state.isOnboarded,
       }).where(eq(playbook.id, rows[0].id))
+    } else {
+      // Create record if not exists (should already happen in seedDefaults, but good to have)
+      await db.insert(playbook).values({
+        userName: state.userName,
+        monthlyIncome: state.monthlyIncome,
+        monthStartDay: state.monthStartDay,
+        fallbackBucketId: state.fallbackBucketId,
+        efFloor: state.efFloor,
+        isOnboarded: state.isOnboarded,
+      })
     }
   },
 

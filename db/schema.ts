@@ -2,6 +2,7 @@ import { int, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
 export const playbook = sqliteTable('playbook', {
   id: integer('id').primaryKey(),
+  userName: text('user_name'),
   monthlyIncome: real('monthly_income').notNull().default(125000),
   monthStartDay: integer('month_start_day').notNull().default(1),
   fallbackBucketId: text('fallback_bucket_id'),
@@ -34,6 +35,7 @@ export const sureShotMerchants = sqliteTable('sure_shot_merchants', {
 
 export const transactions = sqliteTable('transactions', {
   id: text('id').primaryKey(),
+  type: text('type', { enum: ['expense', 'income'] }).notNull().default('expense'),
   amount: real('amount').notNull(),
   merchant: text('merchant'),
   bucketId: text('bucket_id').notNull(),
