@@ -21,6 +21,7 @@ import { useTransactionsStore } from '@/store/transactions'
 import { useGoalsStore } from '@/store/goals'
 import { formatNPR } from '@/lib/format'
 import { getMonthRange } from '@/lib/month'
+import { EF_BUCKET_ID } from '@/constants/defaults'
 import { db } from '@/db/client'
 import {
   transactions,
@@ -541,9 +542,16 @@ export default function SettingsScreen() {
                   </View>
                   <TypeBadge type={b.type} />
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => confirmDeactivate(b)} hitSlop={8} style={{ marginLeft: 12 }}>
-                  <Ionicons name="close-circle" size={20} color={colors.textMuted} />
-                </TouchableOpacity>
+                {b.id === EF_BUCKET_ID ? (
+                  <View style={{ marginLeft: 12, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.greenFill, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+                    <Ionicons name="lock-closed" size={12} color={colors.green} />
+                    <Text style={{ fontSize: 11, fontFamily: 'Inter_600SemiBold', color: colors.green }}>Protected</Text>
+                  </View>
+                ) : (
+                  <TouchableOpacity onPress={() => confirmDeactivate(b)} hitSlop={8} style={{ marginLeft: 12 }}>
+                    <Ionicons name="close-circle" size={20} color={colors.textMuted} />
+                  </TouchableOpacity>
+                )}
               </View>
 
               {expandedBucketId === b.id && (

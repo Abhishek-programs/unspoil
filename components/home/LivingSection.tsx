@@ -34,7 +34,11 @@ export function LivingSection({ buckets, spentByBucket }: LivingSectionProps) {
                 </Text>
               </View>
               <View style={styles.barWrap}>
-                <ProgressBar value={ratio} height={4} />
+                {spent === 0 ? (
+                  <Text style={styles.noTxnHint}>No transactions yet this month</Text>
+                ) : (
+                  <ProgressBar value={ratio} height={4} />
+                )}
               </View>
             </View>
           )
@@ -113,6 +117,12 @@ const styles = StyleSheet.create({
   },
   barWrap: {
     paddingBottom: 14,
+  },
+  noTxnHint: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: colors.textMuted,
+    fontStyle: 'italic',
   },
   empty: {
     paddingVertical: 16,

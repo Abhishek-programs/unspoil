@@ -22,7 +22,7 @@ export const usePlaybookStore = create<PlaybookState>((set, get) => ({
   monthlyIncome: 125000,
   monthStartDay: 1,
   fallbackBucketId: null,
-  efFloor: 150000,
+  efFloor: 300000,
   isOnboarded: false,
   lastChecklistMonth: null,
   isLoaded: false,

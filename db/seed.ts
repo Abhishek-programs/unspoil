@@ -1,15 +1,15 @@
 import { db } from './client'
 import { buckets, keywordMappings, playbook } from './schema'
-import { DEFAULT_BUCKETS, DEFAULT_INCOME, DEFAULT_EF_FLOOR, DEFAULT_KEYWORD_MAPPINGS } from '@/constants/defaults'
+import { DEFAULT_BUCKETS, DEFAULT_INCOME, DEFAULT_EF_FLOOR, DEFAULT_KEYWORD_MAPPINGS, EF_BUCKET_ID } from '@/constants/defaults'
 
 // Called once after first migration. Seeds default playbook and buckets.
 export async function seedDefaults() {
   const existing = await db.select().from(playbook).limit(1)
   if (existing.length > 0) return // Already seeded
 
-  // Insert default buckets
+  // Insert default buckets — Emergency Fund gets a stable ID
   const bucketInserts = DEFAULT_BUCKETS.map((b, i) => ({
-    id: `bucket_${i + 1}`,
+    id: b.name === 'Emergency Fund' ? EF_BUCKET_ID : `bucket_${i + 1}`,
     name: b.name,
     type: b.type,
     monthlyAmount: b.monthlyAmount,

@@ -1,99 +1,159 @@
-import { View, Text, StyleSheet, ScrollView } from 'react-native'
-import { BarChart, PieChart } from 'react-native-gifted-charts'
+import { useState, useEffect } from 'react'
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native'
+import { BarChart } from 'react-native-gifted-charts'
 import { colors } from '@/constants/colors'
 import { Ionicons } from '@expo/vector-icons'
 import { formatNPRShort } from '@/lib/format'
+import { getMonthlySpendHistory, type MonthlySpend } from '@/lib/chart-data'
 
-interface ChartsViewProps {
-  spendingByBucket: { label: string; value: number; color: string }[]
-  savingsByBucket?: { label: string; value: number; target: number; color: string; confirmed: boolean }[]
-  goals?: { name: string; current: number; target: number; projectedDate?: string }[]
+interface BucketSpend {
+  label: string
+  value: number
+  limit: number
+  color: string
 }
 
-export function ChartsView({ 
-  spendingByBucket, 
+interface ChartsViewProps {
+  spendingByBucket: BucketSpend[]
+  savingsByBucket?: { label: string; value: number; target: number; color: string; confirmed: boolean }[]
+  goals?: { name: string; current: number; target: number; projectedDate?: string }[]
+  period: 'month' | 'year'
+}
+
+function getThresholdColor(spent: number, limit: number): string {
+  if (limit <= 0) return colors.green
+  const ratio = spent / limit
+  if (ratio >= 1) return colors.red
+  if (ratio >= 0.8) return colors.amber
+  return colors.green
+}
+
+export function ChartsView({
+  spendingByBucket,
   savingsByBucket = [],
-  goals = []
+  goals = [],
+  period,
 }: ChartsViewProps) {
-  if (spendingByBucket.length === 0 && savingsByBucket.length === 0) {
+  const [trendData, setTrendData] = useState<MonthlySpend[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const months = period === 'year' ? 12 : 6
+    setLoading(true)
+    getMonthlySpendHistory(months)
+      .then(setTrendData)
+      .finally(() => setLoading(false))
+  }, [period])
+
+  const hasData = spendingByBucket.length > 0 || savingsByBucket.length > 0
+  const hasTrendData = trendData.some(m => m.total > 0)
+  const monthsWithData = trendData.filter(m => m.total > 0).length
+
+  // Empty states
+  if (!hasData && !hasTrendData) {
     return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyText}>No financial data yet this month</Text>
+      <View style={styles.emptyFull}>
+        <Ionicons name="add-circle-outline" size={40} color={colors.divider} />
+        <Text style={styles.emptyTitle}>No transactions yet</Text>
+        <Text style={styles.emptySubtext}>Add your first transaction using the + button below</Text>
       </View>
     )
   }
 
-  const barData = spendingByBucket.map(item => ({
+  // Spending by bucket — horizontal bars with threshold colors
+  const horizontalBarData = spendingByBucket.map(item => ({
     value: item.value,
     label: item.label,
-    frontColor: item.color,
+    frontColor: getThresholdColor(item.value, item.limit),
     topLabelComponent: () => (
-      <Text style={styles.barLabel}>{Math.round(item.value / 1000)}K</Text>
+      <Text style={styles.barTopLabel}>{formatNPRShort(item.value)}</Text>
     ),
   }))
 
-  const pieData = spendingByBucket.map(item => ({
-    value: item.value,
-    color: item.color,
-    text: item.label[0],
+  // Trend bar chart
+  const trendBarData = trendData.map(m => ({
+    value: m.total,
+    label: m.month,
+    frontColor: m.isCurrent ? colors.green : colors.green + '40',
+    topLabelComponent: () =>
+      m.total > 0 ? (
+        <Text style={styles.barTopLabel}>{formatNPRShort(m.total)}</Text>
+      ) : null,
   }))
 
-  const totalSpent = spendingByBucket.reduce((sum, b) => sum + b.value, 0)
-
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Spending Breakdown */}
-      <View style={styles.section}>
-        <Text style={styles.title}>Spending Distribution</Text>
-        <View style={styles.chartWrapper}>
-          <View style={styles.donutRow}>
-            <PieChart
-              data={pieData}
-              donut
-              radius={70}
-              innerRadius={50}
-              innerCircleColor={colors.surface}
-              centerLabelComponent={() => (
-                <View style={{ alignItems: 'center' }}>
-                  <Text style={styles.donutTotalLabel}>Total</Text>
-                  <Text style={styles.donutTotalValue}>{formatNPRShort(totalSpent)}</Text>
+    <View style={styles.container}>
+      {/* Spending by Bucket */}
+      {spendingByBucket.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.title}>Spending by Bucket</Text>
+          <View style={styles.chartCard}>
+            {spendingByBucket.map(item => {
+              const ratio = item.limit > 0 ? Math.min(item.value / item.limit, 1) : 0
+              const barColor = getThresholdColor(item.value, item.limit)
+              return (
+                <View key={item.label} style={styles.hBarRow}>
+                  <View style={styles.hBarLabelCol}>
+                    <Text style={styles.hBarLabel} numberOfLines={1}>{item.label}</Text>
+                    <Text style={[styles.hBarAmount, { color: barColor }]}>
+                      {formatNPRShort(item.value)} / {formatNPRShort(item.limit)}
+                    </Text>
+                  </View>
+                  <View style={styles.hBarTrack}>
+                    <View
+                      style={[
+                        styles.hBarFill,
+                        { width: `${Math.max(ratio * 100, 2)}%`, backgroundColor: barColor },
+                      ]}
+                    />
+                  </View>
                 </View>
-              )}
-            />
-            <View style={styles.legend}>
-              {spendingByBucket.map(item => (
-                <View key={item.label} style={styles.legendItem}>
-                  <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-                  <Text style={styles.legendLabel}>{item.label}</Text>
-                  <Text style={styles.legendValue}>{Math.round((item.value / totalSpent) * 100)}%</Text>
-                </View>
-              ))}
-            </View>
+              )
+            })}
           </View>
         </View>
-      </View>
+      )}
 
-      {/* Bar Chart */}
+      {/* Trend Chart */}
       <View style={styles.section}>
-        <Text style={styles.title}>Spending by Bucket</Text>
-        <View style={styles.chartWrapper}>
-          <BarChart
-            data={barData}
-            barWidth={32}
-            barBorderTopLeftRadius={6}
-            barBorderTopRightRadius={6}
-            spacing={20}
-            noOfSections={4}
-            yAxisThickness={0}
-            xAxisThickness={1}
-            xAxisColor={colors.border}
-            rulesColor={colors.divider}
-            xAxisLabelTextStyle={styles.xLabel}
-            hideYAxisText
-            isAnimated
-            animationDuration={400}
-          />
-        </View>
+        <Text style={styles.title}>
+          {period === 'year' ? '12-Month Spending Trend' : '6-Month Spending Trend'}
+        </Text>
+        {loading ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="small" color={colors.green} />
+          </View>
+        ) : monthsWithData < (period === 'year' ? 2 : 1) ? (
+          <View style={styles.chartCard}>
+            <View style={styles.emptyChart}>
+              <Ionicons name="bar-chart-outline" size={28} color={colors.divider} />
+              <Text style={styles.emptyChartText}>
+                {period === 'year'
+                  ? 'Need at least 2 months of data for annual view'
+                  : 'Charts will appear once you have a full month of transactions'}
+              </Text>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.chartCard}>
+            <BarChart
+              data={trendBarData}
+              barWidth={period === 'year' ? 18 : 28}
+              barBorderTopLeftRadius={4}
+              barBorderTopRightRadius={4}
+              spacing={period === 'year' ? 10 : 16}
+              noOfSections={4}
+              yAxisThickness={0}
+              xAxisThickness={1}
+              xAxisColor={colors.border}
+              rulesColor={colors.divider}
+              xAxisLabelTextStyle={styles.xLabel}
+              hideYAxisText
+              isAnimated
+              animationDuration={400}
+            />
+          </View>
+        )}
       </View>
 
       {/* Savings Grid */}
@@ -105,10 +165,10 @@ export function ChartsView({
               <View key={item.label} style={styles.savingsCard}>
                 <View style={styles.savingsHeader}>
                   <View style={[styles.savingsIcon, { backgroundColor: item.color + '15' }]}>
-                    <Ionicons 
-                      name={item.confirmed ? "checkmark-circle" : "time-outline"} 
-                      size={16} 
-                      color={item.confirmed ? colors.green : colors.textMuted} 
+                    <Ionicons
+                      name={item.confirmed ? 'checkmark-circle' : 'time-outline'}
+                      size={16}
+                      color={item.confirmed ? colors.green : colors.textMuted}
                     />
                   </View>
                   <Text style={styles.savingsName} numberOfLines={1}>{item.label}</Text>
@@ -118,14 +178,14 @@ export function ChartsView({
                   <Text style={styles.savingsTarget}>/ {formatNPRShort(item.target)}</Text>
                 </View>
                 <View style={styles.miniProgressContainer}>
-                  <View 
+                  <View
                     style={[
-                      styles.miniProgressBar, 
-                      { 
+                      styles.miniProgressBar,
+                      {
                         width: `${Math.min((item.value / item.target) * 100, 100)}%`,
-                        backgroundColor: item.confirmed ? colors.green : colors.textMuted
-                      }
-                    ]} 
+                        backgroundColor: item.confirmed ? colors.green : colors.textMuted,
+                      },
+                    ]}
                   />
                 </View>
               </View>
@@ -149,28 +209,27 @@ export function ChartsView({
                   {formatNPRShort(goal.current)} of {formatNPRShort(goal.target)}
                 </Text>
                 <Text style={styles.goalPercent}>
-                  {Math.round((goal.current / goal.target) * 100)}%
+                  {goal.target > 0 ? Math.round((goal.current / goal.target) * 100) : 0}%
                 </Text>
               </View>
               <View style={styles.goalTrack}>
-                <View 
+                <View
                   style={[
-                    styles.goalFill, 
-                    { width: `${Math.min((goal.current / goal.target) * 100, 100)}%` }
-                  ]} 
+                    styles.goalFill,
+                    { width: `${goal.target > 0 ? Math.min((goal.current / goal.target) * 100, 100) : 0}%` },
+                  ]}
                 />
               </View>
             </View>
           ))}
         </View>
       )}
-    </ScrollView>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     padding: 16,
   },
   section: {
@@ -184,7 +243,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  chartWrapper: {
+  chartCard: {
     backgroundColor: colors.surface,
     borderRadius: 20,
     borderWidth: 1,
@@ -192,48 +251,40 @@ const styles = StyleSheet.create({
     padding: 20,
     borderCurve: 'continuous',
   },
-  donutRow: {
+  // Horizontal bar chart styles
+  hBarRow: {
+    marginBottom: 16,
+  },
+  hBarLabelCol: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 20,
+    marginBottom: 6,
   },
-  donutTotalLabel: {
-    fontSize: 11,
-    fontFamily: 'Inter_500Medium',
-    color: colors.textMuted,
-  },
-  donutTotalValue: {
-    fontSize: 18,
-    fontFamily: 'Inter_700Bold',
-    color: colors.textPrimary,
-  },
-  legend: {
-    flex: 1,
-    gap: 8,
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  legendDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  legendLabel: {
-    flex: 1,
-    fontSize: 13,
-    fontFamily: 'Inter_500Medium',
-    color: colors.textSecond,
-  },
-  legendValue: {
+  hBarLabel: {
     fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
     color: colors.textPrimary,
+    flex: 1,
   },
-  barLabel: {
-    fontSize: 10,
+  hBarAmount: {
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+    fontVariant: ['tabular-nums'],
+  },
+  hBarTrack: {
+    height: 10,
+    backgroundColor: colors.divider,
+    borderRadius: 5,
+    overflow: 'hidden',
+  },
+  hBarFill: {
+    height: '100%',
+    borderRadius: 5,
+  },
+  // Trend / bar chart
+  barTopLabel: {
+    fontSize: 9,
     fontFamily: 'Inter_500Medium',
     color: colors.textSecond,
     marginBottom: 4,
@@ -242,9 +293,51 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: 'Inter_400Regular',
     color: colors.textMuted,
-    width: 60,
+    width: 40,
     textAlign: 'center',
   },
+  loadingBox: {
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 40,
+    alignItems: 'center',
+    borderCurve: 'continuous',
+  },
+  // Empty states
+  emptyFull: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 80,
+    gap: 12,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter_600SemiBold',
+    color: colors.textSecond,
+  },
+  emptySubtext: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: colors.textMuted,
+    textAlign: 'center',
+    maxWidth: 240,
+  },
+  emptyChart: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    gap: 10,
+  },
+  emptyChartText: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: colors.textMuted,
+    textAlign: 'center',
+    maxWidth: 240,
+  },
+  // Savings grid
   savingsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -304,6 +397,7 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 2,
   },
+  // Goals
   goalLine: {
     backgroundColor: colors.surface,
     borderRadius: 16,
@@ -355,16 +449,5 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: colors.green,
     borderRadius: 4,
-  },
-  empty: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 100,
-  },
-  emptyText: {
-    fontSize: 14,
-    fontFamily: 'Inter_400Regular',
-    color: colors.textMuted,
   },
 })

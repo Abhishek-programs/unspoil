@@ -84,15 +84,16 @@ export default function TransactionsScreen() {
   )
   const net = totalIncome - totalSpent
 
-  // Chart data
+  // Chart data — includes limit for threshold coloring
   const spendingByBucket = useMemo(() => {
     return spendingBuckets.map(b => ({
       label: b.name,
       value: transactions
         .filter(t => t.bucketId === b.id && !t.isFlagged && !t.isRecurringDraft && t.type === 'expense')
         .reduce((s, t) => s + t.amount, 0),
+      limit: b.monthlyAmount,
       color: b.color,
-    })).filter(d => d.value > 0)
+    }))
   }, [transactions, spendingBuckets])
 
   const savingsInfo = useMemo(() => {
@@ -253,10 +254,11 @@ export default function TransactionsScreen() {
           contentContainerStyle={{ paddingBottom: 40 }}
           showsVerticalScrollIndicator={false}
         >
-          <ChartsView 
-            spendingByBucket={spendingByBucket} 
+          <ChartsView
+            spendingByBucket={spendingByBucket}
             savingsByBucket={savingsInfo}
             goals={goalsInfo}
+            period={chartPeriod}
           />
         </ScrollView>
       )}

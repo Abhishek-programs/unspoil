@@ -6,12 +6,13 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  Alert,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { colors } from '@/constants/colors'
-import { formatNPR, formatNPRShort, formatDate } from '@/lib/format'
-import { type Goal } from '@/store/goals'
+import { formatNPR, formatNPRShort } from '@/lib/format'
+import { useGoalsStore, type Goal } from '@/store/goals'
 import { projectGoal } from '@/lib/projection'
 import { PieChart } from 'react-native-gifted-charts'
 
@@ -19,10 +20,31 @@ interface GoalDetailSheetProps {
   goal: (Goal & { current: number; color: string }) | null
   visible: boolean
   onClose: () => void
+  onEdit?: (goal: Goal) => void
 }
 
-export function GoalDetailSheet({ goal, visible, onClose }: GoalDetailSheetProps) {
+export function GoalDetailSheet({ goal, visible, onClose, onEdit }: GoalDetailSheetProps) {
+  const { deleteGoal } = useGoalsStore()
+
   if (!goal) return null
+
+  const handleDelete = () => {
+    Alert.alert(
+      'Delete Goal',
+      `Are you sure you want to delete "${goal.name}"? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await deleteGoal(goal.id)
+            onClose()
+          },
+        },
+      ],
+    )
+  }
 
   const percent = Math.min((goal.current / goal.targetAmount) * 100, 100)
   const { projectedDate, monthsRemaining, nudge } = projectGoal({ 
@@ -45,7 +67,7 @@ export function GoalDetailSheet({ goal, visible, onClose }: GoalDetailSheetProps
             <Ionicons name="close" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Goal Details</Text>
-          <TouchableOpacity hitSlop={12}>
+          <TouchableOpacity hitSlop={12} onPress={() => onEdit?.(goal)}>
             <Text style={styles.editLink}>Edit</Text>
           </TouchableOpacity>
         </View>
@@ -128,6 +150,14 @@ export function GoalDetailSheet({ goal, visible, onClose }: GoalDetailSheetProps
                 </View>
               </View>
             </View>
+          </View>
+
+          {/* Delete */}
+          <View style={styles.section}>
+            <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
+              <Ionicons name="trash-outline" size={18} color={colors.red} />
+              <Text style={styles.deleteText}>Delete Goal</Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -306,5 +336,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter_400Regular',
     color: colors.textSecond,
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.red + '30',
+    backgroundColor: colors.red + '08',
+  },
+  deleteText: {
+    fontSize: 15,
+    fontFamily: 'Inter_600SemiBold',
+    color: colors.red,
   },
 })

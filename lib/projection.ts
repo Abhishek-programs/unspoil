@@ -1,4 +1,4 @@
-import { addMonths, format, differenceInMonths } from 'date-fns'
+import { addMonths, format } from 'date-fns'
 
 interface ProjectionResult {
   monthsRemaining: number

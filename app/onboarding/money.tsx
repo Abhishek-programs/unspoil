@@ -9,18 +9,17 @@ import { usePlaybookStore } from '@/store/playbook'
 export default function OnboardingMoneyScreen() {
   const [income, setIncome] = useState('125000')
   const [startDay, setStartDay] = useState('1')
-  const { updatePlaybook, setOnboarded } = usePlaybookStore()
+  const { updatePlaybook } = usePlaybookStore()
 
-  const handleFinish = async () => {
+  const handleNext = async () => {
     const incValue = parseFloat(income) || 125000
     const dayValue = parseInt(startDay) || 1
-    
-    await updatePlaybook({ 
+
+    await updatePlaybook({
       monthlyIncome: incValue,
       monthStartDay: Math.max(1, Math.min(31, dayValue))
     })
-    await setOnboarded()
-    router.replace('/(tabs)')
+    router.push('/onboarding/buckets')
   }
 
   return (
@@ -74,12 +73,12 @@ export default function OnboardingMoneyScreen() {
         <View style={styles.spacer} />
 
         <Animated.View entering={FadeInRight.duration(600).delay(600)}>
-          <TouchableOpacity 
-            style={styles.button} 
-            onPress={handleFinish}
+          <TouchableOpacity
+            style={styles.button}
+            onPress={handleNext}
           >
-            <Text style={styles.buttonText}>Get Started</Text>
-            <Ionicons name="rocket" size={20} color="#fff" />
+            <Text style={styles.buttonText}>Next</Text>
+            <Ionicons name="arrow-forward" size={20} color="#fff" />
           </TouchableOpacity>
         </Animated.View>
       </ScrollView>

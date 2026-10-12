@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { eq } from 'drizzle-orm'
 import { db } from '@/db/client'
 import { buckets, keywordMappings, sureShotMerchants } from '@/db/schema'
+import { EF_BUCKET_ID } from '@/constants/defaults'
 
 export interface Bucket {
   id: string
@@ -79,6 +80,8 @@ export const useBucketsStore = create<BucketsState>((set, get) => ({
   },
 
   deactivateBucket: async (id) => {
+    // Emergency Fund bucket cannot be deactivated
+    if (id === EF_BUCKET_ID) return
     await db.update(buckets).set({ isActive: false }).where(eq(buckets.id, id))
     await get().loadBuckets()
   },

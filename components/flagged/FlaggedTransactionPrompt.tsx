@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Modal,
+  Switch,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
@@ -20,22 +21,27 @@ interface FlaggedTransactionPromptProps {
   onClose: () => void
 }
 
-export function FlaggedTransactionPrompt({ 
-  visible, 
-  flaggedTransactions, 
-  onClose 
+export function FlaggedTransactionPrompt({
+  visible,
+  flaggedTransactions,
+  onClose
 }: FlaggedTransactionPromptProps) {
   const { updateTransaction } = useTransactionsStore()
-  const { getSpendingBuckets, getSavingsBuckets } = useBucketsStore()
-  
+  const { getSpendingBuckets, getSavingsBuckets, addSureShotMerchant, buckets } = useBucketsStore()
+
   const [currentIndex, setCurrentIndex] = useState(0)
   const [saving, setSaving] = useState(false)
+  const [selectedBucketId, setSelectedBucketId] = useState<string | null>(null)
+  const [alwaysUse, setAlwaysUse] = useState(false)
 
   const currentTxn = flaggedTransactions[currentIndex]
   const allBuckets = [...getSpendingBuckets(), ...getSavingsBuckets()]
 
-  const handleResolve = async (bucketId: string) => {
+  const currentBucket = currentTxn ? buckets.find(b => b.id === currentTxn.bucketId) : null
+
+  const handleConfirm = async () => {
     if (!currentTxn || saving) return
+    const bucketId = selectedBucketId || currentTxn.bucketId
     setSaving(true)
 
     try {
@@ -44,9 +50,19 @@ export function FlaggedTransactionPrompt({
         isFlagged: false,
       })
 
+      // Add to sure-shot merchants if toggled and merchant exists
+      if (alwaysUse && currentTxn.merchant) {
+        await addSureShotMerchant(currentTxn.merchant, bucketId)
+      }
+
+      // Reset for next
+      setSelectedBucketId(null)
+      setAlwaysUse(false)
+
       if (currentIndex < flaggedTransactions.length - 1) {
         setCurrentIndex(v => v + 1)
       } else {
+        setCurrentIndex(0)
         onClose()
       }
     } catch (e) {
@@ -56,7 +72,27 @@ export function FlaggedTransactionPrompt({
     }
   }
 
+  const handleSkip = () => {
+    setSelectedBucketId(null)
+    setAlwaysUse(false)
+    if (currentIndex < flaggedTransactions.length - 1) {
+      setCurrentIndex(v => v + 1)
+    } else {
+      setCurrentIndex(0)
+      onClose()
+    }
+  }
+
+  const handleClose = () => {
+    setCurrentIndex(0)
+    setSelectedBucketId(null)
+    setAlwaysUse(false)
+    onClose()
+  }
+
   if (!currentTxn) return null
+
+  const effectiveBucketId = selectedBucketId || currentTxn.bucketId
 
   return (
     <Modal visible={visible} animationType="fade" transparent>
@@ -70,8 +106,8 @@ export function FlaggedTransactionPrompt({
                   {currentIndex + 1} of {flaggedTransactions.length}
                 </Text>
               </View>
-              <Text style={styles.title}>Confirm category</Text>
-              <TouchableOpacity onPress={onClose} hitSlop={12}>
+              <Text style={styles.title}>Needs Review</Text>
+              <TouchableOpacity onPress={handleClose} hitSlop={12}>
                 <Ionicons name="close" size={24} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
@@ -79,41 +115,77 @@ export function FlaggedTransactionPrompt({
             {/* Txn Info */}
             <View style={styles.txnInfo}>
               <Text style={styles.merchant}>{currentTxn.merchant || 'Unknown Merchant'}</Text>
-              <Text style={styles.amount}>{formatNPR(currentTxn.amount)}</Text>
+              <Text style={styles.amount}>NPR {formatNPR(currentTxn.amount)}</Text>
               <Text style={styles.date}>{formatDate(currentTxn.date)}</Text>
-              {currentTxn.remarks && (
+              <View style={styles.currentBucketBadge}>
+                <Text style={styles.currentBucketText}>
+                  Currently in: {currentBucket?.name || 'Unknown'}
+                </Text>
+              </View>
+              {currentTxn.remarks && currentTxn.remarks !== '__savings_confirm__' && (
                 <View style={styles.remarksBadge}>
-                  <Text style={styles.remarksText}>“{currentTxn.remarks}”</Text>
+                  <Text style={styles.remarksText}>"{currentTxn.remarks}"</Text>
                 </View>
               )}
             </View>
 
-            <Text style={styles.question}>Which bucket does this belong to?</Text>
+            <Text style={styles.question}>Assign to bucket:</Text>
 
             {/* Bucket Grid */}
-            <ScrollView 
+            <ScrollView
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.bucketGrid}
             >
-              {allBuckets.map(bucket => (
-                <TouchableOpacity
-                  key={bucket.id}
-                  style={[styles.bucketItem, { borderColor: bucket.id === currentTxn.bucketId ? colors.green : colors.border }]}
-                  onPress={() => handleResolve(bucket.id)}
-                  disabled={saving}
-                >
-                  <Text style={styles.bucketIcon}>{bucket.icon}</Text>
-                  <Text style={styles.bucketName} numberOfLines={1}>{bucket.name}</Text>
-                </TouchableOpacity>
-              ))}
+              {allBuckets.map(bucket => {
+                const isSelected = effectiveBucketId === bucket.id
+                return (
+                  <TouchableOpacity
+                    key={bucket.id}
+                    style={[
+                      styles.bucketItem,
+                      isSelected && styles.bucketItemSelected,
+                    ]}
+                    onPress={() => setSelectedBucketId(bucket.id)}
+                    disabled={saving}
+                  >
+                    <Text style={styles.bucketIcon}>{bucket.icon}</Text>
+                    <Text style={[
+                      styles.bucketName,
+                      isSelected && styles.bucketNameSelected,
+                    ]} numberOfLines={1}>{bucket.name}</Text>
+                  </TouchableOpacity>
+                )
+              })}
             </ScrollView>
 
-            <TouchableOpacity 
-              style={styles.skipButton} 
-              onPress={() => currentIndex < flaggedTransactions.length - 1 ? setCurrentIndex(v => v + 1) : onClose()}
-            >
-              <Text style={styles.skipText}>Skip for now</Text>
-            </TouchableOpacity>
+            {/* Always use toggle */}
+            {currentTxn.merchant && (
+              <View style={styles.alwaysRow}>
+                <Text style={styles.alwaysText} numberOfLines={2}>
+                  Always use this bucket for "{currentTxn.merchant}"
+                </Text>
+                <Switch
+                  value={alwaysUse}
+                  onValueChange={setAlwaysUse}
+                  trackColor={{ false: colors.border, true: colors.greenFill }}
+                  thumbColor={alwaysUse ? colors.green : '#f4f3f4'}
+                />
+              </View>
+            )}
+
+            {/* Actions */}
+            <View style={styles.actions}>
+              <TouchableOpacity
+                style={styles.confirmButton}
+                onPress={handleConfirm}
+                disabled={saving}
+              >
+                <Text style={styles.confirmText}>Confirm</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
+                <Text style={styles.skipText}>Skip</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </SafeAreaView>
       </View>
@@ -135,7 +207,7 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.pageBg,
     borderRadius: 24,
-    maxHeight: '80%',
+    maxHeight: '85%',
     overflow: 'hidden',
     borderCurve: 'continuous',
     shadowColor: '#000',
@@ -153,7 +225,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.divider,
   },
   counter: {
-    backgroundColor: colors.green + '15',
+    backgroundColor: colors.amber + '15',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
@@ -161,7 +233,7 @@ const styles = StyleSheet.create({
   counterText: {
     fontSize: 10,
     fontFamily: 'Inter_700Bold',
-    color: colors.green,
+    color: colors.amber,
   },
   title: {
     fontSize: 16,
@@ -185,6 +257,7 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontFamily: 'Inter_700Bold',
     color: colors.textPrimary,
+    fontVariant: ['tabular-nums'],
     marginBottom: 8,
   },
   date: {
@@ -192,8 +265,20 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     color: colors.textMuted,
   },
+  currentBucketBadge: {
+    marginTop: 10,
+    backgroundColor: colors.amberFill,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  currentBucketText: {
+    fontSize: 11,
+    fontFamily: 'Inter_500Medium',
+    color: colors.amber,
+  },
   remarksBadge: {
-    marginTop: 12,
+    marginTop: 8,
     backgroundColor: colors.pageBg,
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -220,15 +305,20 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   bucketItem: {
-    width: '31.5%',
+    width: '31%',
     aspectRatio: 1,
     backgroundColor: colors.surface,
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 8,
+    borderCurve: 'continuous',
+  },
+  bucketItemSelected: {
+    borderColor: colors.green,
+    backgroundColor: colors.greenFill,
   },
   bucketIcon: {
     fontSize: 24,
@@ -240,12 +330,52 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     textAlign: 'center',
   },
-  skipButton: {
-    paddingVertical: 16,
+  bucketNameSelected: {
+    color: colors.green,
+  },
+  alwaysRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 12,
+  },
+  alwaysText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+    color: colors.textSecond,
+  },
+  actions: {
+    flexDirection: 'row',
+    padding: 16,
+    gap: 12,
+  },
+  confirmButton: {
+    flex: 1,
+    backgroundColor: colors.green,
+    borderRadius: 12,
+    paddingVertical: 14,
     alignItems: 'center',
   },
+  confirmText: {
+    fontSize: 15,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#FFFFFF',
+  },
+  skipButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   skipText: {
-    fontSize: 13,
+    fontSize: 14,
     fontFamily: 'Inter_500Medium',
     color: colors.textMuted,
   },

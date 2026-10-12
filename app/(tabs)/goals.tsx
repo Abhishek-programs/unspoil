@@ -5,52 +5,126 @@ import { colors } from '@/constants/colors'
 import { useGoalsStore, type Goal } from '@/store/goals'
 import { useTransactionsStore } from '@/store/transactions'
 import { useBucketsStore } from '@/store/buckets'
+import { usePlaybookStore } from '@/store/playbook'
 import { GoalCard } from '@/components/goals/GoalCard'
 import { GoalDetailSheet } from '@/components/goals/GoalDetailSheet'
+import { AddGoalSheet } from '@/components/goals/AddGoalSheet'
+import { formatNPR } from '@/lib/format'
+import { EF_BUCKET_ID } from '@/constants/defaults'
+
+const EF_PSEUDO_ID = '__ef_goal__'
 
 export default function GoalsScreen() {
   const { goals } = useGoalsStore()
   const { transactions } = useTransactionsStore()
   const { buckets } = useBucketsStore()
+  const { efFloor } = usePlaybookStore()
 
   const [selectedGoal, setSelectedGoal] = useState<(Goal & { current: number; color: string }) | null>(null)
   const [detailVisible, setDetailVisible] = useState(false)
+  const [addVisible, setAddVisible] = useState(false)
+  const [editGoal, setEditGoal] = useState<Goal | null>(null)
+
+  // Find the Emergency Fund bucket by stable ID
+  const efBucket = buckets.find(b => b.id === EF_BUCKET_ID && b.isActive)
 
   const goalsWithStatus = useMemo(() => {
-    return goals.map(goal => {
-      const current = transactions
-        .filter(t => goal.linkedBucketIds.includes(t.bucketId))
+    const result: (Goal & { current: number; color: string; isEF?: boolean })[] = []
+
+    // EF pseudo-goal: derived from playbook efFloor + savings confirm transactions for EF bucket
+    if (efBucket && efFloor > 0) {
+      const efContributed = transactions
+        .filter(t => t.bucketId === efBucket.id && t.remarks === '__savings_confirm__')
         .reduce((sum, t) => sum + t.amount, 0)
-      
+
+      result.push({
+        id: EF_PSEUDO_ID,
+        name: 'Emergency Fund',
+        targetAmount: efFloor,
+        monthlyContribution: efBucket.monthlyAmount,
+        targetDate: null,
+        linkedBucketIds: [efBucket.id],
+        startBalance: 0,
+        createdAt: '',
+        current: efContributed,
+        color: '#3B82F6',
+        isEF: true,
+      })
+    }
+
+    // User-created goals: only count __savings_confirm__ transactions as contributions
+    goals.forEach(goal => {
+      const contributed = transactions
+        .filter(t =>
+          goal.linkedBucketIds.includes(t.bucketId) &&
+          t.remarks === '__savings_confirm__'
+        )
+        .reduce((sum, t) => sum + t.amount, 0)
+
       const bucket = buckets.find(b => goal.linkedBucketIds.includes(b.id))
-      
-      return {
+
+      result.push({
         ...goal,
-        current: goal.startBalance + current,
+        current: goal.startBalance + contributed,
         color: bucket?.color || colors.green,
-      }
+      })
     })
-  }, [goals, transactions, buckets])
+
+    return result
+  }, [goals, transactions, buckets, efBucket, efFloor])
+
+  // Summary calculations
+  const totalSaved = goalsWithStatus.reduce((sum, g) => sum + g.current, 0)
+  const totalMonthlyCommitment = goalsWithStatus.reduce((sum, g) => sum + g.monthlyContribution, 0)
+  // EF coverage = target / Core Living monthly (how many months of core expenses covered)
+  const coreLivingBucket = buckets.find(b => b.name === 'Core Living' && b.isActive)
+  const coreLivingMonthly = coreLivingBucket?.monthlyAmount ?? 0
+  const efCoverageMonths = coreLivingMonthly > 0 ? Math.floor(efFloor / coreLivingMonthly) : 0
+
+  const handleEdit = (goal: Goal) => {
+    // Can't edit the EF pseudo-goal (managed via Settings)
+    if (goal.id === EF_PSEUDO_ID) return
+    setDetailVisible(false)
+    setEditGoal(goal)
+    setAddVisible(true)
+  }
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Vault</Text>
-        <TouchableOpacity style={styles.addButton} hitSlop={12}>
+        <TouchableOpacity
+          style={styles.addButton}
+          hitSlop={12}
+          onPress={() => {
+            setEditGoal(null)
+            setAddVisible(true)
+          }}
+        >
           <Ionicons name="add" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
       </View>
 
-      <ScrollView 
-        style={styles.content} 
+      <ScrollView
+        style={styles.content}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* Summary Card */}
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryLabel}>Total Savings Portfolio</Text>
+          <Text style={styles.summaryLabel}>Total Saved</Text>
           <Text style={styles.summaryValue}>
-            NPR {goalsWithStatus.reduce((sum, g) => sum + g.current, 0).toLocaleString()}
+            NPR {formatNPR(totalSaved)}
           </Text>
+          <View style={styles.summaryMeta}>
+            <Text style={styles.summaryMetaText}>
+              {efCoverageMonths} months EF coverage
+            </Text>
+            <Text style={styles.summaryDot}>  ·  </Text>
+            <Text style={styles.summaryMetaText}>
+              NPR {formatNPR(totalMonthlyCommitment)}/mo committed
+            </Text>
+          </View>
         </View>
 
         <Text style={styles.sectionTitle}>Active Goals</Text>
@@ -69,15 +143,23 @@ export default function GoalsScreen() {
           />
         ))}
 
-        {goals.length === 0 && (
+        {goalsWithStatus.length === 0 && (
           <View style={styles.empty}>
             <Ionicons name="leaf-outline" size={48} color={colors.divider} />
             <Text style={styles.emptyText}>No goals yet. Start saving for something big!</Text>
-            <TouchableOpacity style={styles.emptyButton}>
+            <TouchableOpacity
+              style={styles.emptyButton}
+              onPress={() => {
+                setEditGoal(null)
+                setAddVisible(true)
+              }}
+            >
               <Text style={styles.emptyButtonText}>Create first goal</Text>
             </TouchableOpacity>
           </View>
         )}
+
+        <View style={{ height: 80 }} />
       </ScrollView>
 
       <GoalDetailSheet
@@ -87,6 +169,16 @@ export default function GoalsScreen() {
           setDetailVisible(false)
           setSelectedGoal(null)
         }}
+        onEdit={handleEdit}
+      />
+
+      <AddGoalSheet
+        visible={addVisible}
+        onClose={() => {
+          setAddVisible(false)
+          setEditGoal(null)
+        }}
+        editGoal={editGoal}
       />
     </View>
   )
@@ -144,6 +236,24 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontFamily: 'Inter_700Bold',
     color: colors.green,
+    fontVariant: ['tabular-nums'],
+  },
+  summaryMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    flexWrap: 'wrap',
+  },
+  summaryMetaText: {
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+    color: colors.green,
+    opacity: 0.8,
+  },
+  summaryDot: {
+    fontSize: 12,
+    color: colors.green,
+    opacity: 0.5,
   },
   sectionTitle: {
     fontSize: 12,

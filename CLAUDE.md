@@ -19,6 +19,7 @@ Personal finance Android app. React Native + Expo. NPR-denominated, Nepal-focuse
 | Charts | react-native-gifted-charts |
 | Image pick | expo-image-picker (screenshot OCR flow) |
 | OCR | rn-mlkit-ocr (Google ML Kit, fully on-device) |
+| Overlay (V2) | Custom Kotlin `OverlayService` + `OverlayModule` + ML Kit |
 | Fonts | expo-google-fonts (Inter) |
 
 No tests in V1. No testing libraries. No error boundaries beyond what screen specs require.
@@ -140,6 +141,10 @@ Month start day is user-set (default: 1). All "this month" queries use this. Sto
 
 Monthly only in V1. Auto-create draft on month_start_day. Draft shown on Home as pending item. Must be confirmed within 3 days or nudge fires. Drafts do NOT count toward totals until confirmed.
 
+### Emergency Fund Target
+
+Emergency Fund target = `EF_MULTIPLIER` (default 6) × Core Living monthly amount. Never derived from income. Recalculates if Core Living bucket amount is edited in Settings.
+
 ### Floors
 
 Stored in playbook. Warn when EF balance approaches floor. Never block.
@@ -248,7 +253,7 @@ export function projectGoalCompletion(opts: {
 - CSV export
 
 **Out of V1:**
-- Bubble overlay / SYSTEM_ALERT_WINDOW → V2
+- Bubble overlay / SYSTEM_ALERT_WINDOW → **V2** (architecture fully planned — see `reference/OVERLAY_LLM_PROMPT.md`)
 - Share intent capture → V2
 - SMS/email reading → V2
 - Dark mode → V2
@@ -256,6 +261,36 @@ export function projectGoalCompletion(opts: {
 - SIP portfolio tracking (NAV, returns) → V2
 - iOS → V3
 - Cloud sync / backup → V3
+
+---
+
+## Bubble Overlay (V2 — Android Only)
+
+**Architecture:** Custom Kotlin native modules registered via `ReactPackage`. Lives entirely in `android/app/src/main/java/com/spendsense/overlay/`.
+
+**Core modules:**
+| File | Role |
+|---|---|
+| `OverlayService.kt` | Foreground service, holds `WindowManager` bubble, orchestrates capture pipeline |
+| `FloatingBubbleView.kt` | Draggable `FrameLayout` drawn by `WindowManager TYPE_APPLICATION_OVERLAY` |
+| `ScreenCaptureManager.kt` | `MediaProjection` + `ImageReader` → `Bitmap` |
+| `MLKitOCRProcessor.kt` | ML Kit Text Recognition on captured bitmap |
+| `OcrResultBridge.kt` | Emits `onOcrResult` event to RN JS thread |
+| `OverlayModule.kt` | JS-callable API: `startOverlay`, `stopOverlay`, `requestPermission`, `requestMediaProjection` |
+| `OverlayPackage.kt` | Registers modules with React Native |
+
+**JS layer:**
+- `lib/overlay.ts` — typed wrapper around `NativeModules.OverlayModule`
+- `hooks/useOverlay.ts` — subscribes to `onOcrResult`, runs categorize → DB write → Toast
+- `app/_layout.tsx` — add `useOverlay()` call
+- `app/(tabs)/settings.tsx` — add Overlay toggle section
+
+**Key rules for V2:**
+- All overlay code is Android-only (`Platform.OS === 'android'` guards in all JS)
+- Never modify `lib/categorize.ts`, `store/`, `db/schema.ts` — overlay is purely additive
+- OCR and DB writes on non-main thread (Kotlin coroutines / JS thread via bridge)
+- Transaction source = `'overlay'` (add to source union type in schema migration if needed)
+- Full LLM-ready prompt in `reference/OVERLAY_LLM_PROMPT.md`
 
 ---
 
@@ -295,3 +330,19 @@ export function projectGoalCompletion(opts: {
 - Only comment non-obvious business logic (e.g. the categorization priority order).
 - Don't refactor adjacent code unless it directly blocks the task.
 - Don't add features, fallbacks, or validation beyond what the screen spec requires.
+
+---
+
+## Future AI Layer (not in V1, not in any planned version — exploratory only)
+
+If AI is ever added, it lives in `ai/` and is purely additive.
+It never touches `lib/`, `store/`, or `db/` directly.
+All math stays in pure functions. AI only narrates or suggests.
+
+Potential surfaces (tap-triggered, no chat):
+- Monthly insights card — spend commentary from real data
+- Goal acceleration — surplus-based scenarios via `projection.ts`
+- EF intelligence — multi-month surplus patterns → contribution nudge
+
+Do not build until 3+ months of real data exists.
+App is fully functional and complete without this layer.
