@@ -112,7 +112,11 @@ Playbook (income, month start, EF floor, age) · buckets (Living / Future header
 
 ```
 effectiveIncome      = salary txn amount if confirmed this month else 0
-safeToSpend          = spendingPlan - lifestyleSpent - personalDraws + max(0, effectiveIncome - totalAllocations) + lendingCashAdjust - fees
+safeToSpend          = min(
+                         spendingPlan - lifestyleSpent - personalDraws + max(0, effectiveIncome - totalAllocations) + lendingCashAdjust - fees,
+                         max(0, yourMoney - carriedForward - stillInBank)
+                       )
+                       Personal plan top-up uses NPR 1,000/mo while personal recovery debt > 0.
 bankPile             = max(0, carriedForward + periodIncome - periodExpenses - fees + lendingCashAdjust + foundThisPeriod)
 yourMoney            = bankPile + eSewa + Cash
 stillInBank          = salary confirmed ? max(0, plannedSavings - confirmedSavedInvested) : 0

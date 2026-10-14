@@ -7,7 +7,13 @@ import { useAccountsStore } from '@/store/accounts'
 import { getMonthRange, getDaysRemaining } from '@/lib/month'
 import { computeMonthMetrics } from '@/lib/lending/balance'
 import { computeCashOnHand, foundMoneyInRange, periodCashFromTransactions } from '@/lib/your-money'
-import { EF_BUCKET_ID, SIP_BUCKET_ID, SHARES_BUCKET_ID } from '@/constants/defaults'
+import {
+  EF_BUCKET_ID,
+  PERSONAL_BUCKET_ID,
+  SIP_BUCKET_ID,
+  SHARES_BUCKET_ID,
+} from '@/constants/defaults'
+import { PERSONAL_RECOVERY_TOP_UP } from '@/lib/bucket-balance'
 import { BANK_ACCOUNT_ID } from '@/constants/accounts'
 import { isSalaryTxn, isSavingsConfirmTxn } from '@/lib/txn-kind'
 
@@ -18,6 +24,7 @@ export function usePulseData() {
     monthlyIncome,
     efStartBalance,
     carriedForwardBalance,
+    personalRecoveryDebt,
   } = usePlaybookStore()
   const { buckets, bucketBalances } = useBucketsStore()
   const {
@@ -53,7 +60,12 @@ export function usePulseData() {
 
   const personalDraws = accumulatingBuckets.reduce((s, b) => s + (spentByBucket[b.id] ?? 0), 0)
 
-  const personalTopUps = accumulatingBuckets.reduce((s, b) => s + b.monthlyAmount, 0)
+  const personalTopUps = accumulatingBuckets.reduce((s, b) => {
+    if (b.id === PERSONAL_BUCKET_ID && personalRecoveryDebt > 0) {
+      return s + PERSONAL_RECOVERY_TOP_UP
+    }
+    return s + b.monthlyAmount
+  }, 0)
   const lifestyleBudget = regularSpendingBuckets.reduce((s, b) => s + b.monthlyAmount, 0)
 
   const totalIncome = getTotalIncome()
@@ -110,21 +122,13 @@ export function usePulseData() {
 
   const unallocatedAtStart = Math.max(0, effectiveIncome - totalAllocations)
 
-  // Spendable = lifestyle bucket budgets remaining + any income not yet assigned to buckets
-  const spendingPlan = lifestyleBudget + personalTopUps
-  const safeToSpend = hasSalaryThisMonth
-    ? spendingPlan - lifestyleSpent - personalDraws + unallocatedAtStart
-    : 0
-
-  const lendBorrowMonth = computeMonthMetrics(allEntries, start, end)
-  const lendBorrowCashAdjust = lendBorrowMonth.lendBorrowCashAdjust
-  const adjustedSafeToSpend = safeToSpend + lendBorrowCashAdjust - feesThisMonth
-  const lentOutstandingThisMonth = lendBorrowMonth.lentOutstandingThisMonth
-
   const unconfirmedSavingsThisMonth = Math.max(0, plannedSavings - confirmedSavedInvested)
   const stillInBank = hasSalaryThisMonth ? unconfirmedSavingsThisMonth : 0
 
-  const availableBalance = Math.max(0, adjustedSafeToSpend + carriedForwardBalance)
+  const lendBorrowMonth = computeMonthMetrics(allEntries, start, end)
+  const lendBorrowCashAdjust = lendBorrowMonth.lendBorrowCashAdjust
+  const lentOutstandingThisMonth = lendBorrowMonth.lentOutstandingThisMonth
+
   const { foundMoneyTotal, accounts: moneyAccounts, adjustments } = useAccountsStore()
   const periodCash = periodCashFromTransactions(transactions)
   const bankPile = computeCashOnHand({
@@ -139,6 +143,25 @@ export function usePulseData() {
     .filter(a => a.id !== BANK_ACCOUNT_ID)
     .reduce((s, a) => s + a.balance, 0)
   const yourMoney = bankPile + otherWallets
+
+  // Living/Personal plan remaining + unallocated salary (Future is not in spendingPlan)
+  const spendingPlan = lifestyleBudget + personalTopUps
+  const planSafeToSpend = hasSalaryThisMonth
+    ? spendingPlan - lifestyleSpent - personalDraws + unallocatedAtStart
+    : 0
+
+  const planAdjustedSafe =
+    planSafeToSpend + lendBorrowCashAdjust - feesThisMonth
+  const cashSpendableCeiling = Math.max(
+    0,
+    yourMoney - carriedForwardBalance - stillInBank,
+  )
+  const adjustedSafeToSpend = hasSalaryThisMonth
+    ? Math.min(planAdjustedSafe, cashSpendableCeiling)
+    : 0
+  const safeToSpend = adjustedSafeToSpend
+
+  const availableBalance = Math.max(0, adjustedSafeToSpend + carriedForwardBalance)
   const monthRemainingBalance = adjustedSafeToSpend
 
   const daysRemaining = getDaysRemaining(monthStartDay, earlyMonthStartDate)
@@ -217,7 +240,7 @@ export function usePulseData() {
     bankPile,
     stillInBank,
     safeToSpend: adjustedSafeToSpend,
-    rawSafeToSpend: safeToSpend,
+    rawSafeToSpend: planSafeToSpend,
     monthRemainingBalance,
     carriedForwardBalance,
     lendBorrowCashAdjust,
@@ -227,7 +250,7 @@ export function usePulseData() {
     youOweLiability,
     lendingContactCount: contacts.length,
     unallocatedAtStart,
-    actualSafeToSpend: safeToSpend,
+    actualSafeToSpend: planSafeToSpend,
     safeBeforeInvestments: safeToSpend + confirmedSavedInvested,
     plannedSavings,
     plannedSavingsOnly,
