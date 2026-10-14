@@ -55,7 +55,7 @@ Monthly take-home (playbook)
 | Concept | Meaning |
 |---------|---------|
 | **Your money** (collapsed) | Bank leftover pile (carry + this period’s bank flow) plus eSewa and Cash. Cash is its own wallet — it is not subtracted from Bank. Confirming a save moves that amount to net worth. |
-| **Safe to spend** (ring) | Lifestyle budgets remaining + unallocated income, after salary confirmed. Excludes carry-forward and unconfirmed Future. |
+| **Safe to spend** (ring) | Living/Personal plan remaining + unallocated salary − fees/lending; **capped** at cash on you minus carry and unconfirmed Future (`stillInBank`). Confirmed Future lowers **Your money**, not the plan line (Future was never in `spendingPlan`). |
 | **Net worth** (Your money, expanded) | Confirmed EF + goals + SIP + shares only |
 
 ---
