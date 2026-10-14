@@ -33,119 +33,163 @@ const SIZE = 220;
 const STROKE = 14;
 const RADIUS = (SIZE - STROKE) / 2;
 const CIRC = 2 * Math.PI * RADIUS;
+/** Slight overlap so SVG butt caps do not leave hairline gaps. */
+const JOINT_TURN = 0.003;
 const CENTER = SIZE / 2;
 const PILL_ORBIT = RADIUS + STROKE / 2 + 2;
 
 type SegmentKind = "available" | "spent" | "unconfirmed" | "confirmed" | "lent";
 
-interface RingSegment {
+interface RingSlice {
   kind: SegmentKind;
   ratio: number;
   startRatio: number;
+  dashLength: number;
   stroke: string;
   strokeWidth: number;
   opacity: number;
 }
 
-function clampRatio(value: number, denom: number) {
-  if (denom <= 0) return 0;
-  return Math.max(0, Math.min(value / denom, 1));
+interface RingModel {
+  slices: RingSlice[];
+  spentOverlay: RingSlice | null;
 }
 
-function buildSegments(
+function buildRing(
   income: number,
   confirmed: number,
   unconfirmed: number,
   spent: number,
   available: number,
   lentOutstanding: number,
-): RingSegment[] {
-  if (income <= 0) return [];
+): RingModel {
+  if (income <= 0) return { slices: [], spentOverlay: null };
 
-  const raw = [
+  const conf = Math.max(0, confirmed);
+  const unconf = Math.max(0, unconfirmed);
+  const lent = Math.max(0, lentOutstanding);
+  const spentAmt = Math.max(0, spent);
+  const avail = Math.max(0, available);
+
+  let pool = avail + spentAmt;
+  let confV = conf;
+  let unconfV = unconf;
+  let lentV = lent;
+  let total = pool + confV + unconfV + lentV;
+  if (total > income) {
+    const scale = income / total;
+    pool *= scale;
+    confV *= scale;
+    unconfV *= scale;
+    lentV *= scale;
+  } else if (total < income) {
+    pool += income - total;
+  }
+
+  const parts = [
     {
       kind: "available" as const,
-      value: available,
+      value: pool,
       stroke: colors.green,
       strokeWidth: STROKE,
       opacity: 1,
     },
     {
-      kind: "spent" as const,
-      value: spent,
-      stroke: colors.red,
-      strokeWidth: STROKE,
-      opacity: 1,
-    },
-    {
       kind: "lent" as const,
-      value: lentOutstanding,
+      value: lentV,
       stroke: colors.purple,
       strokeWidth: STROKE,
       opacity: 1,
     },
     {
       kind: "unconfirmed" as const,
-      value: unconfirmed,
+      value: unconfV,
       stroke: colors.savingsSetAside,
       strokeWidth: STROKE,
       opacity: 0.4,
     },
     {
       kind: "confirmed" as const,
-      value: confirmed,
+      value: confV,
       stroke: colors.savingsSetAside,
       strokeWidth: STROKE,
       opacity: 1,
     },
-  ];
+  ].filter((p) => p.value > 0);
 
-  let start = 0;
-  const segments: RingSegment[] = [];
-  for (const item of raw) {
-    const ratio = clampRatio(item.value, income);
-    if (ratio <= 0.001) continue;
-    segments.push({
-      kind: item.kind,
+  if (parts.length === 0) return { slices: [], spentOverlay: null };
+
+  const totalVal = parts.reduce((s, p) => s + p.value, 0);
+  if (totalVal <= 0) return { slices: [], spentOverlay: null };
+
+  const slices: RingSlice[] = [];
+  let ratioCursor = 0;
+  for (let i = 0; i < parts.length; i++) {
+    let ratio =
+      i === parts.length - 1 ? 1 - ratioCursor : parts[i].value / totalVal;
+    if (ratio <= 0) continue;
+    const lead = i === 0 ? 0 : JOINT_TURN;
+    const tail = JOINT_TURN;
+    slices.push({
+      kind: parts[i].kind,
       ratio,
-      startRatio: start,
-      stroke: item.stroke,
-      strokeWidth: item.strokeWidth,
-      opacity: item.opacity,
+      startRatio: Math.max(0, ratioCursor - lead),
+      dashLength: CIRC * (ratio + lead + tail),
+      stroke: parts[i].stroke,
+      strokeWidth: parts[i].strokeWidth,
+      opacity: parts[i].opacity,
     });
-    start += ratio;
+    ratioCursor += ratio;
   }
-  return segments;
+
+  const poolSlice = slices.find((s) => s.kind === "available");
+  const poolStart = poolSlice?.startRatio ?? 0;
+  const poolRatio = poolSlice ? poolSlice.dashLength / CIRC : 0;
+  const spentRatio = Math.min(spentAmt / income, poolRatio);
+  const spentOverlay: RingSlice | null =
+    spentRatio > 0.001
+      ? {
+          kind: "spent",
+          ratio: spentRatio,
+          startRatio: poolStart,
+          dashLength: 0,
+          stroke: colors.red,
+          strokeWidth: STROKE,
+          opacity: 1,
+        }
+      : null;
+
+  return { slices, spentOverlay };
 }
 
-function RingArc({
-  ratio,
+function RingDashArc({
+  dashLength,
   startRatio,
   stroke,
   strokeWidth,
   opacity,
 }: {
-  ratio: number;
+  dashLength: number;
   startRatio: number;
   stroke: string;
   strokeWidth: number;
   opacity: number;
 }) {
-  const cx = CENTER;
-  const cy = CENTER;
+  if (dashLength <= 0) return null;
+  const gap = Math.max(0, CIRC - dashLength);
   return (
     <Circle
-      cx={cx}
-      cy={cy}
+      cx={CENTER}
+      cy={CENTER}
       r={RADIUS}
       stroke={stroke}
       strokeWidth={strokeWidth}
       fill="none"
       strokeLinecap="butt"
       strokeOpacity={opacity}
-      strokeDasharray={`${CIRC * ratio} ${CIRC * (1 - ratio)}`}
+      strokeDasharray={`${dashLength} ${gap}`}
       rotation={-90 + startRatio * 360}
-      origin={`${cx}, ${cy}`}
+      origin={`${CENTER}, ${CENTER}`}
     />
   );
 }
@@ -212,28 +256,35 @@ export function HeroRing({
   const available = Math.max(0, safeToSpend);
   const pulse = useSharedValue(0);
 
-  const segments = useMemo(
-    () =>
-      hasSalary
-        ? buildSegments(
-            effectiveIncome,
-            confirmedSavedInvested,
-            unconfirmedSavingsThisMonth,
-            spentTotal,
-            available,
-            lentOutstandingThisMonth,
-          )
-        : [],
-    [
-      hasSalary,
+  const ring = useMemo(() => {
+    if (!hasSalary) return { slices: [], spentOverlay: null };
+    const model = buildRing(
       effectiveIncome,
       confirmedSavedInvested,
       unconfirmedSavingsThisMonth,
       spentTotal,
       available,
       lentOutstandingThisMonth,
-    ],
-  );
+    );
+    const paintOrder: SegmentKind[] = [
+      "lent",
+      "unconfirmed",
+      "confirmed",
+      "available",
+    ];
+    model.slices.sort(
+      (a, b) => paintOrder.indexOf(a.kind) - paintOrder.indexOf(b.kind),
+    );
+    return model;
+  }, [
+    hasSalary,
+    effectiveIncome,
+    confirmedSavedInvested,
+    unconfirmedSavingsThisMonth,
+    spentTotal,
+    available,
+    lentOutstandingThisMonth,
+  ]);
 
   useEffect(() => {
     pulse.value = withTiming(1, {
@@ -309,26 +360,38 @@ export function HeroRing({
         )}
 
         <Svg width={SIZE} height={SIZE}>
-          <Circle
-            cx={cx}
-            cy={cy}
-            r={RADIUS}
-            stroke={hasSalary ? colors.green + "20" : "#E5E7EB"}
-            strokeWidth={STROKE}
-            fill="none"
-          />
+          {!hasSalary && (
+            <Circle
+              cx={cx}
+              cy={cy}
+              r={RADIUS}
+              stroke="#E5E7EB"
+              strokeWidth={STROKE}
+              fill="none"
+            />
+          )}
 
           {hasSalary &&
-            segments.map((seg, i) => (
-              <RingArc
+            ring.slices.map((seg, i) => (
+              <RingDashArc
                 key={`${seg.kind}-${i}`}
-                ratio={seg.ratio}
+                dashLength={seg.dashLength}
                 startRatio={seg.startRatio}
                 stroke={seg.stroke}
                 strokeWidth={seg.strokeWidth}
                 opacity={seg.opacity}
               />
             ))}
+          {hasSalary && ring.spentOverlay && (
+            <RingDashArc
+              key="spent-overlay"
+              dashLength={CIRC * ring.spentOverlay.ratio}
+              startRatio={ring.spentOverlay.startRatio}
+              stroke={ring.spentOverlay.stroke}
+              strokeWidth={ring.spentOverlay.strokeWidth}
+              opacity={ring.spentOverlay.opacity}
+            />
+          )}
         </Svg>
 
         <Animated.View style={[styles.center, centerStyle]}>
