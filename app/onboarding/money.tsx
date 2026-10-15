@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { CurrencyPrefix } from '@/components/ui/CurrencyPrefix'
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native'
 import { router } from 'expo-router'
+import { currencyByCode } from '@/constants/currencies'
 import { Ionicons } from '@expo/vector-icons'
 import Animated, { FadeInDown } from 'react-native-reanimated'
 import { colors } from '@/constants/colors'
@@ -48,6 +49,8 @@ function MoneyFields({
       </Animated.View>
 
       <Animated.View entering={FadeInDown.duration(500).delay(100)} style={styles.formArea}>
+        <CurrencyPicker />
+
         <View style={styles.inputGroup}>
           <Text style={styles.label}>MONTHLY TAKE-HOME MONEY</Text>
           <View style={styles.inputWrapper}>
@@ -118,6 +121,19 @@ function MoneyFields({
         </View>
       </Animated.View>
     </>
+  )
+}
+
+function CurrencyPicker() {
+  const currency = usePlaybookStore(s => s.currency)
+  return (
+    <TouchableOpacity style={styles.inputGroup} onPress={() => router.push('/currency')}>
+      <Text style={styles.label}>CURRENCY</Text>
+      <View style={styles.inputWrapper}>
+        <CurrencyPrefix style={styles.prefix} />
+        <Text style={styles.currencyName}>{currencyByCode(currency).name}</Text>
+      </View>
+    </TouchableOpacity>
   )
 }
 
@@ -219,6 +235,12 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   input: {
+    fontSize: 24,
+    fontFamily: 'Inter_700Bold',
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  currencyName: {
     fontSize: 24,
     fontFamily: 'Inter_700Bold',
     color: colors.textPrimary,

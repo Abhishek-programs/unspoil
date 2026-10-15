@@ -8,7 +8,6 @@ import { colors } from '@/constants/colors'
 import { usePlaybookStore } from '@/store/playbook'
 import { useBucketsStore } from '@/store/buckets'
 import { formatMoney } from '@/lib/format'
-import { currencyByCode } from '@/constants/currencies'
 import { EF_MULTIPLIER, CORE_LIVING_BUCKET_ID } from '@/constants/defaults'
 import { OnboardingBack } from '@/components/onboarding/OnboardingBack'
 import { OnboardingShell, useOnboardingFieldScroll } from '@/components/onboarding/OnboardingShell'
@@ -33,7 +32,6 @@ function FoundationsFields({
   suggestedFloor: number
 }) {
   const { bindField } = useOnboardingFieldScroll()
-  const currency = usePlaybookStore(s => s.currency)
   const coreField = bindField('core')
   const efFloorField = bindField('efFloor')
   const efBalanceField = bindField('efBalance')
@@ -50,14 +48,6 @@ function FoundationsFields({
       </Animated.View>
 
       <Animated.View entering={FadeInDown.duration(500).delay(100)} style={styles.formArea}>
-        <TouchableOpacity style={styles.inputGroup} onPress={() => router.push('/currency')}>
-          <Text style={styles.label}>CURRENCY</Text>
-          <View style={styles.inputWrapper}>
-            <CurrencyPrefix style={styles.prefix} />
-            <Text style={styles.input}>{currencyByCode(currency).name}</Text>
-          </View>
-        </TouchableOpacity>
-
         <View style={styles.inputGroup}>
           <Text style={styles.label}>CORE LIVING (MONTHLY)</Text>
           <View style={styles.inputWrapper}>

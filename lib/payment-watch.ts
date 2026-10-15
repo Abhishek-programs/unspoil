@@ -106,9 +106,20 @@ export async function hasPaymentWatchBatteryUnrestricted(): Promise<boolean> {
   return Native.hasBatteryUnrestricted()
 }
 
-export async function requestPaymentWatchBatteryUnrestricted(): Promise<void> {
-  if (!Native?.requestBatteryUnrestricted) return
-  await Native.requestBatteryUnrestricted()
+export async function requestPaymentWatchBatteryUnrestricted(): Promise<boolean> {
+  try {
+    if (Native?.requestBatteryUnrestricted) {
+      await Native.requestBatteryUnrestricted()
+      return true
+    }
+    if (Native?.openBatterySettings) {
+      await Native.openBatterySettings()
+      return true
+    }
+  } catch {
+    return false
+  }
+  return false
 }
 
 export async function getPaymentWatchTargetPackages(): Promise<string[]> {

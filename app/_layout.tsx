@@ -1,4 +1,5 @@
 import '../global.css'
+import '@/lib/auto-backup-task'
 import { useEffect, useState } from 'react'
 import { AppState } from 'react-native'
 import { Stack, router } from 'expo-router'
@@ -24,6 +25,8 @@ import {
 import { runMonthRollover } from '@/lib/bucket-balance'
 import { runSurplusRollover } from '@/lib/month-surplus'
 import { startPaymentWatchIfEnabled } from '@/lib/payment-watch'
+import { runAutoBackupJob } from '@/lib/auto-backup'
+import { syncAutoBackupSchedule } from '@/lib/auto-backup-schedule'
 
 SplashScreen.preventAutoHideAsync()
 
@@ -109,6 +112,9 @@ export default function RootLayout() {
     setupNotificationChannel()
     requestPermissions()
     startPaymentWatchIfEnabled()
+    const pb = usePlaybookStore.getState()
+    void syncAutoBackupSchedule(pb.autoBackup)
+    void runAutoBackupJob()
   }, [playbookLoaded, isOnboarded])
 
   useEffect(() => {
@@ -119,6 +125,7 @@ export default function RootLayout() {
       const { start, end } = getMonthRange(pb.monthStartDay, pb.earlyMonthStartDate)
       loadTransactions(start, end)
       startPaymentWatchIfEnabled()
+      void runAutoBackupJob()
     })
     return () => sub.remove()
   }, [playbookLoaded, isOnboarded, loadTransactions])

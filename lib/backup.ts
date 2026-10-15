@@ -24,7 +24,9 @@ import {
   restorePaymentWatchBackupState,
   type PaymentWatchBackupState,
 } from '@/lib/payment-watch'
-import { usePlaybookStore, type NudgeToggles } from '@/store/playbook'
+import { defaultAutoBackupPrefs } from '@/lib/nudge-prefs'
+import { syncAutoBackupSchedule } from '@/lib/auto-backup-schedule'
+import { usePlaybookStore, type AutoBackupPrefs, type NudgeToggles } from '@/store/playbook'
 import { useBucketsStore } from '@/store/buckets'
 import { useTransactionsStore } from '@/store/transactions'
 import { useGoalsStore } from '@/store/goals'
@@ -64,6 +66,7 @@ export type BackupPreferences = {
   nudgeToggles: NudgeToggles
   lastNotificationDate: string | null
   nudgeFired?: Record<string, true>
+  autoBackup?: AutoBackupPrefs
 }
 
 export type BackupPayload = {
@@ -187,6 +190,7 @@ export async function exportBackup(): Promise<string> {
       nudgeToggles: pb.nudgeToggles,
       lastNotificationDate: pb.lastNotificationDate,
       nudgeFired: pb.nudgeFired,
+      autoBackup: pb.autoBackup,
     },
     paymentHelper,
   }
@@ -307,16 +311,20 @@ async function insertBackupTables(t: BackupPayload['tables']) {
 
 async function restorePreferences(prefs?: BackupPreferences) {
   if (!prefs) return
+  const autoBackup = prefs.autoBackup ?? defaultAutoBackupPrefs()
   usePlaybookStore.setState({
     nudgeToggles: prefs.nudgeToggles,
     lastNotificationDate: prefs.lastNotificationDate,
     nudgeFired: prefs.nudgeFired ?? {},
+    autoBackup,
   })
   await usePlaybookStore.getState().updatePlaybook({
     nudgeToggles: prefs.nudgeToggles,
     lastNotificationDate: prefs.lastNotificationDate,
     nudgeFired: prefs.nudgeFired ?? {},
+    autoBackup,
   })
+  await syncAutoBackupSchedule(autoBackup)
 }
 
 export async function importBackup(raw: string): Promise<{

@@ -122,42 +122,23 @@ export default function OnboardingBucketsScreen() {
       const ef = prev.find(d => d.id === EF_BUCKET_ID || d.name === 'Emergency Fund')
       const pool = prev.find(d => d.id === GOAL_POOL_BUCKET_ID)
       const coreAmt = parseInt(coreLiving?.monthlyAmount ?? '50000', 10) || 50000
-      const efAmt = parseInt(ef?.monthlyAmount ?? '15000', 10) || 15000
       const poolAmt = parseInt(pool?.monthlyAmount ?? '0', 10) || 0
+      let efSuggest = takeHome - coreAmt - poolAmt
+      if (efSuggest < 0) efSuggest = 0
 
-      const optionalSpending = prev
-        .filter(
-          d =>
-            d.type === 'spending' &&
-            d.isActive &&
-            !isNonRemovableBucket({ id: d.id, name: d.name }),
-        )
-        .reduce((s, d) => s + (parseInt(d.monthlyAmount, 10) || 0), 0)
-
-      let leftover = takeHome - coreAmt - efAmt - optionalSpending - poolAmt
-      if (leftover < 0) leftover = 0
-
-      const sipDefault =
-        buckets.find(b => b.id === SIP_BUCKET_ID || b.name === 'SIPs')?.monthlyAmount ?? 6000
-      const sharesDefault =
-        buckets.find(b => b.id === SHARES_BUCKET_ID || b.name === 'Direct Shares')?.monthlyAmount ??
-        15000
-      const totalDefault = sipDefault + sharesDefault
-      const sipRatio = totalDefault > 0 ? sipDefault / totalDefault : 0.5
-
-      const sipSuggest = Math.round(leftover * sipRatio)
-      const sharesSuggest = Math.max(0, leftover - sipSuggest)
+      const zeroOptional = (d: BucketDraft) => {
+        if (d.linkedGoalId) return false
+        if (d.id === CORE_LIVING_BUCKET_ID || d.name === 'Core Living') return false
+        if (d.id === EF_BUCKET_ID || d.name === 'Emergency Fund') return false
+        return d.isActive
+      }
 
       return prev.map(d => {
-        if ((d.id === SIP_BUCKET_ID || d.name === 'SIPs') && d.isActive && !d.linkedGoalId) {
-          return { ...d, monthlyAmount: String(sipSuggest || sipDefault) }
+        if ((d.id === EF_BUCKET_ID || d.name === 'Emergency Fund') && d.isActive && !d.linkedGoalId) {
+          return { ...d, monthlyAmount: String(efSuggest) }
         }
-        if (
-          (d.id === SHARES_BUCKET_ID || d.name === 'Direct Shares') &&
-          d.isActive &&
-          !d.linkedGoalId
-        ) {
-          return { ...d, monthlyAmount: String(sharesSuggest || sharesDefault) }
+        if (zeroOptional(d)) {
+          return { ...d, monthlyAmount: '0' }
         }
         return d
       })

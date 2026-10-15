@@ -72,6 +72,10 @@ async function chooseBackupFile(onSuccess?: ImportBackupFlowOptions['onSuccess']
   }
 }
 
+export function confirmImportBackupRaw(raw: string, options: Pick<ImportBackupFlowOptions, 'onSuccess'> = {}) {
+  void pickAndConfirmImport(raw, options.onSuccess)
+}
+
 export function startImportBackupFlow(options: ImportBackupFlowOptions = {}) {
   const {
     introTitle = 'Import backup?',
