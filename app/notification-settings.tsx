@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   AppState,
-  Image,
   ScrollView,
   StyleSheet,
   Switch,
@@ -13,112 +12,160 @@ import {
   View,
 } from 'react-native'
 import { router } from 'expo-router'
-import Slider from '@react-native-community/slider'
 import { Ionicons } from '@expo/vector-icons'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Card } from '@/components/ui/Card'
+import { PaymentWatchAppsModal } from '@/components/notifications/PaymentWatchAppsModal'
 import { colors } from '@/constants/colors'
 import { requestPermissions } from '@/lib/notifications'
+import type { NudgeToggles } from '@/lib/nudge-prefs'
 import {
   getPaymentWatchDelaySeconds,
   getPaymentWatchEnabled,
+  getPaymentWatchKeepBackgroundNotification,
   getPaymentWatchLaunchableApps,
   getPaymentWatchTargetPackages,
   hasPaymentWatchNotificationPermission,
   hasPaymentWatchUsageAccess,
   isPaymentWatchAvailable,
+  openPaymentWatchBatterySettings,
   openPaymentWatchNotificationSettings,
   openPaymentWatchUsageSettings,
   PaymentWatchApp,
   setPaymentWatchDelaySeconds,
   setPaymentWatchEnabled,
+  setPaymentWatchKeepBackgroundNotification,
   setPaymentWatchTargetPackages,
 } from '@/lib/payment-watch'
+import { usePlaybookStore } from '@/store/playbook'
+
+const NUDGE_ROWS: { key: keyof NudgeToggles; label: string }[] = [
+  { key: 'budgetBreach', label: 'Budget breach alerts' },
+  { key: 'savingsReminder', label: 'Savings reminders' },
+  { key: 'efFloorWarning', label: 'EF floor warnings' },
+  { key: 'recurringDraft', label: 'Recurring draft reminders' },
+]
+
+function packageSummary(selectedPackages: string[], apps: PaymentWatchApp[]): string {
+  if (selectedPackages.length === 0) return 'None selected'
+  const labels = selectedPackages.map(pkg => {
+    const found = apps.find(a => a.packageName === pkg)
+    if (found) return found.label
+    if (pkg.includes('esewa')) return 'eSewa'
+    if (pkg === 'com.f1soft.nabilmbank') return 'nBank'
+    return pkg.split('.').pop() ?? pkg
+  })
+  if (labels.length <= 2) return labels.join(', ')
+  return `${labels.slice(0, 2).join(', ')} +${labels.length - 2}`
+}
 
 export default function NotificationSettingsScreen() {
+  const pb = usePlaybookStore()
   const available = isPaymentWatchAvailable()
-  const [loading, setLoading] = useState(true)
+
+  const [helperReady, setHelperReady] = useState(!available)
   const [enabled, setEnabled] = useState(false)
   const [usageAccess, setUsageAccess] = useState(false)
   const [notificationAccess, setNotificationAccess] = useState(false)
   const [delay, setDelay] = useState(5)
-  const [apps, setApps] = useState<PaymentWatchApp[]>([])
+  const [delayDraft, setDelayDraft] = useState('5')
+  const [keepWatchingNotification, setKeepWatchingNotification] = useState(false)
   const [selectedPackages, setSelectedPackages] = useState<string[]>([])
-  const [search, setSearch] = useState('')
+  const [apps, setApps] = useState<PaymentWatchApp[]>([])
+  const [appsLoading, setAppsLoading] = useState(false)
+  const [appsModalVisible, setAppsModalVisible] = useState(false)
 
-  const refresh = useCallback(async () => {
+  const refreshHelperCore = useCallback(async () => {
     if (!available) {
-      setLoading(false)
+      setHelperReady(true)
       return
     }
     try {
-      const [isEnabled, hasAccess, hasNotifications, delaySeconds, targets, launchable] =
+      const [isEnabled, hasAccess, hasNotifications, delaySeconds, keepBg, targets] =
         await Promise.all([
           getPaymentWatchEnabled(),
           hasPaymentWatchUsageAccess(),
           hasPaymentWatchNotificationPermission(),
           getPaymentWatchDelaySeconds(),
+          getPaymentWatchKeepBackgroundNotification(),
           getPaymentWatchTargetPackages(),
-          getPaymentWatchLaunchableApps(),
         ])
       setEnabled(isEnabled)
       setUsageAccess(hasAccess)
       setNotificationAccess(hasNotifications)
       setDelay(delaySeconds)
+      setDelayDraft(String(delaySeconds))
+      setKeepWatchingNotification(keepBg)
       setSelectedPackages(targets)
-      setApps(launchable)
     } catch {
       Alert.alert('Could not load payment helper', 'Please try again.')
     } finally {
-      setLoading(false)
+      setHelperReady(true)
+    }
+  }, [available])
+
+  const loadAppsList = useCallback(async () => {
+    if (!available) return
+    setAppsLoading(true)
+    try {
+      const launchable = await getPaymentWatchLaunchableApps()
+      setApps(launchable)
+    } catch {
+      // User can reopen the modal to retry
+    } finally {
+      setAppsLoading(false)
     }
   }, [available])
 
   useEffect(() => {
-    refresh()
+    refreshHelperCore()
     const subscription = AppState.addEventListener('change', state => {
-      if (state === 'active') refresh()
+      if (state === 'active') refreshHelperCore()
     })
     return () => subscription.remove()
-  }, [refresh])
+  }, [refreshHelperCore])
 
-  const filteredApps = useMemo(() => {
-    const installedPackages = new Set(apps.map(app => app.packageName))
-    const unavailable = selectedPackages
-      .filter(packageName => !installedPackages.has(packageName))
-      .map(packageName => ({
-        packageName,
-        iconPath: null as string | null,
-        label:
-          packageName.includes('esewa')
-            ? 'eSewa (not installed)'
-            : packageName === 'com.f1soft.nabilmbank'
-              ? 'nBank (not installed)'
-              : `${packageName} (not installed)`,
-      }))
-    const selectableApps = [...apps, ...unavailable]
-    const query = search.trim().toLowerCase()
-    if (!query) return selectableApps
-    return selectableApps.filter(
-      app =>
-        app.label.toLowerCase().includes(query) ||
-        app.packageName.toLowerCase().includes(query),
-    )
-  }, [apps, search, selectedPackages])
+  useEffect(() => {
+    if (available) loadAppsList()
+  }, [available, loadAppsList])
+
+  const openAppsModal = () => {
+    setAppsModalVisible(true)
+    if (apps.length === 0 && !appsLoading) loadAppsList()
+  }
+
+  const selectedSummary = useMemo(
+    () => packageSummary(selectedPackages, apps),
+    [selectedPackages, apps],
+  )
 
   const toggleHelper = async (value: boolean) => {
     if (value && selectedPackages.length === 0) {
-      Alert.alert('Choose an app', 'Select at least one app to watch first.')
+      Alert.alert('Choose an app', 'Select at least one payment app first.')
+      openAppsModal()
       return
     }
     if (value && !(await requestPermissions())) {
       Alert.alert(
         'Notifications are off',
-        'Allow notifications for UnSpoil in Android settings before enabling Payment Helper.',
+        'Allow notifications for UnSpoil before enabling payment helper.',
       )
       return
     }
     const result = await setPaymentWatchEnabled(value)
+    if (value && result === 'needs_notification_permission') {
+      setEnabled(false)
+      Alert.alert(
+        'Notifications are off',
+        'Turn on UnSpoil notifications and enable the “Log a payment” channel.',
+        [
+          { text: 'Later', style: 'cancel' },
+          { text: 'Open settings', onPress: openPaymentWatchNotificationSettings },
+        ],
+      )
+      await refreshHelperCore()
+      return
+    }
     setEnabled(value)
     if (value && result === 'needs_usage_access') {
       Alert.alert(
@@ -130,13 +177,25 @@ export default function NotificationSettingsScreen() {
         ],
       )
     }
-    await refresh()
+    await refreshHelperCore()
   }
 
   const saveDelay = async (seconds: number) => {
     const next = Math.round(Math.max(0, Math.min(60, seconds)))
     setDelay(next)
+    setDelayDraft(String(next))
     await setPaymentWatchDelaySeconds(next)
+  }
+
+  const commitDelayDraft = async () => {
+    const parsed = Number.parseInt(delayDraft.replace(/\D/g, ''), 10)
+    const next = Number.isFinite(parsed) ? parsed : delay
+    await saveDelay(next)
+  }
+
+  const toggleKeepWatchingNotification = async (value: boolean) => {
+    setKeepWatchingNotification(value)
+    await setPaymentWatchKeepBackgroundNotification(value)
   }
 
   const toggleApp = async (packageName: string) => {
@@ -144,11 +203,16 @@ export default function NotificationSettingsScreen() {
       ? selectedPackages.filter(item => item !== packageName)
       : [...selectedPackages, packageName]
     if (enabled && next.length === 0) {
-      Alert.alert('Keep one app selected', 'Turn off Payment Helper before removing every app.')
+      Alert.alert('Keep one app selected', 'Turn off payment helper before removing every app.')
       return
     }
     setSelectedPackages(next)
     await setPaymentWatchTargetPackages(next)
+  }
+
+  const setNudge = (key: keyof NudgeToggles, value: boolean) => {
+    const updated = { ...pb.nudgeToggles, [key]: value }
+    pb.updatePlaybook({ nudgeToggles: updated })
   }
 
   return (
@@ -157,128 +221,171 @@ export default function NotificationSettingsScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={12}>
           <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Payment helper</Text>
+        <Text style={styles.headerTitle}>Notifications</Text>
         <View style={{ width: 24 }} />
       </View>
 
-      {!available ? (
-        <View style={styles.center}>
-          <Text style={styles.emptyTitle}>Development build required</Text>
-          <Text style={styles.helpText}>
-            Payment Helper is Android-only and is unavailable in Expo Go.
-          </Text>
-        </View>
-      ) : loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={colors.green} />
-        </View>
-      ) : (
-        <ScrollView contentContainerStyle={styles.content}>
-          <Text style={styles.sectionTitle}>Payment helper</Text>
-          <Card>
-            <SettingRow
-              label="Payment Helper"
-              detail="Show a payment prompt in selected apps"
-              value={enabled}
-              onValueChange={toggleHelper}
-            />
-            {enabled && !usageAccess && (
-              <>
-                <View style={styles.divider} />
-                <Text style={styles.warning}>
-                  Usage access is off. UnSpoil cannot detect the selected apps.
-                </Text>
-                <TouchableOpacity style={styles.outlineButton} onPress={openPaymentWatchUsageSettings}>
-                  <Text style={styles.outlineButtonText}>Grant usage access</Text>
-                </TouchableOpacity>
-              </>
-            )}
-            {enabled && !notificationAccess && (
-              <>
-                <View style={styles.divider} />
-                <Text style={styles.warning}>
-                  Android notifications are off, so payment prompts cannot appear.
-                </Text>
-                <TouchableOpacity
-                  style={styles.outlineButton}
-                  onPress={openPaymentWatchNotificationSettings}
-                >
-                  <Text style={styles.outlineButtonText}>Open notification settings</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </Card>
+      <ScrollView contentContainerStyle={styles.content}>
+        <Text style={styles.lead}>
+          Manage notifications and select apps. At most one plan nudge a day; each alert once per
+          month while it still applies. Quiet 10pm–8am.
+        </Text>
 
-          <Text style={styles.sectionTitle}>Timing</Text>
-          <Card>
-            <View style={styles.delayHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.rowLabel}>Show after</Text>
-                <Text style={styles.rowDetail}>Delay after a selected app opens</Text>
+        <Text style={styles.sectionTitle}>Plan nudges</Text>
+        <Card>
+          {NUDGE_ROWS.map((item, i) => (
+            <View key={item.key}>
+              {i > 0 && <View style={styles.divider} />}
+              <View style={styles.toggleRow}>
+                <Text style={styles.rowLabel}>{item.label}</Text>
+                <Switch
+                  value={pb.nudgeToggles[item.key]}
+                  onValueChange={v => setNudge(item.key, v)}
+                  trackColor={{ false: colors.border, true: colors.greenFill }}
+                  thumbColor={pb.nudgeToggles[item.key] ? colors.green : '#f4f3f4'}
+                />
               </View>
-              <Text style={styles.seconds}>{delay} sec</Text>
             </View>
-            <Slider
-              minimumValue={0}
-              maximumValue={60}
-              step={1}
-              value={delay}
-              onValueChange={setDelay}
-              onSlidingComplete={saveDelay}
-              minimumTrackTintColor={colors.green}
-              maximumTrackTintColor={colors.border}
-              thumbTintColor={colors.green}
-              accessibilityLabel="Notification delay in seconds"
-            />
-          </Card>
+          ))}
+        </Card>
 
-          <View style={styles.appsHeading}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.sectionTitle}>Apps</Text>
-              <Text style={styles.sectionDetail}>
-                {selectedPackages.length} selected
-              </Text>
-            </View>
-          </View>
-          <TextInput
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Search installed apps"
-            placeholderTextColor={colors.textMuted}
-            style={styles.search}
-          />
-          <Card style={styles.appsCard}>
-            {filteredApps.length === 0 ? (
-              <Text style={styles.helpText}>No matching launchable apps.</Text>
-            ) : (
-              filteredApps.map((app, index) => {
-                const selected = selectedPackages.includes(app.packageName)
-                return (
-                  <View key={app.packageName}>
-                    {index > 0 && <View style={styles.divider} />}
-                    <TouchableOpacity
-                      style={styles.appRow}
-                      onPress={() => toggleApp(app.packageName)}
-                      accessibilityRole="checkbox"
-                      accessibilityState={{ checked: selected }}
-                    >
-                      {app.iconPath ? (
-                        <Image source={{ uri: `file://${app.iconPath}` }} style={styles.appIcon} />
-                      ) : null}
-                      <Text style={[styles.rowLabel, { flex: 1 }]}>{app.label}</Text>
-                      <Ionicons
-                        name={selected ? 'checkmark-circle' : 'ellipse-outline'}
-                        size={23}
-                        color={selected ? colors.green : colors.textMuted}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                )
-              })
-            )}
+        <Text style={styles.sectionTitle}>Payment helper</Text>
+        {!available ? (
+          <Card>
+            <Text style={styles.rowDetail}>
+              Payment helper is Android-only and needs a development or store build (not Expo Go).
+            </Text>
           </Card>
-        </ScrollView>
-      )}
+        ) : !helperReady ? (
+          <Card style={styles.helperLoading}>
+            <ActivityIndicator color={colors.green} />
+          </Card>
+        ) : (
+          <>
+            <Card>
+              <SettingRow
+                label="Payment helper"
+                detail="Log prompt when a selected payment app is open"
+                value={enabled}
+                onValueChange={toggleHelper}
+              />
+              {enabled && !usageAccess && (
+                <>
+                  <View style={styles.divider} />
+                  <Text style={styles.warning}>
+                    Usage access is off. UnSpoil cannot detect the selected apps.
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.outlineButton}
+                    onPress={openPaymentWatchUsageSettings}
+                  >
+                    <Text style={styles.outlineButtonText}>Grant usage access</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+              {enabled && !notificationAccess && (
+                <>
+                  <View style={styles.divider} />
+                  <Text style={styles.warning}>
+                    Notifications are off or “Log a payment” is blocked — prompts will not appear.
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.outlineButton}
+                    onPress={openPaymentWatchNotificationSettings}
+                  >
+                    <Text style={styles.outlineButtonText}>Open notification settings</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+              {enabled && (
+                <>
+                  <View style={styles.divider} />
+                  <SettingRow
+                    label="Always-on watching notification"
+                    detail="Optional quiet notification for more reliable detection in the background"
+                    value={keepWatchingNotification}
+                    onValueChange={toggleKeepWatchingNotification}
+                  />
+                </>
+              )}
+              {enabled && usageAccess && notificationAccess && !keepWatchingNotification && (
+                <>
+                  <View style={styles.divider} />
+                  <Text style={styles.helpInline}>
+                    If log prompts stop, turn on always-on watching or set UnSpoil to unrestricted
+                    battery use.
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.outlineButton}
+                    onPress={openPaymentWatchBatterySettings}
+                  >
+                    <Text style={styles.outlineButtonText}>Battery settings</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </Card>
+
+            <Text style={styles.sectionTitle}>Prompt timing</Text>
+            <Card>
+              <View style={styles.delayRow}>
+                <View style={{ flex: 1, paddingRight: 12 }}>
+                  <Text style={styles.rowLabel}>Wait before prompt</Text>
+                  <Text style={styles.rowDetail}>Seconds after a selected app opens</Text>
+                </View>
+                <View style={styles.stepper}>
+                  <TouchableOpacity
+                    style={[styles.stepperBtn, delay <= 0 && styles.stepperBtnDisabled]}
+                    disabled={delay <= 0}
+                    onPress={() => saveDelay(delay - 1)}
+                    accessibilityLabel="Decrease seconds"
+                  >
+                    <Ionicons name="remove" size={20} color={colors.textPrimary} />
+                  </TouchableOpacity>
+                  <TextInput
+                    value={delayDraft}
+                    onChangeText={setDelayDraft}
+                    onBlur={commitDelayDraft}
+                    onSubmitEditing={commitDelayDraft}
+                    keyboardType="number-pad"
+                    maxLength={2}
+                    style={styles.delayInput}
+                    accessibilityLabel="Prompt delay in seconds"
+                  />
+                  <Text style={styles.stepperSuffix}>sec</Text>
+                  <TouchableOpacity
+                    style={[styles.stepperBtn, delay >= 60 && styles.stepperBtnDisabled]}
+                    disabled={delay >= 60}
+                    onPress={() => saveDelay(delay + 1)}
+                    accessibilityLabel="Increase seconds"
+                  >
+                    <Ionicons name="add" size={20} color={colors.textPrimary} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </Card>
+
+            <Text style={styles.sectionTitle}>Payment apps</Text>
+            <Card>
+              <TouchableOpacity style={styles.navRow} onPress={openAppsModal}>
+                <View style={{ flex: 1, paddingRight: 8 }}>
+                  <Text style={styles.rowLabel}>Watched apps</Text>
+                  <Text style={styles.rowDetail}>{selectedSummary}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              </TouchableOpacity>
+            </Card>
+          </>
+        )}
+      </ScrollView>
+
+      <PaymentWatchAppsModal
+        visible={appsModalVisible}
+        loading={appsLoading && apps.length === 0}
+        apps={apps}
+        selectedPackages={selectedPackages}
+        onClose={() => setAppsModalVisible(false)}
+        onToggle={toggleApp}
+      />
     </SafeAreaView>
   )
 }
@@ -325,17 +432,12 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   content: { padding: 16, paddingBottom: 40 },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter_700Bold',
-    color: colors.textPrimary,
-    marginBottom: 6,
+  lead: {
+    fontSize: 13,
+    lineHeight: 19,
+    fontFamily: 'Inter_400Regular',
+    color: colors.textSecond,
+    marginBottom: 4,
   },
   sectionTitle: {
     fontSize: 17,
@@ -344,16 +446,16 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 8,
   },
-  sectionDetail: {
-    fontSize: 13,
-    fontFamily: 'Inter_400Regular',
-    color: colors.textMuted,
-    marginTop: -4,
-  },
   settingRow: {
     flexDirection: 'row',
     alignItems: 'center',
     minHeight: 52,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 48,
   },
   rowLabel: {
     fontSize: 15,
@@ -391,47 +493,57 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
     color: colors.green,
   },
-  delayHeader: {
+  delayRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    minHeight: 52,
   },
-  seconds: {
-    fontSize: 15,
-    fontFamily: 'Inter_600SemiBold',
-    color: colors.textPrimary,
-    marginLeft: 6,
+  stepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
-  appsHeading: { flexDirection: 'row', alignItems: 'flex-end' },
-  search: {
+  stepperBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 12,
-    backgroundColor: colors.surface,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    fontSize: 14,
-    fontFamily: 'Inter_400Regular',
-    color: colors.textPrimary,
-    marginBottom: 10,
-  },
-  appsCard: { paddingVertical: 6 },
-  appRow: {
-    flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 56,
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
   },
-  appIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
-    marginRight: 12,
-  },
-  helpText: {
-    fontSize: 13,
-    lineHeight: 19,
+  stepperBtnDisabled: { opacity: 0.35 },
+  delayInput: {
+    width: 40,
     textAlign: 'center',
+    fontSize: 16,
+    fontFamily: 'Inter_600SemiBold',
+    color: colors.textPrimary,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  stepperSuffix: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: colors.textMuted,
+    marginRight: 2,
+  },
+  helpInline: {
+    fontSize: 12,
+    lineHeight: 18,
     fontFamily: 'Inter_400Regular',
     color: colors.textSecond,
+  },
+  navRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 52,
+  },
+  helperLoading: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 28,
   },
 })

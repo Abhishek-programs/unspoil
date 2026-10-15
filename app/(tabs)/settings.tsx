@@ -445,32 +445,6 @@ function MoneyLocationsCard() {
   )
 }
 
-function PaymentWatchCard() {
-  return (
-    <>
-      <SectionHeader
-        title="Payment helper"
-        description="Log an amount from a notification while a payment app is open."
-      />
-      <Card>
-        <TouchableOpacity
-          style={styles.mappingRow}
-          onPress={() => router.push('/notification-settings')}
-          accessibilityRole="button"
-        >
-          <View style={{ flex: 1 }}>
-            <Text style={styles.editableLabel}>Delay and apps</Text>
-            <Text style={styles.mappingBucket}>
-              Toggle, show-after delay, and watched apps
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-        </TouchableOpacity>
-      </Card>
-    </>
-  )
-}
-
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets()
   const pb = usePlaybookStore()
@@ -504,9 +478,6 @@ export default function SettingsScreen() {
   // Add bucket state
   const [addingBucket, setAddingBucket] = useState(false)
   const [newBucket, setNewBucket] = useState({ name: '', monthlyAmount: '', type: 'spending' as Bucket['type'], showOnHome: true })
-
-  // Notification toggles — synced to playbook store
-  const [nudges, setNudges] = useState(pb.nudgeToggles)
 
   const draftFromBucket = (b: Bucket) => ({
     name: b.name,
@@ -1081,37 +1052,27 @@ export default function SettingsScreen() {
 
         <MoneyLocationsCard />
 
-        <PaymentWatchCard />
-
-        {/* Section 5: Notifications */}
-        <SectionHeader title="Notifications" description="At most one nudge a day, quiet 10pm–8am" />
+        <SectionHeader
+          title="Notifications"
+          description="Manage notifications and select apps."
+        />
         <Card>
-          {[
-            { key: 'budgetBreach' as const, label: 'Budget breach alerts' },
-            { key: 'savingsReminder' as const, label: 'Savings reminders' },
-            { key: 'efFloorWarning' as const, label: 'EF floor warnings' },
-            { key: 'recurringDraft' as const, label: 'Recurring draft reminders' },
-          ].map((item, i) => (
-            <View key={item.key}>
-              {i > 0 && <View style={styles.divider} />}
-              <View style={styles.toggleRow}>
-                <Text style={styles.editableLabel}>{item.label}</Text>
-                <Switch
-                  value={nudges[item.key]}
-                  onValueChange={v => {
-                    const updated = { ...nudges, [item.key]: v }
-                    setNudges(updated)
-                    pb.updatePlaybook({ nudgeToggles: updated })
-                  }}
-                  trackColor={{ false: colors.border, true: colors.greenFill }}
-                  thumbColor={nudges[item.key] ? colors.green : '#f4f3f4'}
-                />
-              </View>
+          <TouchableOpacity
+            style={styles.mappingRow}
+            onPress={() => router.push('/notification-settings')}
+            accessibilityRole="button"
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={styles.editableLabel}>Nudges and payment helper</Text>
+              <Text style={styles.mappingBucket}>
+                Plan alerts, log prompts, timing, and watched apps
+              </Text>
             </View>
-          ))}
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+          </TouchableOpacity>
         </Card>
 
-        {/* Section 6: Data */}
+        {/* Section 5: Data */}
         <SectionHeader
           title="Data"
           description="Full backup for another phone, UnSpoil reinstall, or your own analysis."

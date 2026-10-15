@@ -138,6 +138,13 @@ export function applySchemaPatches() {
   if (playbookExists && !hasColumn('playbook', 'ef_start_balance')) {
     tryExec(`ALTER TABLE \`playbook\` ADD COLUMN \`ef_start_balance\` real DEFAULT 0 NOT NULL`)
   }
+  if (playbookExists) {
+    ensureColumn(
+      'playbook',
+      'nudge_prefs_json',
+      `ALTER TABLE \`playbook\` ADD COLUMN \`nudge_prefs_json\` text`,
+    )
+  }
 
   const bucketsExists = sqlite.getFirstSync(
     `SELECT name FROM sqlite_master WHERE type='table' AND name='buckets'`

@@ -20,6 +20,7 @@ export const playbook = sqliteTable('playbook', {
   lastPersonalRebalancePromptMonth: text('last_personal_rebalance_prompt_month'),
   personalRecoveryDebt: real('personal_recovery_debt').default(0),
   personalNormalTopUp: real('personal_normal_top_up'),
+  nudgePrefsJson: text('nudge_prefs_json'),
 })
 
 export const buckets = sqliteTable('buckets', {

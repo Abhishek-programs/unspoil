@@ -13,13 +13,13 @@ import { useTransactionsStore } from '@/store/transactions'
 import { useGoalsStore } from '@/store/goals'
 import { useLendingStore } from '@/store/lending'
 import { useAccountsStore } from '@/store/accounts'
-import { getMonthRange, getDaysRemaining, toLocalDateKey } from '@/lib/month'
+import { getMonthRange, toLocalDateKey } from '@/lib/month'
+import { currentMonthKey } from '@/lib/bucket-balance'
 import {
   requestPermissions,
   setupNotificationChannel,
   checkAndScheduleAll,
-  setNudgeToggles,
-  setLastNotificationDate,
+  computeEfBalance,
 } from '@/lib/notifications'
 import { runMonthRollover } from '@/lib/bucket-balance'
 import { runSurplusRollover } from '@/lib/month-surplus'
@@ -36,8 +36,9 @@ export default function RootLayout() {
   })
   const [dbReady, setDbReady] = useState(false)
   const { loadPlaybook, isOnboarded, isLoaded: playbookLoaded } = usePlaybookStore()
-  const { loadBuckets } = useBucketsStore()
-  const { loadTransactions, loadAllTransactions } = useTransactionsStore()
+  const { loadBuckets, isLoaded: bucketsLoaded } = useBucketsStore()
+  const { loadTransactions, loadAllTransactions, isLoaded: transactionsLoaded } =
+    useTransactionsStore()
   const { loadGoals } = useGoalsStore()
   const { loadContacts, loadEntries, loadAllEntries } = useLendingStore()
   const { loadAccounts } = useAccountsStore()
@@ -105,9 +106,6 @@ export default function RootLayout() {
   // Notification setup — runs once after onboarding
   useEffect(() => {
     if (!playbookLoaded || !isOnboarded) return
-    const pb = usePlaybookStore.getState()
-    setNudgeToggles(pb.nudgeToggles)
-    setLastNotificationDate(pb.lastNotificationDate)
     setupNotificationChannel()
     requestPermissions()
     startPaymentWatchIfEnabled()
@@ -134,6 +132,14 @@ export default function RootLayout() {
 
     if (!bs.isLoaded || !ts.isLoaded) return
 
+    const { start } = getMonthRange(pb.monthStartDay, pb.earlyMonthStartDate)
+    const periodKey = currentMonthKey(pb.monthStartDay, pb.earlyMonthStartDate)
+    const startMs = start.getTime()
+    const daysSincePeriodStart = Math.max(
+      0,
+      Math.floor((Date.now() - startMs) / 86400000),
+    )
+
     const spendingBuckets = bs.getSpendingBuckets()
     const savingsBuckets = bs.getSavingsBuckets()
 
@@ -148,21 +154,17 @@ export default function RootLayout() {
     })
 
     const confirmedIds = ts.getConfirmedSavingsBuckets()
-    const daysSinceStart = Math.max(
-      0,
-      getDaysRemaining(pb.monthStartDay, pb.earlyMonthStartDate),
-    )
     const unconfirmedSavings = savingsBuckets
       .filter(b => b.showOnHome && !confirmedIds.has(b.id))
-      .map(b => ({ name: b.name, daysSinceMonthStart: 30 - daysSinceStart }))
+      .map(b => ({
+        id: b.id,
+        name: b.name,
+        daysSinceMonthStart: daysSincePeriodStart,
+      }))
 
-    // EF balance from savings confirm transactions
-    const efBucket = bs.buckets.find(b => b.id === 'ef')
-    const efBalance = efBucket
-      ? ts.transactions
-          .filter(t => t.bucketId === efBucket.id && t.type === 'expense')
-          .reduce((sum, t) => sum + t.amount, 0)
-      : 0
+    const efBalance = computeEfBalance(pb.efStartBalance, ts.allTransactions)
+
+    const recurringDraftCount = ts.allTransactions.filter(t => t.isRecurringDraft).length
 
     const flaggedTxns = ts.flaggedTransactions
     const oldestFlagged = flaggedTxns.length > 0
@@ -170,14 +172,17 @@ export default function RootLayout() {
       : 0
 
     checkAndScheduleAll({
+      periodKey,
       spentByBucket,
       unconfirmedSavings,
       efBalance,
       efFloor: pb.efFloor,
+      recurringDraftCount,
+      daysSincePeriodStart,
       flaggedCount: flaggedTxns.length,
       flaggedAgeDays: oldestFlagged,
     })
-  }, [playbookLoaded, isOnboarded])
+  }, [playbookLoaded, isOnboarded, bucketsLoaded, transactionsLoaded])
 
   useEffect(() => {
     if (!(fontsLoaded || fontError) || !dbReady || !playbookLoaded) return

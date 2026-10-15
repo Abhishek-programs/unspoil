@@ -85,6 +85,7 @@ function withPaymentWatch(config) {
 
     AndroidConfig.Permissions.ensurePermissions(manifest, [
       'android.permission.POST_NOTIFICATIONS',
+      'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
       'android.permission.FOREGROUND_SERVICE',
       'android.permission.FOREGROUND_SERVICE_SPECIAL_USE',
       'android.permission.RECEIVE_BOOT_COMPLETED',
@@ -167,6 +168,7 @@ function withPaymentWatch(config) {
             action: [
               { $: { 'android:name': 'android.intent.action.BOOT_COMPLETED' } },
               { $: { 'android:name': 'android.intent.action.LOCKED_BOOT_COMPLETED' } },
+              { $: { 'android:name': 'android.intent.action.MY_PACKAGE_REPLACED' } },
             ],
           },
         ],

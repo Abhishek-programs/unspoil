@@ -27,7 +27,7 @@ export default function OnboardingInfoScreen() {
     if (!name.trim()) return
     Keyboard.dismiss()
     await updatePlaybook({ userName: name.trim() })
-    router.push('/onboarding/money')
+    router.push('/onboarding/permissions')
   }
 
   const handleImportBackup = () => {
