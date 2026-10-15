@@ -12,6 +12,7 @@ object PaymentWatchPrefs {
   private const val KEY_PENDING_MERCHANT = "pending_merchant"
   private const val KEY_DONE_THIS_VISIT = "done_this_visit"
   private const val KEY_HOLD_CANCEL_UNTIL = "hold_cancel_until"
+  private const val KEY_KEEP_BG_NOTIFICATION = "keep_bg_notification"
 
   const val DEFAULT_PACKAGES = "com.f1soft.esewa,com.esewa,com.f1soft.nabilmbank"
   const val DEFAULT_LOG_DELAY_MS = 5000L
@@ -108,4 +109,16 @@ object PaymentWatchPrefs {
   fun shouldHoldCancel(context: Context): Boolean =
     System.currentTimeMillis() <
       context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(KEY_HOLD_CANCEL_UNTIL, 0L)
+
+  /** Quiet ongoing notification while watching; improves reliability on aggressive OEM battery limits. */
+  fun keepBackgroundNotification(context: Context): Boolean =
+    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+      .getBoolean(KEY_KEEP_BG_NOTIFICATION, false)
+
+  fun setKeepBackgroundNotification(context: Context, keep: Boolean) {
+    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+      .edit()
+      .putBoolean(KEY_KEEP_BG_NOTIFICATION, keep)
+      .apply()
+  }
 }

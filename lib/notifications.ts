@@ -1,6 +1,11 @@
 import Constants, { ExecutionEnvironment } from 'expo-constants'
 import { Platform } from 'react-native'
 import { formatMoney } from '@/lib/format'
+import { EF_BUCKET_ID } from '@/constants/defaults'
+import { usePlaybookStore } from '@/store/playbook'
+import type { NudgeToggles } from '@/lib/nudge-prefs'
+
+export type { NudgeToggles } from '@/lib/nudge-prefs'
 
 export type NudgeType =
   | 'budgetBreach'
@@ -11,24 +16,8 @@ export type NudgeType =
   | 'flaggedPending'
   | 'recurringDraft'
 
-export interface NudgeToggles {
-  budgetBreach: boolean
-  savingsReminder: boolean
-  efFloorWarning: boolean
-  recurringDraft: boolean
-}
-
-const DEFAULT_TOGGLES: NudgeToggles = {
-  budgetBreach: true,
-  savingsReminder: true,
-  efFloorWarning: true,
-  recurringDraft: true,
-}
-
 const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient
 
-// expo-notifications remote APIs were removed from Expo Go (SDK 53+).
-// Load only in a real native / development build.
 type NotificationsModule = typeof import('expo-notifications')
 let Notifications: NotificationsModule | null = null
 if (!isExpoGo) {
@@ -36,33 +25,12 @@ if (!isExpoGo) {
   Notifications = require('expo-notifications') as NotificationsModule
 }
 
-let nudgeToggles: NudgeToggles = { ...DEFAULT_TOGGLES }
-let lastNotificationDate: string | null = null
-let firedMilestones: Set<string> = new Set()
-
-export function setNudgeToggles(toggles: NudgeToggles) {
-  nudgeToggles = { ...toggles }
+export async function hasNotificationPermission(): Promise<boolean> {
+  if (Platform.OS === 'web' || !Notifications) return false
+  const { status } = await Notifications.getPermissionsAsync()
+  return status === 'granted'
 }
 
-export function getNudgeToggles(): NudgeToggles {
-  return { ...nudgeToggles }
-}
-
-export function setLastNotificationDate(date: string | null) {
-  lastNotificationDate = date
-}
-
-export function markMilestoneFired(key: string) {
-  firedMilestones.add(key)
-}
-
-export function hasMilestoneFired(key: string): boolean {
-  return firedMilestones.has(key)
-}
-
-/**
- * Request notification permissions. Call once after onboarding.
- */
 export async function requestPermissions(): Promise<boolean> {
   if (Platform.OS === 'web' || !Notifications) return false
 
@@ -73,9 +41,6 @@ export async function requestPermissions(): Promise<boolean> {
   return status === 'granted'
 }
 
-/**
- * Configure notification channel for Android
- */
 export async function setupNotificationChannel() {
   if (Platform.OS !== 'android' || !Notifications) return
 
@@ -96,25 +61,36 @@ function todayKey(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-function hasNotifiedToday(): boolean {
+function hasNotifiedToday(lastNotificationDate: string | null): boolean {
   return lastNotificationDate === todayKey()
 }
 
-/**
- * Schedule a local notification. Respects 1-per-day cap and quiet hours.
- * Returns true if notification was scheduled, false if suppressed.
- */
-export async function scheduleNudge(
+function hasFiredNudge(dedupeKey: string): boolean {
+  return usePlaybookStore.getState().nudgeFired[dedupeKey] === true
+}
+
+async function markNudgeFired(dedupeKey: string): Promise<void> {
+  const pb = usePlaybookStore.getState()
+  const today = todayKey()
+  await pb.updatePlaybook({
+    nudgeFired: { ...pb.nudgeFired, [dedupeKey]: true },
+    lastNotificationDate: today,
+  })
+}
+
+async function scheduleNudge(
   type: NudgeType,
+  dedupeKey: string,
   title: string,
   body: string,
 ): Promise<boolean> {
   if (!Notifications) return false
 
+  const { nudgeToggles, lastNotificationDate } = usePlaybookStore.getState()
   const toggleKey = mapTypeToToggle(type)
   if (toggleKey && !nudgeToggles[toggleKey]) return false
-
-  if (hasNotifiedToday()) return false
+  if (hasFiredNudge(dedupeKey)) return false
+  if (hasNotifiedToday(lastNotificationDate)) return false
 
   let trigger: import('expo-notifications').NotificationTriggerInput = null
   if (isQuietHours()) {
@@ -137,7 +113,7 @@ export async function scheduleNudge(
     trigger,
   })
 
-  lastNotificationDate = todayKey()
+  await markNudgeFired(dedupeKey)
   return true
 }
 
@@ -147,11 +123,12 @@ function mapTypeToToggle(type: NudgeType): keyof NudgeToggles | null {
     case 'budgetExceeded':
       return 'budgetBreach'
     case 'savingsReminder':
-    case 'recurringDraft':
       return 'savingsReminder'
     case 'efFloorWarning':
     case 'efMilestone':
       return 'efFloorWarning'
+    case 'recurringDraft':
+      return 'recurringDraft'
     case 'flaggedPending':
       return null
     default:
@@ -159,26 +136,38 @@ function mapTypeToToggle(type: NudgeType): keyof NudgeToggles | null {
   }
 }
 
-/**
- * Evaluate all trigger conditions and schedule the most urgent nudge.
- * Called on app open from _layout.tsx.
- */
 export async function checkAndScheduleAll(params: {
+  periodKey: string
   spentByBucket: Record<string, { spent: number; limit: number; name: string }>
-  unconfirmedSavings: { name: string; daysSinceMonthStart: number }[]
+  unconfirmedSavings: { id: string; name: string; daysSinceMonthStart: number }[]
   efBalance: number
   efFloor: number
+  recurringDraftCount: number
+  daysSincePeriodStart: number
   flaggedCount: number
   flaggedAgeDays: number
 }): Promise<void> {
-  if (!Notifications || hasNotifiedToday()) return
+  if (!Notifications) return
+  const { lastNotificationDate } = usePlaybookStore.getState()
+  if (hasNotifiedToday(lastNotificationDate)) return
 
-  const { spentByBucket, unconfirmedSavings, efBalance, efFloor, flaggedCount, flaggedAgeDays } = params
+  const {
+    periodKey,
+    spentByBucket,
+    unconfirmedSavings,
+    efBalance,
+    efFloor,
+    recurringDraftCount,
+    daysSincePeriodStart,
+    flaggedCount,
+    flaggedAgeDays,
+  } = params
 
-  for (const [, b] of Object.entries(spentByBucket)) {
+  for (const [bucketId, b] of Object.entries(spentByBucket)) {
     if (b.limit > 0 && b.spent >= b.limit) {
       const sent = await scheduleNudge(
         'budgetExceeded',
+        `budgetExceeded:${bucketId}:${periodKey}`,
         `${b.name} budget reached`,
         `You've used your full ${b.name} budget for this month.`,
       )
@@ -186,11 +175,12 @@ export async function checkAndScheduleAll(params: {
     }
   }
 
-  for (const [, b] of Object.entries(spentByBucket)) {
+  for (const [bucketId, b] of Object.entries(spentByBucket)) {
     if (b.limit > 0 && b.spent >= b.limit * 0.8 && b.spent < b.limit) {
       const remaining = b.limit - b.spent
       const sent = await scheduleNudge(
         'budgetBreach',
+        `budgetBreach:${bucketId}:${periodKey}`,
         `${b.name} is at 80%`,
         `${formatMoney(Math.round(remaining))} left in ${b.name}.`,
       )
@@ -198,20 +188,30 @@ export async function checkAndScheduleAll(params: {
     }
   }
 
+  if (efFloor > 0 && efBalance < efFloor) {
+    const sent = await scheduleNudge(
+      'efFloorWarning',
+      `efFloorBelow:${periodKey}`,
+      'Emergency Fund below floor',
+      `Your EF is ${formatMoney(Math.round(efBalance))} — floor is ${formatMoney(Math.round(efFloor))}.`,
+    )
+    if (sent) return
+  }
+
   if (efFloor > 0) {
-    if (efBalance >= efFloor && !hasMilestoneFired('ef_stage2')) {
-      markMilestoneFired('ef_stage2')
+    if (efBalance >= efFloor && !hasFiredNudge('efMilestone:ef_stage2')) {
       const sent = await scheduleNudge(
         'efMilestone',
+        'efMilestone:ef_stage2',
         'Emergency Fund fully funded!',
         'Your Emergency Fund has reached your target. Great discipline!',
       )
       if (sent) return
     }
-    if (efBalance >= 150000 && !hasMilestoneFired('ef_stage1')) {
-      markMilestoneFired('ef_stage1')
+    if (efBalance >= 150000 && !hasFiredNudge('efMilestone:ef_stage1')) {
       const sent = await scheduleNudge(
         'efMilestone',
+        'efMilestone:ef_stage1',
         'Emergency Fund hit Stage 1!',
         `You have ${formatMoney(150000)} in your Emergency Fund. Keep going!`,
       )
@@ -219,10 +219,21 @@ export async function checkAndScheduleAll(params: {
     }
   }
 
+  if (recurringDraftCount > 0 && daysSincePeriodStart >= 3) {
+    const sent = await scheduleNudge(
+      'recurringDraft',
+      `recurringDraft:${periodKey}`,
+      recurringDraftCount === 1 ? 'Recurring draft waiting' : `${recurringDraftCount} recurring drafts waiting`,
+      'Open UnSpoil and confirm recurring entries so they count in your plan.',
+    )
+    if (sent) return
+  }
+
   for (const s of unconfirmedSavings) {
     if (s.daysSinceMonthStart >= 3) {
       const sent = await scheduleNudge(
         'savingsReminder',
+        `savingsReminder:${s.id}:${periodKey}`,
         `${s.name} transfer pending`,
         `${s.name} transfer not confirmed yet this month.`,
       )
@@ -233,6 +244,7 @@ export async function checkAndScheduleAll(params: {
   if (flaggedCount > 0 && flaggedAgeDays >= 3) {
     const sent = await scheduleNudge(
       'flaggedPending',
+      `flaggedPending:${periodKey}`,
       `${flaggedCount} transaction${flaggedCount > 1 ? 's' : ''} waiting`,
       `${flaggedCount} transaction${flaggedCount > 1 ? 's are' : ' is'} waiting to be categorized.`,
     )
@@ -243,4 +255,14 @@ export async function checkAndScheduleAll(params: {
 export async function cancelAllNudges(): Promise<void> {
   if (!Notifications) return
   await Notifications.cancelAllScheduledNotificationsAsync()
+}
+
+export function computeEfBalance(
+  efStartBalance: number,
+  allTransactions: { bucketId: string | null; type: string; amount: number }[],
+): number {
+  const contributions = allTransactions
+    .filter(t => t.bucketId === EF_BUCKET_ID && t.type === 'expense')
+    .reduce((sum, t) => sum + t.amount, 0)
+  return efStartBalance + contributions
 }

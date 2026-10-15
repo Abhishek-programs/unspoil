@@ -3,13 +3,15 @@ import { eq } from 'drizzle-orm'
 import { db } from '@/db/client'
 import { playbook } from '@/db/schema'
 import { setActiveCurrency } from '@/lib/format'
+import {
+  defaultNudgeToggles,
+  parseNudgePrefs,
+  serializeNudgePrefs,
+  type NudgeFiredMap,
+  type NudgeToggles,
+} from '@/lib/nudge-prefs'
 
-export interface NudgeToggles {
-  budgetBreach: boolean
-  savingsReminder: boolean
-  efFloorWarning: boolean
-  recurringDraft: boolean
-}
+export type { NudgeToggles } from '@/lib/nudge-prefs'
 
 interface PlaybookState {
   userName: string | null
@@ -32,6 +34,7 @@ interface PlaybookState {
   personalNormalTopUp: number | null
   nudgeToggles: NudgeToggles
   lastNotificationDate: string | null
+  nudgeFired: NudgeFiredMap
   isLoaded: boolean
   loadPlaybook: () => Promise<void>
   updatePlaybook: (patch: Partial<Omit<PlaybookState, 'isLoaded' | 'loadPlaybook' | 'updatePlaybook' | 'setOnboarded' | 'startPersonalRecovery' | 'resetPersonalRecovery'>>) => Promise<void>
@@ -81,19 +84,16 @@ export const usePlaybookStore = create<PlaybookState>((set, get) => ({
   lastPersonalRebalancePromptMonth: null,
   personalRecoveryDebt: 0,
   personalNormalTopUp: null,
-  nudgeToggles: {
-    budgetBreach: true,
-    savingsReminder: true,
-    efFloorWarning: true,
-    recurringDraft: true,
-  },
+  nudgeToggles: defaultNudgeToggles(),
   lastNotificationDate: null,
+  nudgeFired: {},
   isLoaded: false,
 
   loadPlaybook: async () => {
     const rows = await db.select().from(playbook).limit(1)
     if (rows.length > 0) {
       const row = rows[0]
+      const nudgePrefs = parseNudgePrefs(row.nudgePrefsJson)
       set({
         userName: row.userName ?? null,
         currency: row.currency || 'NPR',
@@ -113,6 +113,9 @@ export const usePlaybookStore = create<PlaybookState>((set, get) => ({
         lastPersonalRebalancePromptMonth: row.lastPersonalRebalancePromptMonth ?? null,
         personalRecoveryDebt: row.personalRecoveryDebt ?? 0,
         personalNormalTopUp: row.personalNormalTopUp ?? null,
+        nudgeToggles: nudgePrefs.toggles,
+        lastNotificationDate: nudgePrefs.lastNotificationDate,
+        nudgeFired: nudgePrefs.fired,
         isLoaded: true,
       })
       setActiveCurrency(row.currency || 'NPR')
@@ -159,6 +162,14 @@ export const usePlaybookStore = create<PlaybookState>((set, get) => ({
           .filter(key => key in PLAYBOOK_COLUMNS)
           .map(key => [key, (state as any)[key]]),
       )
+      const nudgeKeys = ['nudgeToggles', 'lastNotificationDate', 'nudgeFired'] as const
+      if (nudgeKeys.some(key => key in patch)) {
+        values.nudgePrefsJson = serializeNudgePrefs({
+          nudgeToggles: state.nudgeToggles,
+          lastNotificationDate: state.lastNotificationDate,
+          nudgeFired: state.nudgeFired,
+        })
+      }
       if (Object.keys(values).length === 0) return
       await db.update(playbook).set(values).where(eq(playbook.id, rows[0].id))
     }
@@ -193,6 +204,7 @@ export const usePlaybookStore = create<PlaybookState>((set, get) => ({
           personalNormalTopUp: prev.personalNormalTopUp,
           nudgeToggles: prev.nudgeToggles,
           lastNotificationDate: prev.lastNotificationDate,
+          nudgeFired: prev.nudgeFired,
         })
         setActiveCurrency(prev.currency)
         throw retryError

@@ -63,6 +63,7 @@ const BOOLEAN_FIELDS: Partial<Record<TableKey, string[]>> = {
 export type BackupPreferences = {
   nudgeToggles: NudgeToggles
   lastNotificationDate: string | null
+  nudgeFired?: Record<string, true>
 }
 
 export type BackupPayload = {
@@ -185,6 +186,7 @@ export async function exportBackup(): Promise<string> {
     preferences: {
       nudgeToggles: pb.nudgeToggles,
       lastNotificationDate: pb.lastNotificationDate,
+      nudgeFired: pb.nudgeFired,
     },
     paymentHelper,
   }
@@ -308,6 +310,12 @@ async function restorePreferences(prefs?: BackupPreferences) {
   usePlaybookStore.setState({
     nudgeToggles: prefs.nudgeToggles,
     lastNotificationDate: prefs.lastNotificationDate,
+    nudgeFired: prefs.nudgeFired ?? {},
+  })
+  await usePlaybookStore.getState().updatePlaybook({
+    nudgeToggles: prefs.nudgeToggles,
+    lastNotificationDate: prefs.lastNotificationDate,
+    nudgeFired: prefs.nudgeFired ?? {},
   })
 }
 

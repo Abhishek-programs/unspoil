@@ -3,7 +3,6 @@ package {{PACKAGE}}.paymentwatch
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import androidx.core.app.NotificationManagerCompat
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -30,12 +29,26 @@ class PaymentWatchModule(private val ctx: ReactApplicationContext) :
 
   @ReactMethod
   fun hasNotificationPermission(promise: Promise) {
-    promise.resolve(NotificationManagerCompat.from(ctx).areNotificationsEnabled())
+    promise.resolve(
+      PaymentWatchAccess.canPostLogNotifications(ctx, PaymentWatchService.CHANNEL_LOG),
+    )
   }
 
   @ReactMethod
   fun getLogDelayMs(promise: Promise) {
     promise.resolve(PaymentWatchPrefs.logDelayMs(ctx).toDouble())
+  }
+
+  @ReactMethod
+  fun getKeepBackgroundNotification(promise: Promise) {
+    promise.resolve(PaymentWatchPrefs.keepBackgroundNotification(ctx))
+  }
+
+  @ReactMethod
+  fun setKeepBackgroundNotification(keep: Boolean, promise: Promise) {
+    PaymentWatchPrefs.setKeepBackgroundNotification(ctx, keep)
+    if (PaymentWatchPrefs.isEnabled(ctx)) PaymentWatchService.start(ctx)
+    promise.resolve(true)
   }
 
   @ReactMethod
@@ -52,6 +65,10 @@ class PaymentWatchModule(private val ctx: ReactApplicationContext) :
       if (enabled) {
         if (!PaymentWatchAccess.hasUsageAccess(ctx)) {
           promise.resolve("needs_usage_access")
+          return
+        }
+        if (!PaymentWatchAccess.canPostLogNotifications(ctx, PaymentWatchService.CHANNEL_LOG)) {
+          promise.resolve("needs_notification_permission")
           return
         }
         PaymentWatchService.start(ctx)
@@ -71,6 +88,36 @@ class PaymentWatchModule(private val ctx: ReactApplicationContext) :
       promise.resolve(true)
     } catch (e: Exception) {
       promise.reject("settings_error", e)
+    }
+  }
+
+  @ReactMethod
+  fun openBatterySettings(promise: Promise) {
+    try {
+      ctx.startActivity(PaymentWatchAccess.batteryOptimizationIntent())
+      promise.resolve(true)
+    } catch (e: Exception) {
+      promise.reject("settings_error", e)
+    }
+  }
+
+  @ReactMethod
+  fun hasBatteryUnrestricted(promise: Promise) {
+    promise.resolve(PaymentWatchAccess.isBatteryUnrestricted(ctx))
+  }
+
+  @ReactMethod
+  fun requestBatteryUnrestricted(promise: Promise) {
+    try {
+      ctx.startActivity(PaymentWatchAccess.requestBatteryUnrestrictedIntent(ctx))
+      promise.resolve(true)
+    } catch (e: Exception) {
+      try {
+        ctx.startActivity(PaymentWatchAccess.appBatterySettingsIntent(ctx))
+        promise.resolve(true)
+      } catch (inner: Exception) {
+        promise.reject("settings_error", inner)
+      }
     }
   }
 
@@ -162,13 +209,21 @@ class PaymentWatchModule(private val ctx: ReactApplicationContext) :
     map.putBoolean("enabled", PaymentWatchPrefs.isEnabled(ctx))
     map.putDouble("logDelayMs", PaymentWatchPrefs.logDelayMs(ctx).toDouble())
     map.putArray("targetPackages", Arguments.fromList(PaymentWatchPrefs.targetPackages(ctx).sorted()))
+    map.putBoolean("keepBackgroundNotification", PaymentWatchPrefs.keepBackgroundNotification(ctx))
     promise.resolve(map)
   }
 
   @ReactMethod
-  fun restoreBackupState(enabled: Boolean, logDelayMs: Double, packages: ReadableArray, promise: Promise) {
+  fun restoreBackupState(
+    enabled: Boolean,
+    logDelayMs: Double,
+    packages: ReadableArray,
+    keepBackgroundNotification: Boolean,
+    promise: Promise,
+  ) {
     try {
       PaymentWatchPrefs.setLogDelayMs(ctx, logDelayMs.toLong())
+      PaymentWatchPrefs.setKeepBackgroundNotification(ctx, keepBackgroundNotification)
       val list = mutableListOf<String>()
       for (i in 0 until packages.size()) {
         packages.getString(i)?.let { list.add(it) }

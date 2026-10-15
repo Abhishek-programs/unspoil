@@ -16,19 +16,26 @@ const Native = NativeModules.PaymentWatch as
       setEnabled: (enabled: boolean) => Promise<string>
       openUsageAccessSettings: () => Promise<boolean>
       openNotificationSettings: () => Promise<boolean>
+      openBatterySettings: () => Promise<boolean>
+      hasBatteryUnrestricted: () => Promise<boolean>
+      requestBatteryUnrestricted: () => Promise<boolean>
       setTargetPackages: (packages: string[]) => Promise<boolean>
       getTargetPackages: () => Promise<string[]>
       getLaunchableApps: () => Promise<PaymentWatchApp[]>
       startIfEnabled: () => Promise<boolean>
+      getKeepBackgroundNotification: () => Promise<boolean>
+      setKeepBackgroundNotification: (keep: boolean) => Promise<boolean>
       getBackupState: () => Promise<{
         enabled: boolean
         logDelayMs: number
         targetPackages: string[]
+        keepBackgroundNotification?: boolean
       }>
       restoreBackupState: (
         enabled: boolean,
         logDelayMs: number,
         targetPackages: string[],
+        keepBackgroundNotification: boolean,
       ) => Promise<boolean>
     }
   | undefined
@@ -64,6 +71,16 @@ export async function setPaymentWatchDelaySeconds(seconds: number): Promise<void
   await Native.setLogDelayMs(clamped * 1000)
 }
 
+export async function getPaymentWatchKeepBackgroundNotification(): Promise<boolean> {
+  if (!Native?.getKeepBackgroundNotification) return false
+  return Native.getKeepBackgroundNotification()
+}
+
+export async function setPaymentWatchKeepBackgroundNotification(keep: boolean): Promise<void> {
+  if (!Native?.setKeepBackgroundNotification) return
+  await Native.setKeepBackgroundNotification(keep)
+}
+
 export async function setPaymentWatchEnabled(enabled: boolean): Promise<string> {
   if (!Native) return 'unavailable'
   return Native.setEnabled(enabled)
@@ -77,6 +94,21 @@ export async function openPaymentWatchUsageSettings(): Promise<void> {
 export async function openPaymentWatchNotificationSettings(): Promise<void> {
   if (!Native) return
   await Native.openNotificationSettings()
+}
+
+export async function openPaymentWatchBatterySettings(): Promise<void> {
+  if (!Native) return
+  await Native.openBatterySettings()
+}
+
+export async function hasPaymentWatchBatteryUnrestricted(): Promise<boolean> {
+  if (!Native?.hasBatteryUnrestricted) return Platform.OS !== 'android'
+  return Native.hasBatteryUnrestricted()
+}
+
+export async function requestPaymentWatchBatteryUnrestricted(): Promise<void> {
+  if (!Native?.requestBatteryUnrestricted) return
+  await Native.requestBatteryUnrestricted()
 }
 
 export async function getPaymentWatchTargetPackages(): Promise<string[]> {
@@ -103,6 +135,7 @@ export type PaymentWatchBackupState = {
   enabled: boolean
   logDelayMs: number
   targetPackages: string[]
+  keepBackgroundNotification?: boolean
 }
 
 export async function getPaymentWatchBackupState(): Promise<PaymentWatchBackupState | null> {
@@ -114,5 +147,10 @@ export async function restorePaymentWatchBackupState(
   state: PaymentWatchBackupState,
 ): Promise<void> {
   if (!Native?.restoreBackupState) return
-  await Native.restoreBackupState(state.enabled, state.logDelayMs, state.targetPackages)
+  await Native.restoreBackupState(
+    state.enabled,
+    state.logDelayMs,
+    state.targetPackages,
+    state.keepBackgroundNotification ?? false,
+  )
 }
