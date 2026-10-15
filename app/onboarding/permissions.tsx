@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
+  Alert,
   AppState,
   Platform,
   StyleSheet,
@@ -22,6 +23,7 @@ import {
 import {
   hasPaymentWatchBatteryUnrestricted,
   isPaymentWatchAvailable,
+  openPaymentWatchBatterySettings,
   requestPaymentWatchBatteryUnrestricted,
 } from '@/lib/payment-watch'
 
@@ -54,7 +56,18 @@ export default function OnboardingPermissionsScreen() {
   }
 
   const grantBattery = async () => {
-    await requestPaymentWatchBatteryUnrestricted()
+    const opened = await requestPaymentWatchBatteryUnrestricted()
+    if (!opened) {
+      Alert.alert(
+        'Could not open battery settings',
+        'Open UnSpoil in system Settings → Battery and set it to Unrestricted.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open settings', onPress: () => openPaymentWatchBatterySettings() },
+        ],
+      )
+      return
+    }
     await refresh()
   }
 

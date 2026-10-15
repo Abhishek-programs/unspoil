@@ -4,14 +4,16 @@ import { db } from '@/db/client'
 import { playbook } from '@/db/schema'
 import { setActiveCurrency } from '@/lib/format'
 import {
+  defaultAutoBackupPrefs,
   defaultNudgeToggles,
   parseNudgePrefs,
   serializeNudgePrefs,
+  type AutoBackupPrefs,
   type NudgeFiredMap,
   type NudgeToggles,
 } from '@/lib/nudge-prefs'
 
-export type { NudgeToggles } from '@/lib/nudge-prefs'
+export type { AutoBackupPrefs, NudgeToggles } from '@/lib/nudge-prefs'
 
 interface PlaybookState {
   userName: string | null
@@ -35,6 +37,7 @@ interface PlaybookState {
   nudgeToggles: NudgeToggles
   lastNotificationDate: string | null
   nudgeFired: NudgeFiredMap
+  autoBackup: AutoBackupPrefs
   isLoaded: boolean
   loadPlaybook: () => Promise<void>
   updatePlaybook: (patch: Partial<Omit<PlaybookState, 'isLoaded' | 'loadPlaybook' | 'updatePlaybook' | 'setOnboarded' | 'startPersonalRecovery' | 'resetPersonalRecovery'>>) => Promise<void>
@@ -87,6 +90,7 @@ export const usePlaybookStore = create<PlaybookState>((set, get) => ({
   nudgeToggles: defaultNudgeToggles(),
   lastNotificationDate: null,
   nudgeFired: {},
+  autoBackup: defaultAutoBackupPrefs(),
   isLoaded: false,
 
   loadPlaybook: async () => {
@@ -116,6 +120,7 @@ export const usePlaybookStore = create<PlaybookState>((set, get) => ({
         nudgeToggles: nudgePrefs.toggles,
         lastNotificationDate: nudgePrefs.lastNotificationDate,
         nudgeFired: nudgePrefs.fired,
+        autoBackup: nudgePrefs.autoBackup,
         isLoaded: true,
       })
       setActiveCurrency(row.currency || 'NPR')
@@ -162,12 +167,18 @@ export const usePlaybookStore = create<PlaybookState>((set, get) => ({
           .filter(key => key in PLAYBOOK_COLUMNS)
           .map(key => [key, (state as any)[key]]),
       )
-      const nudgeKeys = ['nudgeToggles', 'lastNotificationDate', 'nudgeFired'] as const
+      const nudgeKeys = [
+        'nudgeToggles',
+        'lastNotificationDate',
+        'nudgeFired',
+        'autoBackup',
+      ] as const
       if (nudgeKeys.some(key => key in patch)) {
         values.nudgePrefsJson = serializeNudgePrefs({
           nudgeToggles: state.nudgeToggles,
           lastNotificationDate: state.lastNotificationDate,
           nudgeFired: state.nudgeFired,
+          autoBackup: state.autoBackup,
         })
       }
       if (Object.keys(values).length === 0) return
@@ -205,6 +216,7 @@ export const usePlaybookStore = create<PlaybookState>((set, get) => ({
           nudgeToggles: prev.nudgeToggles,
           lastNotificationDate: prev.lastNotificationDate,
           nudgeFired: prev.nudgeFired,
+          autoBackup: prev.autoBackup,
         })
         setActiveCurrency(prev.currency)
         throw retryError

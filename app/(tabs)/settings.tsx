@@ -45,7 +45,7 @@ import { useLendingStore } from '@/store/lending'
 import { useAccountsStore } from '@/store/accounts'
 import { BANK_ACCOUNT_ID, ESEWA_ACCOUNT_ID } from '@/constants/accounts'
 import * as Clipboard from 'expo-clipboard'
-import { cacheDirectory, writeAsStringAsync } from 'expo-file-system/legacy'
+import { cacheDirectory, readAsStringAsync, writeAsStringAsync } from 'expo-file-system/legacy'
 import * as Sharing from 'expo-sharing'
 import { buildClaudeSnapshot, CLAUDE_SHARE_PROMPT, snapshotFilename } from '@/lib/claude-snapshot'
 import {
@@ -54,8 +54,22 @@ import {
   hydrateStoresAfterDbChange,
   saveBackupToDevice,
 } from '@/lib/backup'
-import { startImportBackupFlow } from '@/lib/import-backup-flow'
+import { confirmImportBackupRaw, startImportBackupFlow } from '@/lib/import-backup-flow'
+import DateTimePicker from '@react-native-community/datetimepicker'
+import {
+  AUTO_BACKUP_MAX_FILES,
+  listAutoBackupFiles,
+  runAutoBackupNow,
+} from '@/lib/auto-backup'
+import { syncAutoBackupSchedule } from '@/lib/auto-backup-schedule'
+import type { AutoBackupPrefs } from '@/lib/nudge-prefs'
 const BUCKET_TYPES: Bucket['type'][] = ['spending', 'savings', 'investment']
+
+function formatAutoBackupTime(hour: number, minute: number) {
+  const d = new Date()
+  d.setHours(hour, minute, 0, 0)
+  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+}
 
 function SectionHeader({ title, description }: { title: string; description?: string }) {
   return (
@@ -478,6 +492,13 @@ export default function SettingsScreen() {
   // Add bucket state
   const [addingBucket, setAddingBucket] = useState(false)
   const [newBucket, setNewBucket] = useState({ name: '', monthlyAmount: '', type: 'spending' as Bucket['type'], showOnHome: true })
+  const [showAutoBackupTimePicker, setShowAutoBackupTimePicker] = useState(false)
+  const [autoBackupFileCount, setAutoBackupFileCount] = useState(0)
+  const [autoBackupBusy, setAutoBackupBusy] = useState(false)
+
+  useEffect(() => {
+    void listAutoBackupFiles().then(files => setAutoBackupFileCount(files.length))
+  }, [])
 
   const draftFromBucket = (b: Bucket) => ({
     name: b.name,
@@ -719,6 +740,47 @@ export default function SettingsScreen() {
   }
 
   const handleImportBackup = () => startImportBackupFlow()
+
+  const applyAutoBackupPrefs = async (patch: Partial<AutoBackupPrefs>) => {
+    const next = { ...pb.autoBackup, ...patch }
+    await pb.updatePlaybook({ autoBackup: next })
+    await syncAutoBackupSchedule(next)
+  }
+
+  const handleAutoBackupNow = async () => {
+    if (autoBackupBusy) return
+    setAutoBackupBusy(true)
+    try {
+      await runAutoBackupNow()
+      const files = await listAutoBackupFiles()
+      setAutoBackupFileCount(files.length)
+      Alert.alert('Backup saved', `Stored locally (${Math.min(files.length, AUTO_BACKUP_MAX_FILES)} of ${AUTO_BACKUP_MAX_FILES} kept).`)
+    } catch (e) {
+      Alert.alert('Backup failed', e instanceof Error ? e.message : 'Could not save backup.')
+    } finally {
+      setAutoBackupBusy(false)
+    }
+  }
+
+  const handleRestoreLatestAutoBackup = async () => {
+    try {
+      const files = await listAutoBackupFiles()
+      if (files.length === 0) {
+        Alert.alert('No auto-backups', 'Run a backup first or use Import backup for a file you exported.')
+        return
+      }
+      const raw = await readAsStringAsync(files[0].uri)
+      confirmImportBackupRaw(raw)
+    } catch (e) {
+      Alert.alert('Could not read backup', e instanceof Error ? e.message : 'Try again.')
+    }
+  }
+
+  const autoBackupTimeValue = (() => {
+    const d = new Date()
+    d.setHours(pb.autoBackup.hour, pb.autoBackup.minute, 0, 0)
+    return d
+  })()
 
   const handleExportCSV = () => {
     const rows = txnStore.transactions
@@ -1078,6 +1140,75 @@ export default function SettingsScreen() {
           description="Full backup for another phone, UnSpoil reinstall, or your own analysis."
         />
         <Card>
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              <Text style={styles.editableLabel}>Nightly auto-backup</Text>
+              <Text style={styles.mappingBucket}>
+                Saves on this phone at {formatAutoBackupTime(pb.autoBackup.hour, pb.autoBackup.minute)}.
+                Keeps the last {AUTO_BACKUP_MAX_FILES} files (app storage, not Downloads).
+              </Text>
+            </View>
+            <Switch
+              value={pb.autoBackup.enabled}
+              onValueChange={enabled => void applyAutoBackupPrefs({ enabled })}
+              trackColor={{ false: colors.border, true: colors.greenFill }}
+              thumbColor={pb.autoBackup.enabled ? colors.green : '#f4f3f4'}
+            />
+          </View>
+          <View style={styles.divider} />
+          <TouchableOpacity
+            style={styles.mappingRow}
+            onPress={() => setShowAutoBackupTimePicker(true)}
+            accessibilityRole="button"
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={styles.editableLabel}>Backup time</Text>
+              <Text style={styles.mappingBucket}>
+                {formatAutoBackupTime(pb.autoBackup.hour, pb.autoBackup.minute)} each day
+              </Text>
+            </View>
+            <Ionicons name="time-outline" size={18} color={colors.textMuted} />
+          </TouchableOpacity>
+          {showAutoBackupTimePicker && (
+            <DateTimePicker
+              value={autoBackupTimeValue}
+              mode="time"
+              is24Hour={false}
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={(_, selected) => {
+                if (Platform.OS === 'android') setShowAutoBackupTimePicker(false)
+                if (!selected) return
+                void applyAutoBackupPrefs({
+                  hour: selected.getHours(),
+                  minute: selected.getMinutes(),
+                })
+              }}
+            />
+          )}
+          <View style={styles.divider} />
+          <TouchableOpacity
+            onPress={() => void handleAutoBackupNow()}
+            style={styles.actionButton}
+            disabled={autoBackupBusy}
+          >
+            <Text style={styles.actionButtonText}>
+              {autoBackupBusy ? 'Saving…' : 'Back up now'}
+            </Text>
+          </TouchableOpacity>
+          {autoBackupFileCount > 0 && (
+            <>
+              <View style={styles.divider} />
+              <TouchableOpacity
+                onPress={() => void handleRestoreLatestAutoBackup()}
+                style={styles.actionButton}
+              >
+                <Text style={styles.actionButtonText}>
+                  Restore latest auto-backup ({autoBackupFileCount})
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
+          <View style={styles.divider} />
           <TouchableOpacity onPress={handleExportBackup} style={styles.actionButton}>
             <Text style={styles.actionButtonText}>Export backup</Text>
           </TouchableOpacity>

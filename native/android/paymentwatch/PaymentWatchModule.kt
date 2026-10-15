@@ -1,5 +1,6 @@
 package {{PACKAGE}}.paymentwatch
 
+import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -16,6 +17,15 @@ class PaymentWatchModule(private val ctx: ReactApplicationContext) :
   ReactContextBaseJavaModule(ctx) {
 
   override fun getName(): String = "PaymentWatch"
+
+  private fun launchSettings(intent: Intent, promise: Promise) {
+    val activity: Activity? = reactApplicationContext.currentActivity
+    if (PaymentWatchAccess.startSettingsActivity(ctx, activity, intent)) {
+      promise.resolve(true)
+      return
+    }
+    promise.reject("settings_error", Exception("Could not open settings"))
+  }
 
   @ReactMethod
   fun isEnabled(promise: Promise) {
@@ -83,22 +93,12 @@ class PaymentWatchModule(private val ctx: ReactApplicationContext) :
 
   @ReactMethod
   fun openUsageAccessSettings(promise: Promise) {
-    try {
-      ctx.startActivity(PaymentWatchAccess.usageAccessIntent())
-      promise.resolve(true)
-    } catch (e: Exception) {
-      promise.reject("settings_error", e)
-    }
+    launchSettings(PaymentWatchAccess.usageAccessIntent(), promise)
   }
 
   @ReactMethod
   fun openBatterySettings(promise: Promise) {
-    try {
-      ctx.startActivity(PaymentWatchAccess.batteryOptimizationIntent())
-      promise.resolve(true)
-    } catch (e: Exception) {
-      promise.reject("settings_error", e)
-    }
+    launchSettings(PaymentWatchAccess.batteryOptimizationIntent(), promise)
   }
 
   @ReactMethod
@@ -108,27 +108,19 @@ class PaymentWatchModule(private val ctx: ReactApplicationContext) :
 
   @ReactMethod
   fun requestBatteryUnrestricted(promise: Promise) {
-    try {
-      ctx.startActivity(PaymentWatchAccess.requestBatteryUnrestrictedIntent(ctx))
-      promise.resolve(true)
-    } catch (e: Exception) {
-      try {
-        ctx.startActivity(PaymentWatchAccess.appBatterySettingsIntent(ctx))
+    val activity: Activity? = reactApplicationContext.currentActivity
+    for (intent in PaymentWatchAccess.batteryUnrestrictedIntents(ctx)) {
+      if (PaymentWatchAccess.startSettingsActivity(ctx, activity, intent)) {
         promise.resolve(true)
-      } catch (inner: Exception) {
-        promise.reject("settings_error", inner)
+        return
       }
     }
+    promise.reject("settings_error", Exception("Could not open battery settings"))
   }
 
   @ReactMethod
   fun openNotificationSettings(promise: Promise) {
-    try {
-      ctx.startActivity(PaymentWatchAccess.notificationSettingsIntent(ctx))
-      promise.resolve(true)
-    } catch (e: Exception) {
-      promise.reject("settings_error", e)
-    }
+    launchSettings(PaymentWatchAccess.notificationSettingsIntent(ctx), promise)
   }
 
   @ReactMethod
