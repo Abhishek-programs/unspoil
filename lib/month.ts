@@ -97,6 +97,17 @@ export function getMonthRangeBack(
   return range
 }
 
+export function isEarlyPeriodActive(
+  earlyMonthStartDate: string | null | undefined,
+  monthStartDay: number,
+  now = new Date(),
+): boolean {
+  if (!earlyMonthStartDate) return false
+  const earlyStart = parseLocalDate(earlyMonthStartDate)
+  const earlyEnd = getEarlyMonthEnd(earlyStart, monthStartDay)
+  return now >= earlyStart && now <= earlyEnd
+}
+
 export function getDaysUntilNextRegularStart(
   monthStartDay: number,
   now = new Date(),
