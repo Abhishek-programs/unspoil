@@ -21,6 +21,7 @@ import { colors } from '@/constants/colors'
 import { formatDate, formatMoney } from '@/lib/format'
 import { useBucketsStore } from '@/store/buckets'
 import { usePlaybookStore } from '@/store/playbook'
+import { IncomePutBackChips } from '@/components/transactions/IncomePutBackChips'
 import { useTransactionsStore, INCOME_BUCKET_ID } from '@/store/transactions'
 import { useLendingStore } from '@/store/lending'
 import { LendBorrowForm } from '@/components/lending/LendBorrowForm'
@@ -363,64 +364,12 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
 
                 {isIncome && (
                   <View style={styles.section}>
-                    <Text style={styles.label}>Put back into</Text>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={styles.chipRow}
-                    >
-                      <TouchableOpacity
-                        style={[
-                          styles.bucketChip,
-                          selectedBucketId === null && {
-                            backgroundColor: colors.greenFill,
-                            borderColor: colors.green,
-                          },
-                        ]}
-                        onPress={() => {
-                          Keyboard.dismiss()
-                          setSelectedBucketId(null)
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.bucketChipText,
-                            selectedBucketId === null && { color: colors.green },
-                          ]}
-                        >
-                          None
-                        </Text>
-                      </TouchableOpacity>
-                      {spendingBuckets.map(bucket => {
-                        const selected = selectedBucketId === bucket.id
-                        return (
-                          <TouchableOpacity
-                            key={bucket.id}
-                            style={[
-                              styles.bucketChip,
-                              selected && {
-                                backgroundColor: bucket.color + '22',
-                                borderColor: bucket.color,
-                              },
-                            ]}
-                            onPress={() => {
-                              Keyboard.dismiss()
-                              setSelectedBucketId(bucket.id)
-                            }}
-                          >
-                            <Text style={{ fontSize: 14, marginRight: 4 }}>{bucket.icon}</Text>
-                            <Text
-                              style={[
-                                styles.bucketChipText,
-                                selected && { color: bucket.color },
-                              ]}
-                            >
-                              {bucket.name}
-                            </Text>
-                          </TouchableOpacity>
-                        )
-                      })}
-                    </ScrollView>
+                    <Text style={styles.label}>Put back into (optional)</Text>
+                    <IncomePutBackChips
+                      spendingBuckets={spendingBuckets}
+                      selectedBucketId={selectedBucketId}
+                      onChange={setSelectedBucketId}
+                    />
                   </View>
                 )}
 

@@ -49,6 +49,7 @@ import { useLendingStore } from "@/store/lending";
 import {
   getDaysUntilNextRegularStart,
   getMonthRange,
+  isEarlyPeriodActive,
   toLocalDateKey,
 } from "@/lib/month";
 import { runSurplusRollover } from "@/lib/month-surplus";
@@ -144,7 +145,9 @@ export default function HomeScreen() {
 
   // Determine which checklist items are already completed this month
   // by checking if matching transactions exist
-  const hasSalaryThisMonth = transactions.some((t) => isSalaryTxn(t));
+  const hasSalaryThisMonth = transactions.some(
+    (t) => isSalaryTxn(t) && !t.isRecurringDraft,
+  );
   const sipBucket = savingsBuckets.find((b) => b.id === SIP_BUCKET_ID);
   const sipConfirmedPrincipal = transactions
     .filter(
@@ -200,11 +203,27 @@ export default function HomeScreen() {
   const checklistAllDone = checklistItems.every((i) => i.completed);
   const checklistPending = lastChecklistMonth !== monthKey && !checklistAllDone;
   const daysUntilRegularStart = getDaysUntilNextRegularStart(monthStartDay);
+  const inEarlySalaryWindow =
+    daysUntilRegularStart >= 1 && daysUntilRegularStart <= 7;
+  const activeEarlyPeriod = isEarlyPeriodActive(
+    earlyMonthStartDate,
+    monthStartDay,
+  );
+  const todayKey = toLocalDateKey(new Date());
   const canStartMonthEarly =
-    !earlyMonthStartDate &&
     hasSalaryThisMonth &&
-    daysUntilRegularStart >= 1 &&
-    daysUntilRegularStart <= 7;
+    inEarlySalaryWindow &&
+    (!earlyMonthStartDate ||
+      (activeEarlyPeriod && earlyMonthStartDate !== todayKey));
+
+  useEffect(() => {
+    if (
+      earlyMonthStartDate &&
+      !isEarlyPeriodActive(earlyMonthStartDate, monthStartDay)
+    ) {
+      void updatePlaybook({ earlyMonthStartDate: null });
+    }
+  }, [earlyMonthStartDate, monthStartDay, updatePlaybook]);
 
   useEffect(() => {
     if (lastChecklistPromptMonth !== monthKey && !checklistAllDone) {

@@ -19,6 +19,7 @@ import { colors } from '@/constants/colors'
 import { formatDate } from '@/lib/format'
 import { transactionTitle } from '@/lib/transaction-label'
 import { useBucketsStore } from '@/store/buckets'
+import { IncomePutBackChips } from '@/components/transactions/IncomePutBackChips'
 import { useTransactionsStore, INCOME_BUCKET_ID } from '@/store/transactions'
 import { isSalaryTxn } from '@/lib/txn-kind'
 import type { Transaction } from '@/store/transactions'
@@ -52,7 +53,13 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
 
   useEffect(() => {
     if (transaction && visible) {
-      setSelectedBucketId(transaction.bucketId)
+      const incomePutBack =
+        transaction.type === 'income' &&
+        !isSalaryTxn(transaction) &&
+        transaction.bucketId === INCOME_BUCKET_ID
+          ? ''
+          : transaction.bucketId
+      setSelectedBucketId(incomePutBack)
       setAccountId(transaction.accountId || defaultAccountId())
       setAmount(String(transaction.amount))
       setFeeAmount(transaction.feeAmount > 0 ? String(transaction.feeAmount) : '')
@@ -261,52 +268,16 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
 
             {isIncome && !isSalaryTxn(transaction) && (
               <View style={styles.section}>
-                <Text style={styles.label}>Put back into</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.chipRow}
-                >
-                  <TouchableOpacity
-                    style={[
-                      styles.bucketChip,
-                      (selectedBucketId === INCOME_BUCKET_ID || !selectedBucketId) && {
-                        backgroundColor: colors.greenFill,
-                        borderColor: colors.green,
-                      },
-                    ]}
-                    onPress={() => setSelectedBucketId(INCOME_BUCKET_ID)}
-                  >
-                    <Text
-                      style={[
-                        styles.bucketChipText,
-                        (selectedBucketId === INCOME_BUCKET_ID || !selectedBucketId) && {
-                          color: colors.green,
-                        },
-                      ]}
-                    >
-                      None
-                    </Text>
-                  </TouchableOpacity>
-                  {spendingBuckets.map(bucket => {
-                    const selected = selectedBucketId === bucket.id
-                    return (
-                      <TouchableOpacity
-                        key={bucket.id}
-                        style={[
-                          styles.bucketChip,
-                          selected && { backgroundColor: bucket.color + '22', borderColor: bucket.color },
-                        ]}
-                        onPress={() => setSelectedBucketId(bucket.id)}
-                      >
-                        <Text style={{ fontSize: 14, marginRight: 4 }}>{bucket.icon}</Text>
-                        <Text style={[styles.bucketChipText, selected && { color: bucket.color }]}>
-                          {bucket.name}
-                        </Text>
-                      </TouchableOpacity>
-                    )
-                  })}
-                </ScrollView>
+                <Text style={styles.label}>Put back into (optional)</Text>
+                <IncomePutBackChips
+                  spendingBuckets={spendingBuckets}
+                  selectedBucketId={
+                    selectedBucketId && selectedBucketId !== INCOME_BUCKET_ID
+                      ? selectedBucketId
+                      : null
+                  }
+                  onChange={id => setSelectedBucketId(id ?? '')}
+                />
               </View>
             )}
 
