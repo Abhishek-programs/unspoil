@@ -20,16 +20,21 @@ Use a **Google Play Developer** account you control.
 2. Set **Application ID** to `app.unspoil` (must match `app.json` exactly).
 3. Complete **Dashboard** checklist: store listing, content rating, target audience, news app (No), COVID (No), Data safety, privacy policy URL, app access (full access), ads (No if none).
 
-### Store listing (starter copy)
+### Store listing copy & assets
 
-- **Short description:** Track spending and savings in NPR. Know what’s safe to spend each month.
-- **Full description:** UnSpoil helps you plan monthly income across buckets, log expenses, track goals, and see safe-to-spend after salary — built for Nepal (NPR, eSewa-friendly payment helper). All data stays on your device; no account required.
+**Copy-paste fields, screenshot shot list, and asset specs:** [play-store-listing.md](./play-store-listing.md)
 
-Provide **phone screenshots** (1080×1920 or similar): Home, Transactions, Goals, Settings.
+- **512×512 icon:** `docs/play-store-assets/app-icon-512.png`
+- **Feature graphic (1024×500):** create per guide in that doc
+- **Screenshots:** Home, Transactions, Goals, Settings (minimum); 1080 px+ long side for promotions
 
 ### Privacy policy (required)
 
-Host a public HTTPS page stating: data stored locally on device; optional backup export/import by user; Payment Helper uses usage access + notifications only for chosen payment apps; no server collection. Link that URL in Play Console and optionally in-app later.
+**URL (Play Console):** https://bhattaraiabhishek.com.np/apps/unspoil/privacy
+
+Source: `portfolio` repo → `app/apps/unspoil/privacy/page.tsx`. Deploy the portfolio site after changes.
+
+Covers: local-only data, optional backup/export/auto-backup, optional payment helper (usage + notifications for chosen apps), no developer server collection.
 
 ### Data safety (high level)
 
