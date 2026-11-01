@@ -9,6 +9,9 @@ dist/
 web-build/
 expo-env.d.ts
 
+# Play Store capture helper venv
+docs/play-store-assets/.crop-venv/
+
 # Native
 .kotlin/
 *.orig.*
