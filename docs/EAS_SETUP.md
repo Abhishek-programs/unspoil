@@ -11,23 +11,29 @@ UnSpoil is linked to Expo account **`abhishekprograms`** → **@abhishekprograms
 
 ## One-time (new machine or clone)
 
-1. Log in:
+1. Install deps (includes **eas-cli** locally — no global `eas` required):
    ```bash
-   eas login
-   eas whoami
+   npm install
+   ```
+2. Log in:
+   ```bash
+   npm exec eas-cli login
+   npm exec eas-cli whoami
    ```
    Expect **`abhishekprograms`**.
-2. If the project is not linked yet:
+
+   Or without npm scripts: `npx eas-cli login` / `npx eas-cli whoami`.
+3. If the project is not linked yet:
    ```bash
-   npx eas-cli@latest init --account abhishekprograms
-   npx eas-cli@latest update:configure
+   npm exec eas-cli init -- --account abhishekprograms
+   npm exec eas-cli update:configure
    ```
-3. Optional: mirror the project UUID in `.env` as `EAS_PROJECT_ID` — `app.config.js` can override `app.json` at build time.
+4. Optional: mirror the project UUID in `.env` as `EAS_PROJECT_ID` — `app.config.js` can override `app.json` at build time.
 
 Verify:
 
 ```bash
-npx eas-cli@latest project:info
+npm exec eas-cli project:info
 # fullName  @abhishekprograms/unspoil
 ```
 

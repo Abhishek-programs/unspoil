@@ -38,6 +38,9 @@ yarn-error.*
 .env
 .env*.local
 
+# Google Play service account (never commit)
+credentials/*.json
+
 # skills CLI cache (restore: npx skills experimental_install)
 .agents/
 

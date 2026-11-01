@@ -76,14 +76,32 @@ First build: EAS prompts for **Android keystore** — let EAS manage credentials
 
 ### One-time: Google Service Account
 
-1. Play Console → **Setup → API access** → link Google Cloud project.
-2. Create service account with **Release to production** (or Admin) → download JSON key.
-3. Upload to EAS:
+EAS Submit needs a **JSON key file** that exists on your Mac. The name looks like `api-123456789012-abcdef-1234567890ab.json` (from Google Cloud, not a placeholder you type).
 
-```bash
-eas credentials --platform android
-# Or during first: eas submit --platform android
-```
+1. [Play Console](https://play.google.com/console) → **Setup → API access** → link or create a Google Cloud project.
+2. **Invite / grant access** to a service account (Play Console shows steps). Permissions: at least **Release to production** (or Admin) for `app.unspoil`.
+3. [Google Cloud Console](https://console.cloud.google.com/) → **IAM & Admin → Service accounts** → that account → **Keys → Add key → JSON**. Download once; you cannot re-download the same key.
+4. Move the file somewhere safe, e.g.:
+   ```bash
+   mkdir -p /Users/abhishek/Code/unspoil/credentials
+   mv ~/Downloads/api-*.json /Users/abhishek/Code/unspoil/credentials/google-play-service-account.json
+   ```
+   (`credentials/*.json` is gitignored.)
+
+5. At the EAS prompt **Path to Google Service Account file**, paste the **full path**:
+   ```
+   /Users/abhishek/Code/unspoil/credentials/google-play-service-account.json
+   ```
+   Or run submit with the flag (no prompt):
+   ```bash
+   npm exec eas-cli submit -- --platform android --profile production --latest \
+     --path /Users/abhishek/Code/unspoil/credentials/google-play-service-account.json
+   ```
+   EAS stores the key on Expo after the first successful submit; you usually only pick the file once per machine/account.
+
+**No JSON yet?** Skip EAS Submit: download the `.aab` from [expo.dev builds](https://expo.dev/accounts/abhishekprograms/projects/unspoil/builds) → Play Console → **Testing → Internal testing** (or Production) → **Create release** → upload AAB manually.
+
+Guide: https://expo.fyi/creating-google-service-account
 
 ### Submit
 
