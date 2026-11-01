@@ -57,7 +57,7 @@ class PaymentWatchModule(private val ctx: ReactApplicationContext) :
   @ReactMethod
   fun setKeepBackgroundNotification(keep: Boolean, promise: Promise) {
     PaymentWatchPrefs.setKeepBackgroundNotification(ctx, keep)
-    if (PaymentWatchPrefs.isEnabled(ctx)) PaymentWatchService.start(ctx)
+    if (PaymentWatchPrefs.isEnabled(ctx)) PaymentWatchService.start(ctx, syncForeground = true)
     promise.resolve(true)
   }
 
@@ -191,7 +191,7 @@ class PaymentWatchModule(private val ctx: ReactApplicationContext) :
 
   @ReactMethod
   fun startIfEnabled(promise: Promise) {
-    PaymentWatchService.start(ctx)
+    PaymentWatchService.start(ctx, syncForeground = true)
     promise.resolve(PaymentWatchPrefs.isEnabled(ctx) && PaymentWatchAccess.hasUsageAccess(ctx))
   }
 
