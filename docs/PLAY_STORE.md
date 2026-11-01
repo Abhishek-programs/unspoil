@@ -42,6 +42,11 @@ Covers: local-only data, optional backup/export/auto-backup, optional payment he
 - **Optional features:** Usage access (Payment Helper), notifications — declare in form; explain in privacy policy.
 - **Backup file:** User-initiated JSON on device / files they choose.
 
+### FOREGROUND_SERVICE_SPECIAL_USE
+
+Declaration copy + YouTube steps: [play-store-fgs-declaration.md](./play-store-fgs-declaration.md).  
+Re-record demo: `docs/play-store-assets/record-payment-helper-video.sh` → `payment-helper-fgs-demo.mp4` (local, gitignored).
+
 ---
 
 ## 2. EAS build

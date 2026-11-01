@@ -67,6 +67,11 @@ class PaymentWatchService : Service() {
       shutdown()
       return START_NOT_STICKY
     }
+    if (intent?.getBooleanExtra(EXTRA_SYNC_FOREGROUND, false) == true) {
+      foregroundComplianceMet = false
+      eventCursor = 0L
+      foregroundPkg = null
+    }
     syncForegroundMode()
     if (!handler.hasCallbacks(poll)) handler.post(poll)
     val prev = lastTarget
@@ -119,7 +124,7 @@ class PaymentWatchService : Service() {
       return
     }
     latchedTarget = current
-    if (prev != null) PaymentWatchPrefs.setDoneThisVisit(this, false)
+    PaymentWatchPrefs.setDoneThisVisit(this, false)
     waitingForDelay = true
     handler.postDelayed(showLogLater, PaymentWatchPrefs.logDelayMs(this))
   }
@@ -139,7 +144,8 @@ class PaymentWatchService : Service() {
 
   private fun resolveForegroundPackage(): String? {
     applyForegroundEvents()
-    return mostRecentForegroundPackage(30_000) ?: foregroundPkg
+    val recent = mostRecentForegroundPackage(FOREGROUND_WINDOW_MS)
+    return recent ?: foregroundPkg
   }
 
   private fun applyForegroundEvents(): String? {
@@ -211,6 +217,7 @@ class PaymentWatchService : Service() {
 
   private fun syncForegroundMode() {
     val keep = PaymentWatchPrefs.keepBackgroundNotification(this)
+    val nm = getSystemService(NotificationManager::class.java)
     if (keep) {
       promoteToForeground()
       foregroundKeepAlive = true
@@ -227,15 +234,13 @@ class PaymentWatchService : Service() {
         }
         foregroundComplianceMet = true
       }
-      if (foregroundKeepAlive) {
-        if (Build.VERSION.SDK_INT >= 24) {
-          stopForeground(STOP_FOREGROUND_REMOVE)
-        } else {
-          @Suppress("DEPRECATION")
-          stopForeground(true)
-        }
+      if (Build.VERSION.SDK_INT >= 24) {
+        stopForeground(STOP_FOREGROUND_REMOVE)
+      } else {
+        @Suppress("DEPRECATION")
+        stopForeground(true)
       }
-      getSystemService(NotificationManager::class.java)?.cancel(NOTIF_ID)
+      nm?.cancel(NOTIF_ID)
       foregroundKeepAlive = false
     } catch (_: Exception) {
       shutdown()
@@ -265,6 +270,8 @@ class PaymentWatchService : Service() {
       @Suppress("DEPRECATION")
       stopForeground(true)
     }
+    getSystemService(NotificationManager::class.java)?.cancel(NOTIF_ID)
+    getSystemService(NotificationManager::class.java)?.cancel(LOG_NOTIF_ID)
     stopSelf()
   }
 
@@ -393,11 +400,16 @@ class PaymentWatchService : Service() {
     const val EXTRA_PACKAGE = "payment_watch_package"
     const val EXTRA_TXN_ID = "payment_watch_txn_id"
     private const val POLL_MS = 1500L
+    private const val FOREGROUND_WINDOW_MS = 4_000L
     private const val RESTART_REQUEST_CODE = 7103
+    const val EXTRA_SYNC_FOREGROUND = "payment_watch_sync_foreground"
 
-    fun start(context: Context) {
+    fun start(context: Context, syncForeground: Boolean = false) {
       if (!PaymentWatchPrefs.isEnabled(context) || !PaymentWatchAccess.hasUsageAccess(context)) return
-      val intent = Intent(context, PaymentWatchService::class.java)
+      val intent =
+        Intent(context, PaymentWatchService::class.java).apply {
+          if (syncForeground) putExtra(EXTRA_SYNC_FOREGROUND, true)
+        }
       if (Build.VERSION.SDK_INT >= 26) {
         context.startForegroundService(intent)
       } else {
