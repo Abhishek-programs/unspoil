@@ -64,7 +64,8 @@ Animated checkmark on confirm; progress bars animate fill width.
 
 ## Ledger
 
-List / Chart toggle · filters (including **Lending**) · flagged amber border · **title** as main line, description as subtitle when different.
+List / Chart toggle · filters (including **Lending**) · flagged amber border · **title** as main line, description as subtitle when different.  
+Day headers show that day's spend. **Search** (header icon) looks across every period by title, bucket or amount and hides the period, filter and summary rows while open. **Long-press** an expense for a quick bucket change; **swipe left** to delete with a 5-second Undo bar (rows tied to goal savings are deleted from the detail sheet only). Detail sheet: date is editable.
 
 **Charts:** sentence-case section titles · `FadeIn` on cards · six-month trend bars with top NPR labels (`overflowTop` / extra card padding so labels aren't clipped) · softer bar radii · non-current trend months at lower green opacity.
 
@@ -73,14 +74,17 @@ List / Chart toggle · filters (including **Lending**) · flagged amber border �
 ## Vault
 
 Active goals · Completed (archived) · SIP suggested target when age set · inline monthly edit in detail sheet.  
-Goal cards use softened shadows; list rows stagger in with `FadeInDown`.
+Goal cards use softened shadows; list rows stagger in with `FadeInDown`.  
+Goal detail: **Buy now / use savings** (big-spend goals only — not EF, SIP, Shares) opens a sheet: cost → from goal savings / still to pay / left in goal → pay the rest from (Your money or a Living bucket) → leftover goes to (Your money, another goal, keep in goal). Completed cards show `Used NPR X of savings · date`.
 
 ---
 
 ## Manual Entry
 
-Field order: **Amount** (auto-focus) + optional **Fee** chip → Paid from / Lands in → Bucket (expense) or **Put back into** (optional income) → **Funded from (optional)** when bucket is savings/investment → **Title** → Description (optional) → Date. Fees debit cash but do not count toward bucket spend or investment principal.  
-Modes: Expense / Income / Lend-Borrow. Savings/investment destinations are Future contributions; optional funded-from debits that Living ceiling or Personal fund. Income can put back into a spending bucket so that bar comes down. Transaction details show and edit the wallet.
+Field order: **Amount** (auto-focus) + optional **Fee** chip → Bucket grid (expense) or **Put back into** (optional income) → **Funded from (optional)** when bucket is savings/investment → **Title** → one details line (`Bank · Today`) that expands to Paid from / Lands in, Date (Today / Yesterday / Pick), Description and Recurring monthly.  
+Bucket grid: compact three-column tiles, most-used first. **Spend bucket** section (Living buckets + **My money** last) is always open; each tile has a liquid fill showing what is left (amber at ≤20% left; an empty tile, including My money at 0, turns red). **Savings & investments** (EF, SIP, Shares, goals) is collapsed until toggled; tiles show what is saved and fill as this month's contribution is confirmed.  
+Selection rules: spend bucket only → expense there (`_my_money` = outside every bucket, with a warning above the save button). Spend bucket + savings bucket → contribution to the saving funded from that bucket (My money = from general money, no funded-from). Savings bucket only → spending out of that saving (wallet `_goal_savings`, lowers the saving, not Your money) with a warning above the save button; for a goal the warning links to the complete-goal sheet. Fees debit cash but do not count toward bucket spend or investment principal.  
+Modes: Expense / Income / Lend-Borrow. Savings/investment destinations are Future contributions; optional funded-from debits that Living ceiling or Personal fund. Income can put back into a spending bucket so that bar comes down. Leftover released when a goal is completed is logged as income type **Goal return** (`_goal_return`), kept out of the savings-rate income. Transaction details show and edit the wallet.
 
 ---
 
@@ -117,7 +121,9 @@ safeToSpend          = min(
                          max(0, yourMoney - carriedForward - stillInBank)
                        )
                        Personal plan top-up uses NPR 1,000/mo while personal recovery debt > 0.
-bankPile             = max(0, carriedForward + periodIncome - periodExpenses - fees + lendingCashAdjust + foundThisPeriod)
+bankPile             = max(0, carriedForward + bankIncome - bankExpenses - bankFees + lendingCashAdjust + foundInBankThisPeriod + movesIntoBank - movesOutOfBank)
+                       Only transactions whose wallet is Bank count. eSewa / Cash income and spending change that wallet's own balance.
+                       If a wallet cannot cover a spend, the shortfall is saved as a Bank → wallet move.
 yourMoney            = bankPile + eSewa + Cash
 stillInBank          = salary confirmed ? max(0, plannedSavings - confirmedSavedInvested) : 0
 efFloor              = coreLiving × 6

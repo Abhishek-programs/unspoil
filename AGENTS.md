@@ -112,6 +112,8 @@ Home  |  Transactions  |  [+]  |  Goals  |  Settings
 
 **Payment helper:** Optional. Usage access + amount notification while eSewa / nBank is in the foreground; after Log, a second notification with spending-bucket chips for that txn. No screenshot, overlay, or Accessibility. See `docs/superpowers/specs/2026-08-19-payment-watch-notification-design.md`.
 
+**Goal savings spent:** A transaction on wallet `_goal_savings` (`lib/txn-kind.ts`) is paid from the goal bucket in `fundedFromBucketId`: it lowers that goal's saved amount and must stay out of Your money, ceilings, safe to spend and monthly savings confirms. Flow lives in `lib/goals/spend-savings.ts`.
+
 **Funded-from savings:** When logging a contribution to a savings/investment bucket, optional `fundedFromBucketId` uses that Living/Personal ceiling or fund. See `docs/superpowers/specs/2026-07-26-living-ceilings-funded-from-design.md`.
 
 ---

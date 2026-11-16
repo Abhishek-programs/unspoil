@@ -54,7 +54,7 @@ Monthly take-home (playbook)
 
 | Concept | Meaning |
 |---------|---------|
-| **Your money** (collapsed) | Bank leftover pile (carry + this period’s bank flow) plus eSewa and Cash. Cash is its own wallet — it is not subtracted from Bank. Confirming a save moves that amount to net worth. |
+| **Your money** (collapsed) | Bank leftover pile (carry + this period’s bank flow) plus eSewa and Cash. Cash is its own wallet — it is not subtracted from Bank, and income or spending logged on eSewa / Cash never moves Bank (moves between wallets do). Confirming a save moves that amount to net worth. |
 | **Safe to spend** (ring) | Living/Personal plan remaining + unallocated salary − fees/lending; **capped** at cash on you minus carry and unconfirmed Future (`stillInBank`). Confirmed Future lowers **Your money**, not the plan line (Future was never in `spendingPlan`). |
 | **Net worth** (Your money, expanded) | Confirmed EF + goals + SIP + shares only |
 
@@ -81,6 +81,8 @@ Monthly take-home (playbook)
 
 ### Goals
 - Complete at target → archived in Vault; prompt to reallocate freed monthly amount
+- **Buy now / use savings** (goal detail, or the goal chip in [+]): enter what it cost. The saved part is an expense on wallet `_goal_savings` with `funded_from_bucket_id` = the goal bucket — it lowers the goal's saved amount and net worth, and never touches Your money, ceilings or safe to spend. Anything above the saved amount is a normal expense from Your money (`_goal_purchase`, no ceiling) or from a chosen Living/Personal bucket. Leftover goes to Your money (income row on `_goal_return`, shown as **Goal return**), another goal, or stays in the goal. The goal is completed unless leftover stays in it.
+- Goal saved = start balance + contributions − everything funded from its buckets. Deleting a goal-savings row puts the money back and reopens a goal that was completed early.
 
 ---
 

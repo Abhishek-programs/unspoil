@@ -47,7 +47,8 @@
           "color": "#16A34A"
         }
       ],
-      "./plugins/withPaymentWatch.js"
+      "./plugins/withPaymentWatch.js",
+      "./plugins/withDebugAppIdSuffix.js"
     ],
     "extra": {
       "router": {},
