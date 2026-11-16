@@ -25,6 +25,8 @@ const Native = NativeModules.PaymentWatch as
       startIfEnabled: () => Promise<boolean>
       showBackupNotice: (channelId: string, title: string, text: string) => Promise<boolean>
       hideBackupNotice: () => Promise<boolean>
+      scheduleBackupAlarm: (hour: number, minute: number) => Promise<boolean>
+      cancelBackupAlarm: () => Promise<boolean>
       getKeepBackgroundNotification: () => Promise<boolean>
       setKeepBackgroundNotification: (keep: boolean) => Promise<boolean>
       getBackupState: () => Promise<{
@@ -177,4 +179,15 @@ export async function showBackupNotice(channelId: string, title: string, text: s
 export async function hideBackupNotice() {
   if (Platform.OS !== 'android' || !Native?.hideBackupNotice) return
   await Native.hideBackupNotice().catch(() => {})
+}
+
+/** Daily alarm that runs the auto-backup in the background (Android). */
+export async function scheduleBackupAlarm(hour: number, minute: number) {
+  if (Platform.OS !== 'android' || !Native?.scheduleBackupAlarm) return
+  await Native.scheduleBackupAlarm(hour, minute).catch(() => {})
+}
+
+export async function cancelBackupAlarm() {
+  if (Platform.OS !== 'android' || !Native?.cancelBackupAlarm) return
+  await Native.cancelBackupAlarm().catch(() => {})
 }

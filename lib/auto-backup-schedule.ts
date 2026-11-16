@@ -1,14 +1,14 @@
 import Constants, { ExecutionEnvironment } from 'expo-constants'
 import { Platform } from 'react-native'
 import * as Notifications from 'expo-notifications'
-import {
-  AUTO_BACKUP_CHANNEL_ID,
-  AUTO_BACKUP_NOTIFICATION_ID,
-  AUTO_BACKUP_TASK,
-} from '@/lib/auto-backup-task'
+import { cancelBackupAlarm, scheduleBackupAlarm } from '@/lib/payment-watch'
 import type { AutoBackupPrefs } from '@/lib/nudge-prefs'
 
-export { AUTO_BACKUP_NOTIFICATION_ID }
+export const AUTO_BACKUP_CHANNEL_ID = 'unspoil_auto_backup'
+
+// Older builds scheduled a daily notification that never cleared itself.
+const LEGACY_NOTIFICATION_ID = 'unspoil-auto-backup-daily'
+const LEGACY_TASK = 'unspoil-auto-backup'
 
 const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient
 
@@ -25,32 +25,12 @@ export async function ensureAutoBackupNotificationChannel() {
 }
 
 export async function syncAutoBackupSchedule(prefs: AutoBackupPrefs) {
-  if (isExpoGo || Platform.OS === 'web') return
+  if (isExpoGo || Platform.OS !== 'android') return
 
   await ensureAutoBackupNotificationChannel()
+  await Notifications.cancelScheduledNotificationAsync(LEGACY_NOTIFICATION_ID).catch(() => {})
+  await Notifications.unregisterTaskAsync(LEGACY_TASK).catch(() => {})
 
-  try {
-    await Notifications.registerTaskAsync(AUTO_BACKUP_TASK)
-  } catch {
-    // Already registered or unavailable
-  }
-
-  await Notifications.cancelScheduledNotificationAsync(AUTO_BACKUP_NOTIFICATION_ID)
-
-  if (!prefs.enabled) return
-
-  await Notifications.scheduleNotificationAsync({
-    identifier: AUTO_BACKUP_NOTIFICATION_ID,
-    content: {
-      title: 'UnSpoil backup',
-      body: 'Saving your backup…',
-      data: { type: 'auto-backup' },
-      ...(Platform.OS === 'android' ? { channelId: AUTO_BACKUP_CHANNEL_ID } : {}),
-    },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DAILY,
-      hour: prefs.hour,
-      minute: prefs.minute,
-    },
-  })
+  if (prefs.enabled) await scheduleBackupAlarm(prefs.hour, prefs.minute)
+  else await cancelBackupAlarm()
 }

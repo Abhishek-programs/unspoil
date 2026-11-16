@@ -156,6 +156,22 @@ function withPaymentWatch(config) {
       })
     }
 
+    if (!app.receiver.some((r) => r.$['android:name'] === '.paymentwatch.BackupAlarmReceiver')) {
+      app.receiver.push({
+        $: { 'android:name': '.paymentwatch.BackupAlarmReceiver', 'android:exported': 'false' },
+      })
+    }
+
+    if (!app.service.some((s) => s.$['android:name'] === '.paymentwatch.BackupJobService')) {
+      app.service.push({
+        $: {
+          'android:name': '.paymentwatch.BackupJobService',
+          'android:exported': 'false',
+          'android:permission': 'android.permission.BIND_JOB_SERVICE',
+        },
+      })
+    }
+
     if (!app.receiver.some((r) => r.$['android:name'] === '.paymentwatch.PaymentWatchBootReceiver')) {
       app.receiver.push({
         $: {

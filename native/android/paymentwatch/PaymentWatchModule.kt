@@ -244,4 +244,16 @@ class PaymentWatchModule(private val ctx: ReactApplicationContext) :
     BackupNotice.hide(ctx)
     promise.resolve(true)
   }
+
+  @ReactMethod
+  fun scheduleBackupAlarm(hour: Int, minute: Int, promise: Promise) {
+    BackupAlarm.schedule(ctx, hour, minute)
+    promise.resolve(true)
+  }
+
+  @ReactMethod
+  fun cancelBackupAlarm(promise: Promise) {
+    BackupAlarm.cancel(ctx)
+    promise.resolve(true)
+  }
 }

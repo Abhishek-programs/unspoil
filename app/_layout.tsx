@@ -1,5 +1,4 @@
 import '../global.css'
-import '@/lib/auto-backup-task'
 import { useEffect, useState } from 'react'
 import { AppState } from 'react-native'
 import { Stack, router } from 'expo-router'

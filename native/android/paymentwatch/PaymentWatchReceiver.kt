@@ -72,6 +72,10 @@ class PaymentWatchBootReceiver : BroadcastReceiver() {
       -> Unit
       else -> return
     }
+    // Alarms are cleared on reboot. Prefs are not readable before first unlock.
+    if (intent.action != Intent.ACTION_LOCKED_BOOT_COMPLETED) {
+      try { BackupAlarm.reschedule(context) } catch (_: Exception) {}
+    }
     PaymentWatchService.start(context)
   }
 }
