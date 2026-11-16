@@ -48,7 +48,16 @@
         }
       ],
       "./plugins/withPaymentWatch.js",
-      "./plugins/withDebugAppIdSuffix.js"
+      "./plugins/withDebugAppIdSuffix.js",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableMinifyInReleaseBuilds": true,
+            "extraProguardRules": "-keep class expo.modules.adapters.react.apploader.** { *; }\n-keep class * implements expo.modules.interfaces.taskManager.TaskConsumerInterface { *; }\n-keepclassmembers class * implements java.io.Serializable {\n  static final long serialVersionUID;\n  private static final java.io.ObjectStreamField[] serialPersistentFields;\n  private void writeObject(java.io.ObjectOutputStream);\n  private void readObject(java.io.ObjectInputStream);\n  java.lang.Object writeReplace();\n  java.lang.Object readResolve();\n}"
+          }
+        }
+      ]
     ],
     "extra": {
       "router": {},
