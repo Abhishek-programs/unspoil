@@ -1,6 +1,4 @@
 import Constants from 'expo-constants'
-import { Platform } from 'react-native'
-import { StorageAccessFramework } from 'expo-file-system/legacy'
 import { db, applySchemaPatches, sqlite, USER_DATA_TABLES } from '@/db/client'
 import {
   accountAdjustments,
@@ -85,25 +83,6 @@ export type BackupPayload = {
 export function backupFilename(now = new Date()): string {
   const day = now.toISOString().slice(0, 10)
   return `unspoil-backup-${day}.json`
-}
-
-/** Android: pick a folder (Downloads suggested) and write the backup file there. */
-export async function saveBackupToDevice(json: string, filename: string): Promise<void> {
-  if (Platform.OS !== 'android') {
-    throw new Error('Save to device is only supported on Android.')
-  }
-  const baseName = filename.replace(/\.json$/i, '')
-  const downloadsHint = StorageAccessFramework.getUriForDirectoryInRoot('Download')
-  const perm = await StorageAccessFramework.requestDirectoryPermissionsAsync(downloadsHint)
-  if (!perm.granted) {
-    throw new Error('CANCELLED')
-  }
-  const fileUri = await StorageAccessFramework.createFileAsync(
-    perm.directoryUri,
-    baseName,
-    'application/json',
-  )
-  await StorageAccessFramework.writeAsStringAsync(fileUri, json)
 }
 
 function snakeToCamel(key: string): string {

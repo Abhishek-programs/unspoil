@@ -23,6 +23,8 @@ const Native = NativeModules.PaymentWatch as
       getTargetPackages: () => Promise<string[]>
       getLaunchableApps: () => Promise<PaymentWatchApp[]>
       startIfEnabled: () => Promise<boolean>
+      showBackupNotice: (channelId: string, title: string, text: string) => Promise<boolean>
+      hideBackupNotice: () => Promise<boolean>
       getKeepBackgroundNotification: () => Promise<boolean>
       setKeepBackgroundNotification: (keep: boolean) => Promise<boolean>
       getBackupState: () => Promise<{
@@ -164,4 +166,15 @@ export async function restorePaymentWatchBackupState(
     state.targetPackages,
     state.keepBackgroundNotification ?? false,
   )
+}
+
+/** Brief progress notice for the nightly backup (Android dev/prod builds only). */
+export async function showBackupNotice(channelId: string, title: string, text: string) {
+  if (Platform.OS !== 'android' || !Native?.showBackupNotice) return
+  await Native.showBackupNotice(channelId, title, text).catch(() => {})
+}
+
+export async function hideBackupNotice() {
+  if (Platform.OS !== 'android' || !Native?.hideBackupNotice) return
+  await Native.hideBackupNotice().catch(() => {})
 }

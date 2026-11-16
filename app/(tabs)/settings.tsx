@@ -52,13 +52,20 @@ import {
   backupFilename,
   exportBackup,
   hydrateStoresAfterDbChange,
-  saveBackupToDevice,
 } from '@/lib/backup'
-import { confirmImportBackupRaw, startImportBackupFlow } from '@/lib/import-backup-flow'
+import {
+  backupFolderLabel,
+  backupStamp,
+  chooseBackupFolder,
+  getBackupFolder,
+  isBackupFolderSupported,
+  writeFolderBackup,
+  type BackupFolder,
+} from '@/lib/backup-folder'
+import { BackupPickerSheet } from '@/components/settings/BackupPickerSheet'
 import DateTimePicker from '@react-native-community/datetimepicker'
 import {
   AUTO_BACKUP_MAX_FILES,
-  listAutoBackupFiles,
   runAutoBackupNow,
 } from '@/lib/auto-backup'
 import { syncAutoBackupSchedule } from '@/lib/auto-backup-schedule'
@@ -493,11 +500,12 @@ export default function SettingsScreen() {
   const [addingBucket, setAddingBucket] = useState(false)
   const [newBucket, setNewBucket] = useState({ name: '', monthlyAmount: '', type: 'spending' as Bucket['type'], showOnHome: true })
   const [showAutoBackupTimePicker, setShowAutoBackupTimePicker] = useState(false)
-  const [autoBackupFileCount, setAutoBackupFileCount] = useState(0)
   const [autoBackupBusy, setAutoBackupBusy] = useState(false)
+  const [backupFolder, setBackupFolder] = useState<BackupFolder | null>(null)
+  const [importVisible, setImportVisible] = useState(false)
 
   useEffect(() => {
-    void listAutoBackupFiles().then(files => setAutoBackupFileCount(files.length))
+    void getBackupFolder().then(setBackupFolder)
   }, [])
 
   const draftFromBucket = (b: Bucket) => ({
@@ -704,10 +712,12 @@ export default function SettingsScreen() {
   const handleExportBackup = () => {
     const runSave = async () => {
       try {
+        const folder = backupFolder ?? (await pickBackupFolder())
+        if (!folder) return
         const json = await exportBackup()
-        const name = backupFilename()
-        await saveBackupToDevice(json, name)
-        Alert.alert('Backup saved', `${name} is in the folder you selected (e.g. Downloads).`)
+        const name = `unspoil-export-${backupStamp()}.json`
+        await writeFolderBackup(folder.exportsUri, name, json)
+        Alert.alert('Backup saved', `${name} is in ${backupFolderLabel(folder)}/Exports.`)
       } catch (e) {
         const message = e instanceof Error ? e.message : 'Could not export backup.'
         if (message === 'CANCELLED') return
@@ -740,7 +750,18 @@ export default function SettingsScreen() {
     void runShare()
   }
 
-  const handleImportBackup = () => startImportBackupFlow()
+  const handleImportBackup = () => setImportVisible(true)
+
+  const pickBackupFolder = async () => {
+    try {
+      const folder = await chooseBackupFolder()
+      if (folder) setBackupFolder(folder)
+      return folder
+    } catch (e) {
+      Alert.alert('Could not use that folder', e instanceof Error ? e.message : 'Pick another folder.')
+      return null
+    }
+  }
 
   const applyAutoBackupPrefs = async (patch: Partial<AutoBackupPrefs>) => {
     const next = { ...pb.autoBackup, ...patch }
@@ -752,28 +773,19 @@ export default function SettingsScreen() {
     if (autoBackupBusy) return
     setAutoBackupBusy(true)
     try {
-      await runAutoBackupNow()
-      const files = await listAutoBackupFiles()
-      setAutoBackupFileCount(files.length)
-      Alert.alert('Backup saved', `Stored locally (${Math.min(files.length, AUTO_BACKUP_MAX_FILES)} of ${AUTO_BACKUP_MAX_FILES} kept).`)
+      const { inFolder } = await runAutoBackupNow()
+      Alert.alert(
+        'Backup saved',
+        inFolder && backupFolder
+          ? `In ${backupFolderLabel(backupFolder)}/Auto (last ${AUTO_BACKUP_MAX_FILES} kept).`
+          : backupFolder
+            ? 'The backup folder could not be reached, so it was saved in app storage. Pick the folder again.'
+            : `Saved in app storage (last ${AUTO_BACKUP_MAX_FILES} kept). Pick a backup folder to see it in My Files.`,
+      )
     } catch (e) {
       Alert.alert('Backup failed', e instanceof Error ? e.message : 'Could not save backup.')
     } finally {
       setAutoBackupBusy(false)
-    }
-  }
-
-  const handleRestoreLatestAutoBackup = async () => {
-    try {
-      const files = await listAutoBackupFiles()
-      if (files.length === 0) {
-        Alert.alert('No auto-backups', 'Run a backup first or use Import backup for a file you exported.')
-        return
-      }
-      const raw = await readAsStringAsync(files[0].uri)
-      confirmImportBackupRaw(raw)
-    } catch (e) {
-      Alert.alert('Could not read backup', e instanceof Error ? e.message : 'Try again.')
     }
   }
 
@@ -1141,12 +1153,33 @@ export default function SettingsScreen() {
           description="Full backup for another phone, UnSpoil reinstall, or your own analysis."
         />
         <Card>
+          {isBackupFolderSupported() && (
+            <>
+              <TouchableOpacity
+                style={styles.mappingRow}
+                onPress={() => void pickBackupFolder()}
+                accessibilityRole="button"
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.editableLabel}>Backup folder</Text>
+                  <Text style={styles.mappingBucket}>
+                    {backupFolder
+                      ? `${backupFolderLabel(backupFolder)} · Auto and Exports inside`
+                      : 'Not set. Pick Download so backups show in My Files and survive an uninstall.'}
+                  </Text>
+                </View>
+                <Ionicons name="folder-open-outline" size={18} color={colors.textMuted} />
+              </TouchableOpacity>
+              <View style={styles.divider} />
+            </>
+          )}
           <View style={styles.toggleRow}>
             <View style={{ flex: 1, paddingRight: 12 }}>
               <Text style={styles.editableLabel}>Nightly auto-backup</Text>
               <Text style={styles.mappingBucket}>
-                Saves on this phone at {formatAutoBackupTime(pb.autoBackup.hour, pb.autoBackup.minute)}.
-                Keeps the last {AUTO_BACKUP_MAX_FILES} files (app storage, not Downloads).
+                Saves at {formatAutoBackupTime(pb.autoBackup.hour, pb.autoBackup.minute)} to{' '}
+                {backupFolder ? `${backupFolderLabel(backupFolder)}/Auto` : 'app storage'}.
+                Keeps the last {AUTO_BACKUP_MAX_FILES}.
               </Text>
             </View>
             <Switch
@@ -1196,19 +1229,6 @@ export default function SettingsScreen() {
               {autoBackupBusy ? 'Saving…' : 'Back up now'}
             </Text>
           </TouchableOpacity>
-          {autoBackupFileCount > 0 && (
-            <>
-              <View style={styles.divider} />
-              <TouchableOpacity
-                onPress={() => void handleRestoreLatestAutoBackup()}
-                style={styles.actionButton}
-              >
-                <Text style={styles.actionButtonText}>
-                  Restore latest auto-backup ({autoBackupFileCount})
-                </Text>
-              </TouchableOpacity>
-            </>
-          )}
           <View style={styles.divider} />
           <TouchableOpacity onPress={handleExportBackup} style={styles.actionButton}>
             <Text style={styles.actionButtonText}>Export backup</Text>
@@ -1265,6 +1285,7 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </Card>
       </ScrollView>
+      <BackupPickerSheet visible={importVisible} onClose={() => setImportVisible(false)} />
     </View>
   )
 }

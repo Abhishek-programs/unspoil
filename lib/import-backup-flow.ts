@@ -58,7 +58,7 @@ async function pickAndConfirmImport(raw: string, onSuccess?: ImportBackupFlowOpt
   )
 }
 
-async function chooseBackupFile(onSuccess?: ImportBackupFlowOptions['onSuccess']) {
+export async function chooseBackupFile(onSuccess?: ImportBackupFlowOptions['onSuccess']) {
   try {
     const pick = await DocumentPicker.getDocumentAsync({
       type: 'application/json',

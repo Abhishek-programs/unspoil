@@ -232,4 +232,16 @@ class PaymentWatchModule(private val ctx: ReactApplicationContext) :
       promise.reject("restore_error", e)
     }
   }
+
+  @ReactMethod
+  fun showBackupNotice(channelId: String, title: String, text: String, promise: Promise) {
+    BackupNotice.show(ctx, channelId, title, text)
+    promise.resolve(true)
+  }
+
+  @ReactMethod
+  fun hideBackupNotice(promise: Promise) {
+    BackupNotice.hide(ctx)
+    promise.resolve(true)
+  }
 }

@@ -7,6 +7,12 @@ import {
   writeAsStringAsync,
 } from 'expo-file-system/legacy'
 import { exportBackup } from '@/lib/backup'
+import {
+  backupStamp,
+  getBackupFolder,
+  listFolderBackups,
+  writeFolderBackup,
+} from '@/lib/backup-folder'
 import { toLocalDateKey } from '@/lib/month'
 import type { AutoBackupPrefs } from '@/lib/nudge-prefs'
 import { usePlaybookStore } from '@/store/playbook'
@@ -15,8 +21,7 @@ export const AUTO_BACKUP_MAX_FILES = 3
 const AUTO_BACKUP_DIR = `${documentDirectory}auto-backups/`
 
 function autoBackupFilename(now = new Date()): string {
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `unspoil-auto-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}.json`
+  return `unspoil-auto-${backupStamp(now)}.json`
 }
 
 export function autoBackupDirectory(): string {
@@ -51,14 +56,37 @@ async function pruneAutoBackups() {
   }
 }
 
-export async function writeAutoBackupFile(): Promise<string> {
+export type AutoBackupResult = { uri: string; inFolder: boolean }
+
+async function writePhoneAutoBackup(json: string): Promise<string> {
   await makeDirectoryAsync(AUTO_BACKUP_DIR, { intermediates: true })
-  const json = await exportBackup()
-  const filename = autoBackupFilename()
-  const uri = `${AUTO_BACKUP_DIR}${filename}`
+  const uri = `${AUTO_BACKUP_DIR}${autoBackupFilename()}`
   await writeAsStringAsync(uri, json)
   await pruneAutoBackups()
   return uri
+}
+
+/**
+ * Writes to the backup folder (UnSpoil/Auto) when one is set, else to app
+ * storage. If the folder is gone or its permission was revoked, app storage
+ * still gets the backup so a night is never skipped.
+ */
+export async function writeAutoBackupFile(): Promise<AutoBackupResult> {
+  const json = await exportBackup()
+  const folder = await getBackupFolder()
+  if (folder) {
+    try {
+      const uri = await writeFolderBackup(folder.autoUri, autoBackupFilename(), json)
+      const files = await listFolderBackups(folder.autoUri)
+      for (const file of files.slice(AUTO_BACKUP_MAX_FILES)) {
+        await deleteAsync(file.uri, { idempotent: true })
+      }
+      return { uri, inFolder: true }
+    } catch {
+      // Fall through to app storage.
+    }
+  }
+  return { uri: await writePhoneAutoBackup(json), inFolder: false }
 }
 
 function minutesSinceMidnight(d: Date): number {
@@ -84,11 +112,11 @@ export async function runAutoBackupJob(): Promise<boolean> {
   return true
 }
 
-export async function runAutoBackupNow(): Promise<string> {
-  const uri = await writeAutoBackupFile()
+export async function runAutoBackupNow(): Promise<AutoBackupResult> {
+  const result = await writeAutoBackupFile()
   const pb = usePlaybookStore.getState()
   await pb.updatePlaybook({
     autoBackup: { ...pb.autoBackup, lastRunDate: toLocalDateKey(new Date()) },
   })
-  return uri
+  return result
 }
