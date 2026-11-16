@@ -1,13 +1,17 @@
 import { and, gte, lte } from 'drizzle-orm'
 import { eq } from 'drizzle-orm'
 import { db } from '@/db/client'
-import { accountAdjustments, lendBorrowEntries, playbook, transactions } from '@/db/schema'
+import { accountTransfers, lendBorrowEntries, playbook, transactions } from '@/db/schema'
 import { currentMonthKey } from '@/lib/bucket-balance'
 import { getPreviousMonthRange } from '@/lib/month'
 import type { Bucket } from '@/store/buckets'
 import type { Transaction } from '@/store/transactions'
 import { computeMonthMetrics, type LendBorrowEntry } from '@/lib/lending/balance'
-import { computeCashOnHand, periodCashFromTransactions } from '@/lib/your-money'
+import {
+  bankTransfersNetInRange,
+  computeCashOnHand,
+  periodCashFromTransactions,
+} from '@/lib/your-money'
 import { spentTowardBucket } from '@/lib/spent'
 import { isSalaryTxn, isSavingsConfirmTxn } from '@/lib/txn-kind'
 
@@ -94,6 +98,7 @@ export async function cashOnHandForRange(
     note: e.note ?? null,
   }))
   const cash = periodCashFromTransactions(mappedTxns)
+  const transferRows = await db.select().from(accountTransfers)
   return computeCashOnHand({
     carriedForward,
     income: cash.income,
@@ -102,6 +107,7 @@ export async function cashOnHandForRange(
     lendingCashAdjust: computeMonthMetrics(mappedLending, start, end).lendBorrowCashAdjust,
     // Found money stays on Your money for life; do not fold it into carry.
     foundThisPeriod: 0,
+    bankTransfersNet: bankTransfersNetInRange(transferRows, start, end),
   })
 }
 

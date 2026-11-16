@@ -1,7 +1,14 @@
 import type { Transaction } from '@/store/transactions'
 import { roundPaisa } from '@/lib/format'
+import { BANK_ACCOUNT_ID } from '@/constants/accounts'
 
-/** Cash that actually moved in a period — not leftover budget. */
+// eSewa and Cash keep their own running balances; only Bank is derived from the
+// ledger, so a transaction on another wallet must stay out of the Bank pile.
+function isBankWallet(accountId: string | null | undefined): boolean {
+  return !accountId || accountId === BANK_ACCOUNT_ID
+}
+
+/** Bank cash that actually moved in a period — not leftover budget. */
 export function periodCashFromTransactions(txns: Transaction[]): {
   income: number
   expenses: number
@@ -12,6 +19,7 @@ export function periodCashFromTransactions(txns: Transaction[]): {
   let fees = 0
   for (const t of txns) {
     if (t.isRecurringDraft) continue
+    if (!isBankWallet(t.accountId)) continue
     if (t.type === 'income') {
       income += t.amount
       continue
@@ -29,6 +37,7 @@ export function computeCashOnHand(args: {
   fees: number
   lendingCashAdjust: number
   foundThisPeriod: number
+  bankTransfersNet?: number
 }): number {
   return Math.max(
     0,
@@ -38,7 +47,8 @@ export function computeCashOnHand(args: {
         args.expenses -
         args.fees +
         args.lendingCashAdjust +
-        args.foundThisPeriod,
+        args.foundThisPeriod +
+        (args.bankTransfersNet ?? 0),
     ),
   )
 }
@@ -48,17 +58,36 @@ export function movedIntoNewPeriodAdjust(
   txns: Transaction[],
   lendingCashAdjustToday: number,
   newPeriodStart: Date,
+  bankTransfersNetToday = 0,
 ): number {
   const startMs = newPeriodStart.getTime()
   let addBack = 0
   for (const t of txns) {
     if (t.isRecurringDraft) continue
+    if (!isBankWallet(t.accountId)) continue
     if (new Date(t.date).getTime() < startMs) continue
     if (t.type === 'expense') addBack += t.amount + (t.feeAmount ?? 0)
     else addBack -= t.amount
   }
   // Borrow/lend today is re-applied in the new period — do not keep it in carry.
-  return addBack - lendingCashAdjustToday
+  return addBack - lendingCashAdjustToday - bankTransfersNetToday
+}
+
+/** Moves between wallets: into Bank minus out of Bank, within [start, end]. */
+export function bankTransfersNetInRange(
+  transfers: { fromAccountId: string; toAccountId: string; amount: number; date: string }[],
+  start: Date,
+  end: Date,
+): number {
+  const startMs = start.getTime()
+  const endMs = end.getTime()
+  return transfers.reduce((sum, t) => {
+    const ms = new Date(t.date).getTime()
+    if (ms < startMs || ms > endMs) return sum
+    if (t.toAccountId === BANK_ACCOUNT_ID) sum += t.amount
+    if (t.fromAccountId === BANK_ACCOUNT_ID) sum -= t.amount
+    return sum
+  }, 0)
 }
 
 function isIncomeShadowAdjustment(note: string | null | undefined): boolean {
@@ -66,7 +95,7 @@ function isIncomeShadowAdjustment(note: string | null | undefined): boolean {
 }
 
 export function foundMoneyInRange(
-  adjustments: { amount: number; date: string; note?: string | null }[],
+  adjustments: { amount: number; date: string; note?: string | null; accountId?: string | null }[],
   start: Date,
   end: Date,
 ): number {
@@ -74,6 +103,7 @@ export function foundMoneyInRange(
   const endMs = end.getTime()
   return adjustments.reduce((sum, a) => {
     if (isIncomeShadowAdjustment(a.note)) return sum
+    if (!isBankWallet(a.accountId)) return sum
     const ms = new Date(a.date).getTime()
     if (ms < startMs || ms > endMs) return sum
     return sum + a.amount

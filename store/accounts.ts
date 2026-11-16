@@ -32,9 +32,18 @@ export interface AccountAdjustment {
   date: string
 }
 
+export interface AccountTransfer {
+  id: string
+  fromAccountId: string
+  toAccountId: string
+  amount: number
+  date: string
+}
+
 interface AccountsState {
   accounts: Account[]
   adjustments: AccountAdjustment[]
+  transfers: AccountTransfer[]
   foundMoneyTotal: number
   isLoaded: boolean
   loadAccounts: () => Promise<void>
@@ -59,9 +68,28 @@ function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
 }
 
+// Bank is recomputed from the ledger, so the part of a wallet debit that Bank
+// covers is saved as a Bank → wallet move or it would never leave Bank.
+async function debitWallet(accountId: string | null | undefined, amount: number): Promise<void> {
+  const primaryId = accountId || defaultAccountId()
+  const { fromBank } = await debitWithBankFallback(primaryId, amount)
+  if (primaryId === BANK_ACCOUNT_ID || fromBank <= 0) return
+  const now = new Date().toISOString()
+  await db.insert(accountTransfers).values({
+    id: generateId(),
+    fromAccountId: BANK_ACCOUNT_ID,
+    toAccountId: primaryId,
+    amount: fromBank,
+    note: 'Wallet shortfall',
+    date: now,
+    createdAt: now,
+  })
+}
+
 export const useAccountsStore = create<AccountsState>((set, get) => ({
   accounts: [],
   adjustments: [],
+  transfers: [],
   foundMoneyTotal: 0,
   isLoaded: false,
 
@@ -69,6 +97,7 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
     await get().ensureAccounts()
     const rows = await db.select().from(accounts).orderBy(asc(accounts.sortOrder))
     const adjustmentRows = await db.select().from(accountAdjustments)
+    const transferRows = await db.select().from(accountTransfers)
     const foundMoneyTotal = adjustmentRows.reduce((s, a) => s + a.amount, 0)
     set({
       accounts: rows.map(r => ({
@@ -85,6 +114,13 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
         amount: a.amount,
         note: a.note ?? null,
         date: a.date,
+      })),
+      transfers: transferRows.map(t => ({
+        id: t.id,
+        fromAccountId: t.fromAccountId,
+        toAccountId: t.toAccountId,
+        amount: t.amount,
+        date: t.date,
       })),
       foundMoneyTotal,
       isLoaded: true,
@@ -130,7 +166,7 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
 
   applyExpense: async (accountId, amount) => {
     if (amount <= 0) return
-    await debitWithBankFallback(accountId, amount)
+    await debitWallet(accountId, amount)
     await get().loadAccounts()
   },
 
@@ -147,7 +183,7 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
       createdAt: now,
     })
     if (amount > 0) await creditAccount(accountId, amount)
-    else await debitWithBankFallback(accountId, -amount)
+    else await debitWallet(accountId, -amount)
     await get().loadAccounts()
   },
 
@@ -178,7 +214,7 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
     const from = rows.find(r => r.id === fromId)
     if (!from || from.balance < amount) {
       // Allow overdraw from source by pulling remainder from Bank when source isn't Bank
-      await debitWithBankFallback(fromId, amount)
+      await debitWallet(fromId, amount)
     } else {
       await setAccountBalance(fromId, from.balance - amount)
     }

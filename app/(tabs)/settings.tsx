@@ -643,6 +643,7 @@ export default function SettingsScreen() {
         transactions: useTransactionsStore.getState().allTransactions,
         accounts: useAccountsStore.getState().accounts,
         adjustments: useAccountsStore.getState().adjustments,
+        transfers: useAccountsStore.getState().transfers,
         contacts: useLendingStore.getState().contacts,
         entries: useLendingStore.getState().allEntries,
         goals: goalsStore.goals.map(g => ({

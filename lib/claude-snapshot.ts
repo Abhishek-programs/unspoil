@@ -5,7 +5,12 @@ import {
   computeMonthMetrics,
   directionLabel,
 } from '@/lib/lending/balance'
-import { computeCashOnHand, foundMoneyInRange, periodCashFromTransactions } from '@/lib/your-money'
+import {
+  bankTransfersNetInRange,
+  computeCashOnHand,
+  foundMoneyInRange,
+  periodCashFromTransactions,
+} from '@/lib/your-money'
 import { getMonthRange, toLocalDateKey } from '@/lib/month'
 import { formatMoney, getActiveCurrency } from '@/lib/format'
 import { transactionTitle } from '@/lib/transaction-label'
@@ -37,7 +42,8 @@ export type ClaudeSnapshotInput = {
   }[]
   transactions: Transaction[]
   accounts: { id: string; name: string; balance: number }[]
-  adjustments: { amount: number; date: string; note?: string | null }[]
+  adjustments: { amount: number; date: string; note?: string | null; accountId?: string | null }[]
+  transfers?: { fromAccountId: string; toAccountId: string; amount: number; date: string }[]
   contacts: Contact[]
   entries: LendBorrowEntry[]
   goals: {
@@ -107,6 +113,7 @@ export function buildClaudeSnapshot(input: ClaudeSnapshotInput): string {
     fees: cash.fees,
     lendingCashAdjust: lending.lendBorrowCashAdjust,
     foundThisPeriod: found,
+    bankTransfersNet: bankTransfersNetInRange(input.transfers ?? [], start, end),
   })
   const otherWallets = input.accounts
     .filter(a => a.id !== BANK_ACCOUNT_ID)

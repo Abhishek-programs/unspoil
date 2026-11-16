@@ -6,7 +6,12 @@ import { useLendingStore } from '@/store/lending'
 import { useAccountsStore } from '@/store/accounts'
 import { getMonthRange, getDaysRemaining } from '@/lib/month'
 import { computeMonthMetrics } from '@/lib/lending/balance'
-import { computeCashOnHand, foundMoneyInRange, periodCashFromTransactions } from '@/lib/your-money'
+import {
+  bankTransfersNetInRange,
+  computeCashOnHand,
+  foundMoneyInRange,
+  periodCashFromTransactions,
+} from '@/lib/your-money'
 import {
   EF_BUCKET_ID,
   PERSONAL_BUCKET_ID,
@@ -129,7 +134,7 @@ export function usePulseData() {
   const lendBorrowCashAdjust = lendBorrowMonth.lendBorrowCashAdjust
   const lentOutstandingThisMonth = lendBorrowMonth.lentOutstandingThisMonth
 
-  const { foundMoneyTotal, accounts: moneyAccounts, adjustments } = useAccountsStore()
+  const { foundMoneyTotal, accounts: moneyAccounts, adjustments, transfers } = useAccountsStore()
   const periodCash = periodCashFromTransactions(transactions)
   const bankPile = computeCashOnHand({
     carriedForward: carriedForwardBalance,
@@ -138,6 +143,7 @@ export function usePulseData() {
     fees: periodCash.fees,
     lendingCashAdjust: lendBorrowCashAdjust,
     foundThisPeriod: foundMoneyInRange(adjustments, start, end),
+    bankTransfersNet: bankTransfersNetInRange(transfers, start, end),
   })
   const otherWallets = moneyAccounts
     .filter(a => a.id !== BANK_ACCOUNT_ID)

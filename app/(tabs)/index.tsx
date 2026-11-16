@@ -54,7 +54,7 @@ import {
 } from "@/lib/month";
 import { runSurplusRollover } from "@/lib/month-surplus";
 import { computeMonthMetrics } from "@/lib/lending/balance";
-import { movedIntoNewPeriodAdjust } from "@/lib/your-money";
+import { bankTransfersNetInRange, movedIntoNewPeriodAdjust } from "@/lib/your-money";
 import { formatMoney } from "@/lib/format";
 import { applySchemaPatches, restoreWipedSpendingCeilings } from "@/db/client";
 
@@ -495,6 +495,11 @@ export default function HomeScreen() {
                     useTransactionsStore.getState().transactions,
                     lendToday,
                     today,
+                    bankTransfersNetInRange(
+                      useAccountsStore.getState().transfers,
+                      today,
+                      todayEnd,
+                    ),
                   ),
               );
               const surplusKey = await runSurplusRollover(
