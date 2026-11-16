@@ -20,7 +20,7 @@ import {
 } from '@/constants/defaults'
 import { PERSONAL_RECOVERY_TOP_UP } from '@/lib/bucket-balance'
 import { BANK_ACCOUNT_ID } from '@/constants/accounts'
-import { isSalaryTxn, isSavingsConfirmTxn } from '@/lib/txn-kind'
+import { isSalaryTxn, isSavingsConfirmTxn, withdrawnFromBuckets } from '@/lib/txn-kind'
 
 export function usePulseData() {
   const {
@@ -196,7 +196,7 @@ export function usePulseData() {
     const current = allTransactions
       .filter(t => g.linkedBucketIds.includes(t.bucketId) && t.type === 'expense')
       .reduce((sum, t) => sum + t.amount, 0)
-    return g.startBalance + current
+    return g.startBalance + current - withdrawnFromBuckets(g.linkedBucketIds, allTransactions)
   }
 
   const bigSpendGoals = activeGoals.filter(
@@ -211,15 +211,18 @@ export function usePulseData() {
     ? goalValue(sipGoal)
     : allTransactions
         .filter(t => t.bucketId === SIP_BUCKET_ID && t.type === 'expense')
-        .reduce((sum, t) => sum + t.amount, 0)
+        .reduce((sum, t) => sum + t.amount, 0) -
+      withdrawnFromBuckets([SIP_BUCKET_ID], allTransactions)
 
   const sharesLifetime = sharesGoal
     ? goalValue(sharesGoal)
     : allTransactions
         .filter(t => t.bucketId === SHARES_BUCKET_ID && t.type === 'expense')
-        .reduce((sum, t) => sum + t.amount, 0)
+        .reduce((sum, t) => sum + t.amount, 0) -
+      withdrawnFromBuckets([SHARES_BUCKET_ID], allTransactions)
 
-  const efValue = efStartBalance + efContributions
+  const efValue =
+    efStartBalance + efContributions - withdrawnFromBuckets([EF_BUCKET_ID], allTransactions)
 
   const assetBreakdown = [
     ...(efValue > 0 || efStartBalance > 0 ? [{ name: 'Emergency Fund', value: efValue }] : []),

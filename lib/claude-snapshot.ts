@@ -16,6 +16,7 @@ import { formatMoney, getActiveCurrency } from '@/lib/format'
 import { transactionTitle } from '@/lib/transaction-label'
 import { BANK_ACCOUNT_ID } from '@/constants/accounts'
 import { spentTowardBucket } from '@/lib/spent'
+import { withdrawnFromBuckets } from '@/lib/txn-kind'
 
 export const CLAUDE_SHARE_PROMPT =
   'This is an UnSpoil snapshot from my phone. Attach/read the markdown. Playbook month may not be a calendar month. Your money = carry + this period’s cash flow. Safe to spend is this month’s plan after salary, not the bank pile. Answer from the file only.'
@@ -87,7 +88,8 @@ function goalCurrent(
         goal.linkedBucketIds.includes(t.bucketId),
     )
     .reduce((sum, t) => sum + t.amount, 0)
-  return goal.startBalance + confirmed
+  if (goal.completedAt) return goal.startBalance + confirmed
+  return goal.startBalance + confirmed - withdrawnFromBuckets(goal.linkedBucketIds, allTxns)
 }
 
 function pipeSafe(value: string): string {

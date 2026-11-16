@@ -11,9 +11,10 @@ import { usePlaybookStore } from '@/store/playbook'
 import { GoalCard } from '@/components/goals/GoalCard'
 import { GoalDetailSheet } from '@/components/goals/GoalDetailSheet'
 import { AddGoalSheet } from '@/components/goals/AddGoalSheet'
-import { formatMoney } from '@/lib/format'
+import { formatDate, formatMoney } from '@/lib/format'
 import { EF_BUCKET_ID, SIP_BUCKET_ID } from '@/constants/defaults'
 import { suggestSipTarget } from '@/lib/sip-target'
+import { withdrawnFromBuckets } from '@/lib/txn-kind'
 
 const EF_PSEUDO_ID = '__ef_goal__'
 
@@ -57,7 +58,10 @@ export default function GoalsScreen() {
         isEnabled: true,
         completedAt: null,
         freedMonthlyAmount: null,
-        current: efStartBalance + efContributed,
+        current:
+          efStartBalance +
+          efContributed -
+          withdrawnFromBuckets([efBucket.id], transactions),
         color: '#3B82F6',
         isEF: true,
       })
@@ -77,7 +81,10 @@ export default function GoalsScreen() {
 
       result.push({
         ...goal,
-        current: goal.startBalance + contributed,
+        current:
+          goal.startBalance +
+          contributed -
+          withdrawnFromBuckets(goal.linkedBucketIds, transactions),
         color: bucket?.color || colors.green,
       })
     })
@@ -96,9 +103,12 @@ export default function GoalsScreen() {
           )
           .reduce((sum, t) => sum + t.amount, 0)
         const bucket = buckets.find(b => goal.linkedBucketIds.includes(b.id))
+        const used = withdrawnFromBuckets(goal.linkedBucketIds, transactions)
+        const when = goal.completedAt ? formatDate(goal.completedAt) : ''
         return {
           ...goal,
           current: goal.startBalance + contributed,
+          note: used > 0 ? `Used ${formatMoney(used)} of savings · ${when}` : `Completed ${when}`,
           color: bucket?.color || colors.textMuted,
         }
       })
@@ -199,6 +209,7 @@ export default function GoalsScreen() {
                 color={goal.color}
                 paused
                 archived
+                note={goal.note}
                 onPress={() => {
                   setSelectedGoal({ ...goal, monthlyContribution: 0 })
                   setDetailVisible(true)

@@ -7,7 +7,7 @@ import {
   deductFromAccumulatingBucket,
   restoreToAccumulatingBucket,
 } from '@/lib/bucket-balance'
-import { isSavingsConfirmTxn, SALARY_BUCKET_ID } from '@/lib/txn-kind'
+import { GOAL_RETURN_BUCKET_ID, isSavingsConfirmTxn, SALARY_BUCKET_ID } from '@/lib/txn-kind'
 import { clearPersonalCapOverrideIfNeeded } from '@/lib/personal-cap'
 import { useBucketsStore } from '@/store/buckets'
 import { useAccountsStore } from '@/store/accounts'
@@ -190,7 +190,9 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
   },
 
   updateTransaction: async (id, patch) => {
-    const existing = get().transactions.find(t => t.id === id)
+    const existing =
+      get().transactions.find(t => t.id === id) ??
+      get().allTransactions.find(t => t.id === id)
     if (!existing) return
 
     const next = { ...existing, ...patch }
@@ -289,7 +291,9 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
   },
 
   deleteTransaction: async (id) => {
-    const txn = get().transactions.find(t => t.id === id)
+    const txn =
+      get().transactions.find(t => t.id === id) ??
+      get().allTransactions.find(t => t.id === id)
     await db.delete(transactions).where(eq(transactions.id, id))
 
     if (txn) {
@@ -366,7 +370,9 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
 
   getTotalIncome: () => {
     return get()
-      .transactions.filter(t => t.type === 'income' && !t.isRecurringDraft)
+      .transactions.filter(
+        t => t.type === 'income' && !t.isRecurringDraft && t.bucketId !== GOAL_RETURN_BUCKET_ID,
+      )
       .reduce((sum, t) => sum + t.amount, 0)
   },
 

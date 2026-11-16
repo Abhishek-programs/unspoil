@@ -15,13 +15,18 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
+import DateTimePicker from '@react-native-community/datetimepicker'
+import { getMonthRange } from '@/lib/month'
+import { usePlaybookStore } from '@/store/playbook'
 import { colors } from '@/constants/colors'
 import { formatDate } from '@/lib/format'
 import { transactionTitle } from '@/lib/transaction-label'
 import { useBucketsStore } from '@/store/buckets'
 import { IncomePutBackChips } from '@/components/transactions/IncomePutBackChips'
 import { useTransactionsStore, INCOME_BUCKET_ID } from '@/store/transactions'
-import { isSalaryTxn } from '@/lib/txn-kind'
+import { GOAL_RETURN_BUCKET_ID, isPaidFromSavings, isSalaryTxn } from '@/lib/txn-kind'
+import { useGoalsStore } from '@/store/goals'
+import { reopenGoalIfUnderTarget } from '@/lib/goals/completion'
 import type { Transaction } from '@/store/transactions'
 import { useAccountsStore } from '@/store/accounts'
 import { BANK_ACCOUNT_ID, defaultAccountId } from '@/constants/accounts'
@@ -34,7 +39,7 @@ interface TransactionDetailSheetProps {
 }
 
 export function TransactionDetailSheet({ transaction, visible, onClose }: TransactionDetailSheetProps) {
-  const { getSpendingBuckets, getSavingsBuckets } = useBucketsStore()
+  const { getSpendingBuckets, getSavingsBuckets, buckets: everyBucket } = useBucketsStore()
   const { updateTransaction, deleteTransaction } = useTransactionsStore()
   const { accounts: moneyAccounts } = useAccountsStore()
 
@@ -49,6 +54,8 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
   const [description, setDescription] = useState('')
   const [merchant, setMerchant] = useState('')
   const [saving, setSaving] = useState(false)
+  const [date, setDate] = useState(new Date())
+  const [showDatePicker, setShowDatePicker] = useState(false)
   const keyboardHeight = useKeyboardHeight(visible)
 
   useEffect(() => {
@@ -67,6 +74,8 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
       const existingTitle = transaction.description?.trim() || transactionTitle(transaction)
       setDescription(existingTitle === 'Unknown' ? '' : existingTitle)
       setMerchant(transaction.merchant ?? '')
+      setDate(new Date(transaction.date))
+      setShowDatePicker(false)
       setSaving(false)
     }
   }, [transaction, visible])
@@ -84,6 +93,8 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
 
   const isIncome = transaction.type === 'income'
   const isExpense = transaction.type === 'expense'
+  // Paid from goal savings: amount and source are fixed — delete to undo.
+  const fromSavings = isPaidFromSavings(transaction)
 
   const handleSave = async () => {
     if (saving) return
@@ -92,14 +103,16 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
       const parsedAmount = parseFloat(amount.replace(/,/g, '')) || 0
       const parsedFee = parseFloat(feeAmount.replace(/,/g, '')) || 0
       if (parsedAmount <= 0) return
-      const patch: Partial<Transaction> = {
-        amount: parsedAmount,
-        feeAmount: isExpense ? Math.max(0, parsedFee) : 0,
-        description: description.trim() || null,
-        merchant: merchant.trim() || null,
-        accountId,
-      }
-      if (isExpense && selectedBucketId) {
+      const patch: Partial<Transaction> = fromSavings
+        ? { description: description.trim() || null, merchant: merchant.trim() || null }
+        : {
+            amount: parsedAmount,
+            feeAmount: isExpense ? Math.max(0, parsedFee) : 0,
+            description: description.trim() || null,
+            merchant: merchant.trim() || null,
+            accountId,
+          }
+      if (isExpense && selectedBucketId && !fromSavings) {
         patch.bucketId = selectedBucketId
         if (transaction.isFlagged && selectedBucketId !== transaction.bucketId) {
           patch.isFlagged = false
@@ -108,7 +121,15 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
       if (isIncome && !isSalaryTxn(transaction)) {
         patch.bucketId = selectedBucketId || INCOME_BUCKET_ID
       }
+      const dateChanged = date.toISOString() !== new Date(transaction.date).toISOString()
+      if (dateChanged) patch.date = date.toISOString()
       await updateTransaction(transaction.id, patch)
+      if (dateChanged) {
+        // The row may have moved into or out of this period.
+        const pb = usePlaybookStore.getState()
+        const { start, end } = getMonthRange(pb.monthStartDay, pb.earlyMonthStartDate)
+        await useTransactionsStore.getState().loadTransactions(start, end)
+      }
       onClose()
     } catch (e) {
       console.error('Failed to update transaction:', e)
@@ -120,7 +141,9 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
   const handleDelete = () => {
     Alert.alert(
       'Delete transaction',
-      'This cannot be undone. Are you sure?',
+      transaction.fundedFromBucketId && (fromSavings || isIncome)
+        ? 'The amount goes back into the goal\'s savings, and the goal reopens if it was completed early.'
+        : 'This cannot be undone. Are you sure?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -129,6 +152,17 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
           onPress: async () => {
             try {
               await deleteTransaction(transaction.id)
+              if (transaction.fundedFromBucketId && (fromSavings || isIncome)) {
+                const reopened = await reopenGoalIfUnderTarget(
+                  transaction.fundedFromBucketId,
+                  useGoalsStore.getState().goals,
+                  useTransactionsStore.getState().allTransactions,
+                )
+                if (reopened) {
+                  await useGoalsStore.getState().loadGoals()
+                  await useBucketsStore.getState().loadBuckets()
+                }
+              }
               onClose()
             } catch (e) {
               console.error('Failed to delete transaction:', e)
@@ -176,8 +210,9 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
                   value={amount}
                   onChangeText={setAmount}
                   keyboardType="decimal-pad"
+                  editable={!fromSavings}
                 />
-                {isExpense && (
+                {isExpense && !fromSavings && (
                   <TouchableOpacity
                     style={[styles.feeChip, showFee && styles.feeChipActive]}
                     onPress={() => setShowFee(v => !v)}
@@ -203,7 +238,11 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
               )}
               <View style={[styles.typeBadge, { backgroundColor: isIncome ? colors.greenFill : '#FEE2E2' }]}>
                 <Text style={[styles.typeBadgeText, { color: isIncome ? colors.green : colors.red }]}>
-                  {isIncome ? 'Income' : 'Expense'}
+                  {transaction.bucketId === GOAL_RETURN_BUCKET_ID
+                    ? 'Goal return'
+                    : isIncome
+                      ? 'Income'
+                      : 'Expense'}
                 </Text>
               </View>
             </View>
@@ -232,6 +271,7 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
               />
             </View>
 
+            {!fromSavings && (
             <View style={styles.section}>
               <Text style={styles.label}>{isIncome ? 'Lands in' : 'Paid from'}</Text>
               <ScrollView
@@ -265,6 +305,7 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
                 })}
               </ScrollView>
             </View>
+            )}
 
             {isIncome && !isSalaryTxn(transaction) && (
               <View style={styles.section}>
@@ -282,7 +323,7 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
             )}
 
             {/* Bucket selector — expense only */}
-            {isExpense && (
+            {isExpense && !fromSavings && (
               <View style={styles.section}>
                 <Text style={styles.label}>Bucket</Text>
                 <ScrollView
@@ -316,9 +357,9 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
 
             {transaction.fundedFromBucketId ? (
               <View style={styles.section}>
-                <Text style={styles.label}>Funded from</Text>
+                <Text style={styles.label}>{fromSavings ? 'Paid from goal savings' : 'Funded from'}</Text>
                 <Text style={styles.valueText}>
-                  {allBuckets.find(b => b.id === transaction.fundedFromBucketId)?.name ??
+                  {everyBucket.find(b => b.id === transaction.fundedFromBucketId)?.name ??
                     'Unknown bucket'}
                 </Text>
               </View>
@@ -327,7 +368,34 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
             {/* Date */}
             <View style={styles.section}>
               <Text style={styles.label}>Date</Text>
-              <Text style={styles.valueText}>{formatDate(transaction.date)}</Text>
+              <TouchableOpacity
+                style={styles.dateButton}
+                onPress={() => setShowDatePicker(true)}
+              >
+                <Ionicons name="calendar-outline" size={16} color={colors.textSecond} />
+                <Text style={styles.valueText}>{formatDate(date)}</Text>
+              </TouchableOpacity>
+              {showDatePicker && (
+                <DateTimePicker
+                  value={date}
+                  mode="date"
+                  display="spinner"
+                  maximumDate={new Date()}
+                  onChange={(_, selectedDate) => {
+                    setShowDatePicker(Platform.OS === 'ios')
+                    if (selectedDate) {
+                      // Keep the original time of day so same-day ordering is stable.
+                      const next = new Date(date)
+                      next.setFullYear(
+                        selectedDate.getFullYear(),
+                        selectedDate.getMonth(),
+                        selectedDate.getDate(),
+                      )
+                      setDate(next)
+                    }
+                  }}
+                />
+              )}
             </View>
 
             {/* Source badge */}
@@ -379,6 +447,18 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
 }
 
 const styles = StyleSheet.create({
+  dateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 8,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.pageBg,

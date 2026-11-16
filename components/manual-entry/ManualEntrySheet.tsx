@@ -18,7 +18,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import DateTimePicker from '@react-native-community/datetimepicker'
 import { colors } from '@/constants/colors'
-import { formatDate, formatMoney } from '@/lib/format'
+import { formatDate, formatMoney, formatNPRShort } from '@/lib/format'
 import { useBucketsStore } from '@/store/buckets'
 import { usePlaybookStore } from '@/store/playbook'
 import { IncomePutBackChips } from '@/components/transactions/IncomePutBackChips'
@@ -27,7 +27,25 @@ import { useLendingStore } from '@/store/lending'
 import { LendBorrowForm } from '@/components/lending/LendBorrowForm'
 import { useAccountsStore } from '@/store/accounts'
 import { BANK_ACCOUNT_ID, defaultAccountId } from '@/constants/accounts'
-import { PERSONAL_BUCKET_ID } from '@/constants/defaults'
+import {
+  EF_BUCKET_ID,
+  PERSONAL_BUCKET_ID,
+  SHARES_BUCKET_ID,
+  SIP_BUCKET_ID,
+} from '@/constants/defaults'
+import { useGoalsStore, type Goal } from '@/store/goals'
+import { getGoalCurrent } from '@/lib/goals/completion'
+import { UseGoalSavingsSheet, canUseGoalSavings } from '@/components/goals/UseGoalSavingsSheet'
+import { BucketGrid, type BucketTile } from '@/components/manual-entry/BucketGrid'
+import { usePulseData } from '@/hooks/usePulseData'
+import {
+  GOAL_PURCHASE_BUCKET_ID,
+  GOAL_SAVINGS_ACCOUNT_ID,
+  MY_MONEY_BUCKET_ID,
+  isPaidFromSavings,
+  withdrawnFromBuckets,
+} from '@/lib/txn-kind'
+import { effectiveCap } from '@/lib/bucket-balance'
 
 const SAVE_BUTTON_HEIGHT = 56
 const FOOTER_PAD_TOP = 16
@@ -45,7 +63,9 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
 
   const { getSpendingBuckets, getSavingsBuckets, buckets } = useBucketsStore()
   const { startPersonalRecovery } = usePlaybookStore()
-  const { addTransaction } = useTransactionsStore()
+  const { addTransaction, allTransactions } = useTransactionsStore()
+  const { goals } = useGoalsStore()
+  const [goalSpend, setGoalSpend] = useState<{ goal: Goal; price: number } | null>(null)
   const { addEntry: addLendEntry } = useLendingStore()
   const { accounts: moneyAccounts } = useAccountsStore()
 
@@ -60,7 +80,10 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
   const isIncome = entryType === 'income'
   const isLendBorrow = entryType === 'lend_borrow'
   const [selectedBucketId, setSelectedBucketId] = useState<string | null>(null)
-  const [fundedFromBucketId, setFundedFromBucketId] = useState<string | null>(null)
+  // Savings bucket picked in the second section. With a spend bucket selected it is a
+  // contribution funded from that bucket; alone it means spending out of that saving.
+  const [savingsBucketId, setSavingsBucketId] = useState<string | null>(null)
+  const [showSavings, setShowSavings] = useState(false)
   const [accountId, setAccountId] = useState(defaultAccountId())
   const [description, setDescription] = useState('')
   const [merchant, setMerchant] = useState('')
@@ -68,11 +91,99 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [isRecurring, setIsRecurring] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [showDetails, setShowDetails] = useState(false)
 
-  const selectedBucket = allBuckets.find(b => b.id === selectedBucketId)
-  const isSavingsDestination =
-    !!selectedBucket && (selectedBucket.type === 'savings' || selectedBucket.type === 'investment')
-  const fundedFromOptions = spendingBuckets.filter(b => b.id !== selectedBucketId)
+  const { yourMoney, stillInBank, spentByBucket, bucketBalances, efValue, sipInvested, sharesInvested } =
+    usePulseData()
+  const periodTransactions = useTransactionsStore(s => s.transactions)
+
+  // Most-used buckets first, so the usual pick is always in the top row.
+  const useCount = new Map<string, number>()
+  allTransactions.forEach(t => useCount.set(t.bucketId, (useCount.get(t.bucketId) ?? 0) + 1))
+  const byUse = <T extends { id: string }>(list: T[]) =>
+    [...list].sort((a, b) => (useCount.get(b.id) ?? 0) - (useCount.get(a.id) ?? 0))
+
+  const spendTiles: BucketTile[] = byUse(spendingBuckets).map(b => {
+    const left = b.accumulates
+      ? (bucketBalances[b.id] ?? 0)
+      : b.monthlyAmount - (spentByBucket[b.id] ?? 0)
+    const full = b.accumulates
+      ? Math.max(effectiveCap(b) ?? b.monthlyAmount, left)
+      : b.monthlyAmount
+    return {
+      id: b.id,
+      name: b.name,
+      icon: b.icon,
+      color: b.color,
+      left,
+      fraction: full > 0 ? left / full : 0,
+    }
+  })
+  // Catch-all: money on you that no bucket (and no unconfirmed saving) has a claim on.
+  spendTiles.push({
+    id: MY_MONEY_BUCKET_ID,
+    name: 'My money',
+    icon: '👛',
+    color: colors.textMuted,
+    left: Math.max(
+      0,
+      yourMoney - stillInBank - spendTiles.reduce((sum, t) => sum + Math.max(0, t.left), 0),
+    ),
+    fraction: 1,
+    plain: true,
+  })
+
+  const savedIn = (b: { id: string }): number => {
+    if (b.id === EF_BUCKET_ID) return efValue
+    if (b.id === SIP_BUCKET_ID) return sipInvested
+    if (b.id === SHARES_BUCKET_ID) return sharesInvested
+    const goal = goals.find(g => g.linkedBucketIds.includes(b.id))
+    if (goal && goal.linkedBucketIds.length === 1) return getGoalCurrent(goal, allTransactions)
+    return (
+      allTransactions
+        .filter(t => t.bucketId === b.id && t.type === 'expense')
+        .reduce((sum, t) => sum + t.amount, 0) - withdrawnFromBuckets([b.id], allTransactions)
+    )
+  }
+  const savingsTiles: BucketTile[] = byUse(savingsBuckets).map(b => {
+    const confirmed = periodTransactions
+      .filter(
+        t =>
+          t.bucketId === b.id &&
+          t.type === 'expense' &&
+          !t.isFlagged &&
+          !t.isRecurringDraft &&
+          !isPaidFromSavings(t),
+      )
+      .reduce((sum, t) => sum + t.amount, 0)
+    const saved = savedIn(b)
+    return {
+      id: b.id,
+      name: b.name,
+      icon: b.icon,
+      color: b.color,
+      left: saved,
+      // Fills up as this month's contribution is confirmed.
+      fraction: b.monthlyAmount > 0 ? confirmed / b.monthlyAmount : 0,
+      caption: `${formatNPRShort(saved)} saved`,
+      neverEmpty: true,
+    }
+  })
+
+  const savingsBucket = savingsBuckets.find(b => b.id === savingsBucketId)
+  const spendBucket = spendingBuckets.find(b => b.id === selectedBucketId)
+  const spendName = spendBucket?.name ?? (selectedBucketId === MY_MONEY_BUCKET_ID ? 'My money' : null)
+  const isContribution = !isIncome && !!savingsBucket && !!selectedBucketId
+  const isSavingsSpend = !isIncome && !!savingsBucket && !selectedBucketId
+  const savingsSpendGoal = isSavingsSpend
+    ? goals.find(
+        g => g.isEnabled && canUseGoalSavings(g) && g.linkedBucketIds.includes(savingsBucket!.id),
+      )
+    : undefined
+
+  const dayStart = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+  const daysAgo = Math.round((dayStart(new Date()) - dayStart(date)) / 86400000)
+
 
   const footerBottomPad = Math.max(insets.bottom, 16)
 
@@ -92,7 +203,8 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
     setShowFee(false)
     setEntryType('expense')
     setSelectedBucketId(null)
-    setFundedFromBucketId(null)
+    setSavingsBucketId(null)
+    setShowSavings(false)
     setAccountId(defaultAccountId())
     setDescription('')
     setMerchant('')
@@ -100,12 +212,23 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
     setShowDatePicker(false)
     setIsRecurring(false)
     setSaving(false)
+    setShowDetails(false)
     setTimeout(() => amountRef.current?.focus(), 100)
   }, [visible])
 
   const parsedAmount = Math.round((parseFloat(amount.replace(/,/g, '')) || 0) * 1000) / 1000
   const parsedFee = Math.round((parseFloat(feeAmount.replace(/,/g, '')) || 0) * 100) / 100
-  const canSave = parsedAmount > 0 && (isIncome || selectedBucketId !== null)
+  const canSave =
+    parsedAmount > 0 && (isIncome || selectedBucketId !== null || savingsBucketId !== null)
+
+  const detailsSummary = [
+    moneyAccounts.find(a => a.id === accountId)?.name ?? 'Bank',
+    daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' : formatDate(date),
+    merchant.trim() ? 'Note' : null,
+    isRecurring ? 'Recurring' : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
 
   const handleSave = async () => {
     if (!canSave || saving) return
@@ -129,37 +252,40 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
           isRecurringDraft: isRecurring,
         })
       } else {
-        const destBucket = allBuckets.find(b => b.id === selectedBucketId)
-        const isSavingsDest =
-          !!destBucket && (destBucket.type === 'savings' || destBucket.type === 'investment')
-
-        let finalBucketId = selectedBucketId
-        let fundedFrom: string | null = null
-
-        if (isSavingsDest && selectedBucketId) {
-          finalBucketId = selectedBucketId
-          fundedFrom = fundedFromBucketId
-        }
+        // Spend bucket only → plain expense. Spend + savings → contribution funded from
+        // that bucket (My money = from general money). Savings only → paid out of that saving.
+        const fundedFrom = isContribution
+          ? selectedBucketId === MY_MONEY_BUCKET_ID
+            ? null
+            : selectedBucketId
+          : isSavingsSpend
+            ? savingsBucket!.id
+            : null
+        const finalBucketId = isContribution
+          ? savingsBucket!.id
+          : isSavingsSpend
+            ? GOAL_PURCHASE_BUCKET_ID
+            : selectedBucketId
 
         const { overspent } = await addTransaction({
           type: 'expense',
           amount: parsedAmount,
-          feeAmount: parsedFee,
+          feeAmount: isSavingsSpend ? 0 : parsedFee,
           description: description.trim() || null,
-          merchant: merchant.trim() || (isSavingsDest ? destBucket?.name ?? null : null),
+          merchant: merchant.trim() || (isContribution ? savingsBucket!.name : null),
           bucketId: finalBucketId!,
           date: date.toISOString(),
           source: 'manual',
           fundedFromBucketId: fundedFrom,
-          accountId,
+          accountId: isSavingsSpend ? GOAL_SAVINGS_ACCOUNT_ID : accountId,
           parsedTxnId: null,
           isFlagged: false,
-          isRecurringDraft: isRecurring,
+          isRecurringDraft: isSavingsSpend ? false : isRecurring,
         })
 
-        const overspendBucket = fundedFrom
-          ? buckets.find(b => b.id === fundedFrom)
-          : buckets.find(b => b.id === finalBucketId)
+        const overspendBucket = isSavingsSpend
+          ? undefined
+          : buckets.find(b => b.id === (fundedFrom ?? finalBucketId))
         if (overspent && overspendBucket?.accumulates) {
           if (overspendBucket.id === PERSONAL_BUCKET_ID) {
             await startPersonalRecovery(overspent, overspendBucket.monthlyAmount)
@@ -179,6 +305,13 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
   }
 
   return (
+    <>
+    <UseGoalSavingsSheet
+      goal={goalSpend?.goal ?? null}
+      visible={!!goalSpend}
+      initialPrice={goalSpend?.price}
+      onClose={() => setGoalSpend(null)}
+    />
     <Modal
       visible={visible}
       animationType="slide"
@@ -226,8 +359,10 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
                 style={[styles.typeButton, entryType === 'income' && styles.typeButtonActiveIncome]}
                 onPress={() => {
                   setEntryType('income')
-                  const picked = allBuckets.find(b => b.id === selectedBucketId)
-                  if (picked && picked.type !== 'spending') setSelectedBucketId(null)
+                  if (!spendingBuckets.some(b => b.id === selectedBucketId)) {
+                    setSelectedBucketId(null)
+                  }
+                  setSavingsBucketId(null)
                   Keyboard.dismiss()
                 }}
               >
@@ -315,6 +450,102 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
                   </View>
                 )}
 
+                {isIncome && (
+                  <View style={styles.section}>
+                    <Text style={styles.label}>Put back into (optional)</Text>
+                    <IncomePutBackChips
+                      spendingBuckets={spendingBuckets}
+                      selectedBucketId={selectedBucketId}
+                      onChange={setSelectedBucketId}
+                    />
+                  </View>
+                )}
+
+                {!isIncome && (
+                  <View style={styles.section}>
+                    <Text style={styles.label}>Spend bucket</Text>
+                    <BucketGrid
+                      tiles={spendTiles}
+                      selectedId={selectedBucketId}
+                      onSelect={next => {
+                        Keyboard.dismiss()
+                        setSelectedBucketId(next)
+                      }}
+                    />
+
+                    <TouchableOpacity
+                      style={styles.savingsToggle}
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        Keyboard.dismiss()
+                        setShowSavings(v => !v)
+                      }}
+                    >
+                      <Text style={styles.label}>
+                        {savingsBucket
+                          ? `Savings · ${savingsBucket.name}`
+                          : spendName
+                            ? `Contribute from ${spendName} to savings`
+                            : 'Savings & investments'}
+                      </Text>
+                      <Ionicons
+                        name={showSavings ? 'chevron-up' : 'chevron-down'}
+                        size={16}
+                        color={colors.textMuted}
+                      />
+                    </TouchableOpacity>
+                    {showSavings && (
+                      <>
+                        <BucketGrid
+                          tiles={savingsTiles}
+                          selectedId={savingsBucketId}
+                          onSelect={next => {
+                            Keyboard.dismiss()
+                            setSavingsBucketId(next)
+                          }}
+                        />
+                        <Text style={styles.fundedHint}>
+                          {spendName
+                            ? `Adds to the saving and uses ${spendName}.`
+                            : 'No spend bucket picked: this spends out of the saving itself.'}
+                        </Text>
+                      </>
+                    )}
+                  </View>
+                )}
+
+                <View style={styles.section}>
+                  <Text style={styles.label}>Title</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={description}
+                    onChangeText={setDescription}
+                    placeholder={isIncome ? 'e.g. Ankeet share, leftover' : 'e.g. Outing with friends, momo'}
+                    placeholderTextColor={colors.textMuted}
+                  />
+                </View>
+
+                <TouchableOpacity
+                  style={styles.detailsRow}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    Keyboard.dismiss()
+                    setShowDetails(v => !v)
+                  }}
+                >
+                  <Text style={styles.detailsSummary} numberOfLines={1}>
+                    {detailsSummary}
+                  </Text>
+                  <Ionicons
+                    name={showDetails ? 'chevron-up' : 'chevron-down'}
+                    size={16}
+                    color={colors.textMuted}
+                  />
+                </TouchableOpacity>
+
+                {showDetails && (
+                  <>
+
                 <View style={styles.section}>
                   <Text style={styles.label}>
                     {isIncome ? 'Lands in' : 'Paid from'}
@@ -362,139 +593,41 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
                   </ScrollView>
                 </View>
 
-                {isIncome && (
-                  <View style={styles.section}>
-                    <Text style={styles.label}>Put back into (optional)</Text>
-                    <IncomePutBackChips
-                      spendingBuckets={spendingBuckets}
-                      selectedBucketId={selectedBucketId}
-                      onChange={setSelectedBucketId}
-                    />
-                  </View>
-                )}
-
-                {!isIncome && (
-                  <View style={styles.section}>
-                    <Text style={styles.label}>Bucket</Text>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={styles.chipRow}
-                    >
-                      {allBuckets.map(bucket => {
-                        const selected = selectedBucketId === bucket.id
-                        return (
-                          <TouchableOpacity
-                            key={bucket.id}
-                            style={[
-                              styles.bucketChip,
-                              selected && {
-                                backgroundColor: bucket.color + '22',
-                                borderColor: bucket.color,
-                              },
-                            ]}
-                            onPress={() => {
-                              Keyboard.dismiss()
-                              const next = selected ? null : bucket.id
-                              setSelectedBucketId(next)
-                              const nextBucket = allBuckets.find(b => b.id === next)
-                              const stillSavings =
-                                !!nextBucket &&
-                                (nextBucket.type === 'savings' || nextBucket.type === 'investment')
-                              if (!stillSavings) setFundedFromBucketId(null)
-                            }}
-                          >
-                            <Text style={{ fontSize: 14, marginRight: 4 }}>{bucket.icon}</Text>
-                            <Text
-                              style={[
-                                styles.bucketChipText,
-                                selected && { color: bucket.color },
-                              ]}
-                            >
-                              {bucket.name}
-                            </Text>
-                          </TouchableOpacity>
-                        )
-                      })}
-                    </ScrollView>
-                  </View>
-                )}
-
-                {isSavingsDestination && (
-                  <View style={styles.section}>
-                    <Text style={styles.label}>Funded from (optional)</Text>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={styles.chipRow}
-                    >
-                      {fundedFromOptions.map(bucket => {
-                        const selected = fundedFromBucketId === bucket.id
-                        return (
-                          <TouchableOpacity
-                            key={bucket.id}
-                            style={[
-                              styles.bucketChip,
-                              selected && {
-                                backgroundColor: bucket.color + '22',
-                                borderColor: bucket.color,
-                              },
-                            ]}
-                            onPress={() =>
-                              setFundedFromBucketId(selected ? null : bucket.id)
-                            }
-                          >
-                            <Text style={{ fontSize: 14, marginRight: 4 }}>{bucket.icon}</Text>
-                            <Text
-                              style={[
-                                styles.bucketChipText,
-                                selected && { color: bucket.color },
-                              ]}
-                            >
-                              {bucket.name}
-                            </Text>
-                          </TouchableOpacity>
-                        )
-                      })}
-                    </ScrollView>
-                    <Text style={styles.fundedHint}>
-                      Uses that ceiling or Personal balance; destination still gets the
-                      contribution.
-                    </Text>
-                  </View>
-                )}
-
-                <View style={styles.section}>
-                  <Text style={styles.label}>Title</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    value={description}
-                    onChangeText={setDescription}
-                    placeholder={isIncome ? 'e.g. Ankeet share, leftover' : 'e.g. Outing with friends, momo'}
-                    placeholderTextColor={colors.textMuted}
-                  />
-                </View>
-
-                <View style={styles.section}>
-                  <Text style={styles.label}>Description (optional)</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    value={merchant}
-                    onChangeText={setMerchant}
-                    placeholder="Extra detail if you want"
-                    placeholderTextColor={colors.textMuted}
-                  />
-                </View>
-
                 <View style={styles.section}>
                   <Text style={styles.label}>Date</Text>
-                  <TouchableOpacity
-                    style={styles.dateButton}
-                    onPress={() => setShowDatePicker(true)}
-                  >
-                    <Ionicons name="calendar-outline" size={18} color={colors.textSecond} />
-                    <Text style={styles.dateText}>{formatDate(date)}</Text>
-                  </TouchableOpacity>
+                  <View style={styles.chipRow}>
+                    {[
+                      { key: 'today', label: 'Today', on: daysAgo === 0, pick: () => setDate(new Date()) },
+                      {
+                        key: 'yesterday',
+                        label: 'Yesterday',
+                        on: daysAgo === 1,
+                        pick: () => setDate(new Date(Date.now() - 86400000)),
+                      },
+                      {
+                        key: 'pick',
+                        label: daysAgo > 1 ? formatDate(date) : 'Pick',
+                        on: daysAgo > 1,
+                        pick: () => setShowDatePicker(true),
+                      },
+                    ].map(d => (
+                      <TouchableOpacity
+                        key={d.key}
+                        style={[
+                          styles.bucketChip,
+                          d.on && { backgroundColor: colors.greenFill, borderColor: colors.green },
+                        ]}
+                        onPress={() => {
+                          Keyboard.dismiss()
+                          d.pick()
+                        }}
+                      >
+                        <Text style={[styles.bucketChipText, d.on && { color: colors.green }]}>
+                          {d.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                   {showDatePicker && (
                     <DateTimePicker
                       value={date}
@@ -507,6 +640,17 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
                       }}
                     />
                   )}
+                </View>
+
+                <View style={styles.section}>
+                  <Text style={styles.label}>Description (optional)</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={merchant}
+                    onChangeText={setMerchant}
+                    placeholder="Extra detail if you want"
+                    placeholderTextColor={colors.textMuted}
+                  />
                 </View>
 
                 <TouchableOpacity
@@ -522,12 +666,44 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
                     <View style={[styles.toggleKnob, isRecurring && styles.toggleKnobActive]} />
                   </View>
                 </TouchableOpacity>
+                  </>
+                )}
               </>
             )}
           </ScrollView>
 
           {!isLendBorrow && (
             <View style={[styles.footer, { paddingBottom: footerBottomPad }]}>
+              {!isIncome && selectedBucketId === MY_MONEY_BUCKET_ID && !savingsBucket && (
+                <View style={styles.myMoneyWarning}>
+                  <Ionicons name="alert-circle-outline" size={16} color={colors.amber} />
+                  <Text style={styles.myMoneyWarningText}>
+                    Outside your buckets. Better to pick one so your ceilings stay true.
+                  </Text>
+                </View>
+              )}
+              {isSavingsSpend && (
+                <View style={styles.myMoneyWarning}>
+                  <Ionicons name="alert-circle-outline" size={16} color={colors.amber} />
+                  <Text style={styles.myMoneyWarningText}>
+                    Spending from {savingsBucket!.name} savings ({formatMoney(savedIn(savingsBucket!))}{' '}
+                    saved). It lowers that saving, not Your money.
+                    {savingsSpendGoal ? ' Bought the goal? ' : ''}
+                    {savingsSpendGoal && (
+                      <Text
+                        style={styles.myMoneyWarningLink}
+                        onPress={() => {
+                          Keyboard.dismiss()
+                          onClose()
+                          setGoalSpend({ goal: savingsSpendGoal, price: parsedAmount })
+                        }}
+                      >
+                        Complete it instead
+                      </Text>
+                    )}
+                  </Text>
+                </View>
+              )}
               <TouchableOpacity
                 style={[styles.saveButton, !canSave && styles.saveButtonDisabled]}
                 onPress={handleSave}
@@ -535,7 +711,15 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
                 activeOpacity={0.8}
               >
                 <Text style={styles.saveButtonText}>
-                  {saving ? 'Saving...' : isIncome ? 'Add income' : 'Add expense'}
+                  {saving
+                    ? 'Saving...'
+                    : isIncome
+                      ? 'Add income'
+                      : isContribution
+                        ? `Contribute to ${savingsBucket!.name}`
+                        : isSavingsSpend
+                          ? `Spend from ${savingsBucket!.name}`
+                          : 'Add expense'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -543,6 +727,7 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
         </KeyboardAvoidingView>
       </SafeAreaView>
     </Modal>
+    </>
   )
 }
 
@@ -706,6 +891,59 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Inter_500Medium',
     color: colors.textSecond,
+  },
+  detailsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 20,
+  },
+  detailsSummary: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: 'Inter_500Medium',
+    color: colors.textSecond,
+  },
+  myMoneyWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.amberFill,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 10,
+  },
+  myMoneyWarningLink: {
+    fontFamily: 'Inter_700Bold',
+    textDecorationLine: 'underline',
+  },
+  savingsToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 14,
+  },
+  myMoneyWarningText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+    color: '#92400E',
+  },
+  goalSavingsChip: {
+    borderColor: colors.savingsSetAside,
+    backgroundColor: colors.savingsSetAside + '14',
+  },
+  goalSavingsChipText: {
+    color: colors.savingsSetAside,
+    fontFamily: 'Inter_600SemiBold',
   },
   fundedHint: {
     fontSize: 12,

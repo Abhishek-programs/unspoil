@@ -13,6 +13,7 @@ interface GoalCardProps {
   paused?: boolean
   archived?: boolean
   suggestedTarget?: number | null
+  note?: string | null
   onPress: () => void
 }
 
@@ -25,13 +26,15 @@ export function GoalCard({
   paused,
   archived,
   suggestedTarget,
+  note,
   onPress,
 }: GoalCardProps) {
-  const percent = Math.min((current / target) * 100, 100)
+  // A completed goal is done whatever share was saved (it may have been bought early).
+  const percent = archived ? 100 : Math.min((current / target) * 100, 100)
   const { projectedDate, nudge } = projectGoal({ current, target, monthly })
 
   const pieData = [
-    { value: percent, color: color },
+    { value: percent, color: archived ? colors.textMuted : color },
     { value: 100 - percent, color: colors.divider },
   ]
 
@@ -50,7 +53,7 @@ export function GoalCard({
             innerRadius={28}
             innerCircleColor={colors.surface}
             centerLabelComponent={() => (
-              <Text style={styles.percentText}>{Math.round(percent)}%</Text>
+              <Text style={styles.percentText}>{archived ? '✓' : `${Math.round(percent)}%`}</Text>
             )}
           />
         </View>
@@ -58,7 +61,12 @@ export function GoalCard({
         <View style={styles.info}>
           <View style={styles.header}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
-              <Text style={[styles.name, paused && styles.namePaused]}>{name}</Text>
+              <Text
+                style={[styles.name, { flexShrink: 1 }, paused && styles.namePaused]}
+                numberOfLines={1}
+              >
+                {name}
+              </Text>
               {archived && (
                 <View style={styles.archivedBadge}>
                   <Text style={styles.archivedBadgeText}>Archived</Text>
@@ -75,6 +83,7 @@ export function GoalCard({
           
           <View style={styles.meta}>
             <Text style={styles.progressText}>
+              {archived ? 'Saved ' : ''}
               {formatNPRShort(current)} of {formatNPRShort(suggestedTarget ?? target)}
             </Text>
             {!archived && (
@@ -86,10 +95,11 @@ export function GoalCard({
               </Text>
             )}
           </View>
+          {note ? <Text style={styles.suggestedText}>{note}</Text> : null}
         </View>
       </View>
 
-      {nudge && (
+      {nudge && !archived && (
         <View style={styles.nudge}>
           <Text style={styles.nudgeText}>
             Add <Text style={styles.nudgeHighlight}>{formatNPRShort(nudge.amount)}/mo</Text> to finish {nudge.monthsSaved} month{nudge.monthsSaved > 1 ? 's' : ''} sooner

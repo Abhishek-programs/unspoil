@@ -15,13 +15,16 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { colors } from '@/constants/colors'
-import { formatNPR, formatNPRShort, formatMoneyShort } from '@/lib/format'
+import { formatNPR, formatNPRShort, formatMoneyShort, formatDate } from '@/lib/format'
+import { useTransactionsStore } from '@/store/transactions'
+import { withdrawnFromBuckets } from '@/lib/txn-kind'
 import { useGoalsStore, type Goal } from '@/store/goals'
 import { useBucketsStore } from '@/store/buckets'
 import { projectGoal } from '@/lib/projection'
 import { GOAL_BUCKET_LABELS } from '@/lib/goals/plan'
 import { PieChart } from 'react-native-gifted-charts'
 import { useKeyboardHeight } from '@/hooks/useKeyboardHeight'
+import { UseGoalSavingsSheet, canUseGoalSavings } from '@/components/goals/UseGoalSavingsSheet'
 
 interface GoalDetailSheetProps {
   goal: (Goal & { current: number; color: string }) | null
@@ -33,8 +36,10 @@ interface GoalDetailSheetProps {
 export function GoalDetailSheet({ goal, visible, onClose, onEdit }: GoalDetailSheetProps) {
   const { deleteGoal, updateGoalPaymentPlan, goals } = useGoalsStore()
   const { buckets } = useBucketsStore()
+  const allTransactions = useTransactionsStore(s => s.allTransactions)
   const [editingMonthly, setEditingMonthly] = useState(false)
   const [monthlyDraft, setMonthlyDraft] = useState('')
+  const [useSavingsVisible, setUseSavingsVisible] = useState(false)
   const keyboardHeight = useKeyboardHeight(visible && editingMonthly)
 
   useEffect(() => {
@@ -79,7 +84,12 @@ export function GoalDetailSheet({ goal, visible, onClose, onEdit }: GoalDetailSh
     )
   }
 
-  const percent = Math.min((viewGoal.current / viewGoal.targetAmount) * 100, 100)
+  const usedFromSavings = isArchived
+    ? withdrawnFromBuckets(viewGoal.linkedBucketIds, allTransactions)
+    : 0
+  const percent = isArchived
+    ? 100
+    : Math.min((viewGoal.current / viewGoal.targetAmount) * 100, 100)
   const { projectedDate, monthsRemaining, nudge } = projectGoal({
     current: viewGoal.current,
     target: viewGoal.targetAmount,
@@ -87,7 +97,7 @@ export function GoalDetailSheet({ goal, visible, onClose, onEdit }: GoalDetailSh
   })
 
   const pieData = [
-    { value: percent, color: viewGoal.color },
+    { value: percent, color: isArchived ? colors.textMuted : viewGoal.color },
     { value: 100 - percent, color: colors.divider },
   ]
 
@@ -132,8 +142,10 @@ export function GoalDetailSheet({ goal, visible, onClose, onEdit }: GoalDetailSh
               innerCircleColor={colors.pageBg}
               centerLabelComponent={() => (
                 <View style={{ alignItems: 'center' }}>
-                  <Text style={styles.chartPercent}>{Math.round(percent)}%</Text>
-                  <Text style={styles.chartLabel}>Complete</Text>
+                  <Text style={styles.chartPercent}>
+                    {isArchived ? '✓' : `${Math.round(percent)}%`}
+                  </Text>
+                  <Text style={styles.chartLabel}>{isArchived ? 'Completed' : 'Complete'}</Text>
                 </View>
               )}
             />
@@ -148,8 +160,12 @@ export function GoalDetailSheet({ goal, visible, onClose, onEdit }: GoalDetailSh
                 <Text style={styles.statValue}>{formatNPRShort(viewGoal.current)}</Text>
               </View>
               <View style={styles.statItem}>
-                <Text style={styles.statLabel}>Monthly</Text>
-                {editingMonthly && !isArchived ? (
+                <Text style={styles.statLabel}>{isArchived ? 'Used' : 'Monthly'}</Text>
+                {isArchived ? (
+                  <Text style={styles.statValue}>
+                    {usedFromSavings > 0 ? formatNPRShort(usedFromSavings) : '—'}
+                  </Text>
+                ) : editingMonthly ? (
                   <View style={styles.monthlyEditRow}>
                     <TextInput
                       style={styles.monthlyInput}
@@ -181,7 +197,22 @@ export function GoalDetailSheet({ goal, visible, onClose, onEdit }: GoalDetailSh
             </View>
           </View>
 
-          {/* Projection Card */}
+          {isArchived ? (
+          <View style={styles.projectionCard}>
+            <View style={styles.projectionHeader}>
+              <Ionicons name="checkmark-circle-outline" size={20} color={colors.green} />
+              <Text style={styles.projectionTitle}>Completed</Text>
+            </View>
+            <Text style={styles.projectionHero}>
+              {viewGoal.completedAt ? formatDate(viewGoal.completedAt) : ''}
+            </Text>
+            <Text style={styles.projectionSub}>
+              {usedFromSavings > 0
+                ? `${formatNPR(usedFromSavings)} of the savings was used. Delete that row in the ledger to reopen the goal.`
+                : 'Reached its target and moved here.'}
+            </Text>
+          </View>
+          ) : (
           <View style={styles.projectionCard}>
             <View style={styles.projectionHeader}>
               <Ionicons name="sparkles-outline" size={20} color={colors.green} />
@@ -202,8 +233,9 @@ export function GoalDetailSheet({ goal, visible, onClose, onEdit }: GoalDetailSh
               </View>
             )}
           </View>
+          )}
 
-          {viewGoal.paymentMode === 'upfront_emi' && linkedBuckets.length > 1 && (
+          {!isArchived && viewGoal.paymentMode === 'upfront_emi' && linkedBuckets.length > 1 && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Monthly split</Text>
               {linkedBuckets.map(b => {
@@ -223,9 +255,24 @@ export function GoalDetailSheet({ goal, visible, onClose, onEdit }: GoalDetailSh
             </View>
           )}
 
-          {!viewGoal.isEnabled && (
+          {!viewGoal.isEnabled && !isArchived && (
             <View style={styles.pausedBanner}>
               <Text style={styles.pausedText}>This goal is paused — re-enable in Settings or Bucket Builder</Text>
+            </View>
+          )}
+
+          {!isArchived && canUseGoalSavings(viewGoal) && (
+            <View style={styles.section}>
+              <TouchableOpacity
+                style={styles.useSavingsButton}
+                onPress={() => setUseSavingsVisible(true)}
+              >
+                <Ionicons name="bag-check-outline" size={18} color={colors.savingsSetAside} />
+                <Text style={styles.useSavingsText}>Buy now / use savings</Text>
+              </TouchableOpacity>
+              <Text style={styles.useSavingsHint}>
+                Bought it early or closing the goal? Spend what is saved here and complete it.
+              </Text>
             </View>
           )}
 
@@ -238,6 +285,12 @@ export function GoalDetailSheet({ goal, visible, onClose, onEdit }: GoalDetailSh
           </View>
         </ScrollView>
         </KeyboardAvoidingView>
+        <UseGoalSavingsSheet
+          goal={useSavingsVisible ? viewGoal : null}
+          visible={useSavingsVisible}
+          onClose={() => setUseSavingsVisible(false)}
+          onDone={onClose}
+        />
       </SafeAreaView>
     </Modal>
   )
@@ -449,6 +502,29 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.red + '30',
     backgroundColor: colors.red + '08',
+  },
+  useSavingsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.savingsSetAside + '55',
+    backgroundColor: colors.savingsSetAside + '14',
+  },
+  useSavingsText: {
+    fontSize: 15,
+    fontFamily: 'Inter_600SemiBold',
+    color: colors.savingsSetAside,
+  },
+  useSavingsHint: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: 8,
   },
   deleteText: {
     fontSize: 15,

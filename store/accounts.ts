@@ -8,6 +8,7 @@ import {
   defaultAccountId,
   type AccountKind,
 } from '@/constants/accounts'
+import { GOAL_SAVINGS_ACCOUNT_ID } from '@/lib/txn-kind'
 import {
   creditAccount,
   debitWithBankFallback,
@@ -159,13 +160,13 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
   },
 
   applyIncome: async (accountId, amount) => {
-    if (amount <= 0) return
+    if (amount <= 0 || accountId === GOAL_SAVINGS_ACCOUNT_ID) return
     await creditAccount(accountId || defaultAccountId(), amount)
     await get().loadAccounts()
   },
 
   applyExpense: async (accountId, amount) => {
-    if (amount <= 0) return
+    if (amount <= 0 || accountId === GOAL_SAVINGS_ACCOUNT_ID) return
     await debitWallet(accountId, amount)
     await get().loadAccounts()
   },

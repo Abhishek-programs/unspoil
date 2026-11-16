@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import {
   View,
   Text,
@@ -6,11 +6,16 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
+  TextInput,
+  Modal,
+  Pressable,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors } from '@/constants/colors'
-import { formatNPR, formatNPRShort, formatDate } from '@/lib/format'
+import { formatNPR, formatNPRShort, formatDate, formatMoney } from '@/lib/format'
+import { getMonthRange } from '@/lib/month'
+import { transactionTitle } from '@/lib/transaction-label'
 import { useTransactionsStore, INCOME_BUCKET_ID, SALARY_BUCKET_ID } from '@/store/transactions'
 import { useBucketsStore } from '@/store/buckets'
 import { usePlaybookStore } from '@/store/playbook'
@@ -22,6 +27,13 @@ import { LendingRow } from '@/components/transactions/LendingRow'
 import { ChartsView } from '@/components/transactions/ChartsView'
 import type { Transaction } from '@/store/transactions'
 import { useLendingStore } from '@/store/lending'
+import {
+  GOAL_PURCHASE_BUCKET_ID,
+  GOAL_RETURN_BUCKET_ID,
+  MY_MONEY_BUCKET_ID,
+  isPaidFromSavings,
+  withdrawnFromBuckets,
+} from '@/lib/txn-kind'
 import { LendingEntrySheet } from '@/components/lending/LendingEntrySheet'
 import type { LendBorrowEntry } from '@/store/lending'
 
@@ -29,7 +41,8 @@ type FilterKey = 'all' | 'income' | 'flagged' | 'lending' | string
 
 export default function TransactionsScreen() {
   const insets = useSafeAreaInsets()
-  const { allTransactions } = useTransactionsStore()
+  const { allTransactions, updateTransaction, deleteTransaction, addTransaction, loadTransactions } =
+    useTransactionsStore()
   const { monthStartDay, earlyMonthStartDate } = usePlaybookStore()
   const { buckets, getSpendingBuckets, getSavingsBuckets } = useBucketsStore()
   const {
@@ -44,6 +57,14 @@ export default function TransactionsScreen() {
   const [viewMode, setViewMode] = useState<'list' | 'chart'>('list')
   const [chartPeriod, setChartPeriod] = useState<'month' | 'year'>('month')
   const [activeFilter, setActiveFilter] = useState<FilterKey>('all')
+  const [searching, setSearching] = useState(false)
+  const [query, setQuery] = useState('')
+  const [quickTxn, setQuickTxn] = useState<Transaction | null>(null)
+  const [undoTxn, setUndoTxn] = useState<Transaction | null>(null)
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => {
+    if (undoTimer.current) clearTimeout(undoTimer.current)
+  }, [])
   const [selectedTxn, setSelectedTxn] = useState<Transaction | null>(null)
   const [detailVisible, setDetailVisible] = useState(false)
   const [selectedLendingEntry, setSelectedLendingEntry] =
@@ -73,6 +94,9 @@ export default function TransactionsScreen() {
     buckets.forEach(b => m.set(b.id, { name: b.name, color: b.color }))
     m.set(INCOME_BUCKET_ID, { name: 'Income', color: colors.green })
     m.set(SALARY_BUCKET_ID, { name: 'Salary', color: colors.green })
+    m.set(GOAL_RETURN_BUCKET_ID, { name: 'Goal return', color: colors.savingsSetAside })
+    m.set(MY_MONEY_BUCKET_ID, { name: 'My money', color: colors.textSecond })
+    m.set(GOAL_PURCHASE_BUCKET_ID, { name: 'Goal purchase', color: colors.savingsSetAside })
     return m
   }, [buckets])
 
@@ -130,8 +154,22 @@ export default function TransactionsScreen() {
     return transactions.filter(t => t.bucketId === activeFilter)
   }, [transactions, activeFilter, savingsBucketIds])
 
+  // Search looks across every period, so the period and filter rows step aside.
+  const searchResults = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!searching || !q) return null
+    const digits = q.replace(/,/g, '')
+    return allTransactions.filter(
+      t =>
+        (t.description ?? '').toLowerCase().includes(q) ||
+        (t.merchant ?? '').toLowerCase().includes(q) ||
+        (bucketMap.get(t.bucketId)?.name ?? '').toLowerCase().includes(q) ||
+        String(t.amount).includes(digits),
+    )
+  }, [searching, query, allTransactions, bucketMap])
+
   const sections = useMemo(() => {
-    const sorted = [...filtered].sort(
+    const sorted = [...(searchResults ?? filtered)].sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
     )
     const groups: Record<string, Transaction[]> = {}
@@ -140,8 +178,52 @@ export default function TransactionsScreen() {
       if (!groups[key]) groups[key] = []
       groups[key].push(t)
     })
-    return Object.entries(groups).map(([title, data]) => ({ title, data }))
-  }, [filtered])
+    return Object.entries(groups).map(([title, data]) => ({
+      title,
+      data,
+      spent: data
+        .filter(
+          t => t.type === 'expense' && !t.isFlagged && !t.isRecurringDraft && !isPaidFromSavings(t),
+        )
+        .reduce((s, t) => s + t.amount + t.feeAmount, 0),
+    }))
+  }, [filtered, searchResults])
+
+  const canQuickEdit = (t: Transaction) => t.type === 'expense' && !isPaidFromSavings(t)
+  // Rows tied to a goal's savings are undone from the detail sheet, which explains the effect.
+  const canSwipeDelete = (t: Transaction) => !t.fundedFromBucketId || canQuickEdit(t)
+
+  const reloadPeriod = async () => {
+    const { start, end } = getMonthRange(monthStartDay, earlyMonthStartDate)
+    await loadTransactions(start, end)
+  }
+
+  const handleSwipeDelete = async (txn: Transaction) => {
+    await deleteTransaction(txn.id)
+    setUndoTxn(txn)
+    if (undoTimer.current) clearTimeout(undoTimer.current)
+    undoTimer.current = setTimeout(() => setUndoTxn(null), 5000)
+  }
+
+  const handleUndoDelete = async () => {
+    if (!undoTxn) return
+    const { id: _id, createdAt: _createdAt, ...rest } = undoTxn
+    setUndoTxn(null)
+    if (undoTimer.current) clearTimeout(undoTimer.current)
+    await addTransaction(rest)
+    await reloadPeriod()
+  }
+
+  const handleQuickBucket = async (bucketId: string) => {
+    if (!quickTxn) return
+    const txn = quickTxn
+    setQuickTxn(null)
+    if (bucketId === txn.bucketId && !txn.isFlagged) return
+    await updateTransaction(txn.id, {
+      bucketId,
+      ...(txn.isFlagged ? { isFlagged: false } : {}),
+    })
+  }
 
   // Summary numbers
   const totalIncome = useMemo(
@@ -150,7 +232,9 @@ export default function TransactionsScreen() {
   )
   const totalSpent = useMemo(
     () => transactions
-      .filter(t => t.type === 'expense' && !t.isFlagged && !t.isRecurringDraft)
+      .filter(
+        t => t.type === 'expense' && !t.isFlagged && !t.isRecurringDraft && !isPaidFromSavings(t),
+      )
       .reduce((s, t) => s + t.amount + t.feeAmount, 0),
     [transactions],
   )
@@ -202,7 +286,10 @@ export default function TransactionsScreen() {
 
       return {
         name: g.name,
-        current: g.startBalance + current,
+        current:
+          g.startBalance +
+          current -
+          (g.completedAt ? 0 : withdrawnFromBuckets(g.linkedBucketIds, allTransactions)),
         target: g.targetAmount,
         projectedDate: 'Phase 3 goal',
       }
@@ -263,20 +350,54 @@ export default function TransactionsScreen() {
             </View>
           )}
         </View>
-        <TouchableOpacity
-          onPress={() => setViewMode(v => v === 'list' ? 'chart' : 'list')}
-          hitSlop={12}
-        >
-          <Ionicons
-            name={viewMode === 'list' ? 'bar-chart-outline' : 'list-outline'}
-            size={22}
-            color={colors.textPrimary}
-          />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            onPress={() => {
+              setSearching(s => !s)
+              setQuery('')
+              setViewMode('list')
+              setActiveFilter('all')
+            }}
+            hitSlop={12}
+          >
+            <Ionicons
+              name={searching ? 'close' : 'search-outline'}
+              size={22}
+              color={colors.textPrimary}
+            />
+          </TouchableOpacity>
+          {!searching && (
+            <TouchableOpacity
+              onPress={() => setViewMode(v => v === 'list' ? 'chart' : 'list')}
+              hitSlop={12}
+            >
+              <Ionicons
+                name={viewMode === 'list' ? 'bar-chart-outline' : 'list-outline'}
+                size={22}
+                color={colors.textPrimary}
+              />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
+      {searching && (
+        <View style={styles.searchBox}>
+          <Ionicons name="search-outline" size={16} color={colors.textMuted} />
+          <TextInput
+            style={styles.searchInput}
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Title, bucket or amount — all periods"
+            placeholderTextColor={colors.textMuted}
+            autoFocus
+            returnKeyType="search"
+          />
+        </View>
+      )}
+
       {/* Period stepper */}
-      {!isLendingFilter && (
+      {!isLendingFilter && !searching && (
         <View style={styles.periodRow}>
           <TouchableOpacity
             style={[styles.periodArrow, !hasOlderPeriods && styles.periodArrowDisabled]}
@@ -308,6 +429,7 @@ export default function TransactionsScreen() {
       )}
 
       {/* Filter chips */}
+      {!searching && (
       <View>
         <ScrollView
           horizontal
@@ -333,9 +455,10 @@ export default function TransactionsScreen() {
           })}
         </ScrollView>
       </View>
+      )}
 
       {/* Summary row */}
-      {!isLendingFilter ? (
+      {searching ? null : !isLendingFilter ? (
       <View style={styles.summaryRow}>
         <View style={styles.summaryItem}>
           <Text style={[styles.summaryValue, { color: colors.green }]}>{formatNPRShort(totalIncome)}</Text>
@@ -402,9 +525,13 @@ export default function TransactionsScreen() {
           sections={sections}
           keyExtractor={item => item.id}
           contentInsetAdjustmentBehavior="automatic"
+          keyboardShouldPersistTaps="handled"
           renderSectionHeader={({ section }) => (
-            <View style={styles.sectionHeader}>
+            <View style={[styles.sectionHeader, styles.sectionHeaderRow]}>
               <Text style={styles.sectionHeaderText}>{section.title}</Text>
+              {section.spent > 0 && (
+                <Text style={styles.sectionHeaderTotal}>− {formatMoney(section.spent)}</Text>
+              )}
             </View>
           )}
           renderItem={({ item }) => {
@@ -412,15 +539,27 @@ export default function TransactionsScreen() {
             return (
               <TransactionRow
                 transaction={item}
-                bucketName={bucket?.name ?? 'Unknown'}
+                bucketName={
+                  isPaidFromSavings(item) && item.bucketId === GOAL_PURCHASE_BUCKET_ID
+                    ? 'From savings'
+                    : (bucket?.name ?? 'Unknown')
+                }
                 bucketColor={bucket?.color ?? colors.textMuted}
                 onPress={() => openDetail(item)}
+                onLongPress={canQuickEdit(item) ? () => setQuickTxn(item) : undefined}
+                onSwipeDelete={canSwipeDelete(item) ? () => handleSwipeDelete(item) : undefined}
               />
             )
           }}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={styles.emptyText}>No transactions yet</Text>
+              <Text style={styles.emptyText}>
+                {searching
+                  ? query.trim()
+                    ? 'Nothing matches'
+                    : 'Search every period'
+                  : 'No transactions yet'}
+              </Text>
             </View>
           }
           contentContainerStyle={[
@@ -445,6 +584,55 @@ export default function TransactionsScreen() {
           />
         </ScrollView>
       )}
+
+      {undoTxn && (
+        <View style={styles.undoBar}>
+          <Text style={styles.undoText} numberOfLines={1}>
+            Deleted {transactionTitle(undoTxn)}
+          </Text>
+          <TouchableOpacity onPress={handleUndoDelete} hitSlop={12}>
+            <Text style={styles.undoAction}>Undo</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Quick bucket change (long-press a row) */}
+      <Modal
+        visible={quickTxn !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setQuickTxn(null)}
+      >
+        <Pressable style={styles.quickBackdrop} onPress={() => setQuickTxn(null)}>
+          <Pressable style={[styles.quickCard, { paddingBottom: insets.bottom + 16 }]}>
+            <Text style={styles.quickTitle} numberOfLines={1}>
+              {quickTxn ? transactionTitle(quickTxn) : ''}
+              {quickTxn ? `  ·  ${formatMoney(quickTxn.amount)}` : ''}
+            </Text>
+            <Text style={styles.quickLabel}>Move to bucket</Text>
+            <View style={styles.quickChips}>
+              {[...spendingBuckets, ...savingsBuckets].map(b => {
+                const selected = quickTxn?.bucketId === b.id
+                return (
+                  <TouchableOpacity
+                    key={b.id}
+                    style={[
+                      styles.quickChip,
+                      selected && { backgroundColor: b.color + '22', borderColor: b.color },
+                    ]}
+                    onPress={() => handleQuickBucket(b.id)}
+                  >
+                    <Text style={styles.quickChipIcon}>{b.icon}</Text>
+                    <Text style={[styles.quickChipText, selected && { color: b.color }]}>
+                      {b.name}
+                    </Text>
+                  </TouchableOpacity>
+                )
+              })}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Detail sheet */}
       <TransactionDetailSheet
@@ -613,6 +801,113 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 8,
     backgroundColor: colors.pageBg,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 18,
+  },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 10,
+    fontSize: 15,
+    fontFamily: 'Inter_400Regular',
+    color: colors.textPrimary,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+  },
+  sectionHeaderTotal: {
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+    color: colors.textMuted,
+    fontVariant: ['tabular-nums'],
+  },
+  undoBar: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    backgroundColor: colors.textPrimary,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  undoText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: 'Inter_500Medium',
+    color: '#FFFFFF',
+  },
+  undoAction: {
+    fontSize: 14,
+    fontFamily: 'Inter_700Bold',
+    color: '#86EFAC',
+  },
+  quickBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  quickCard: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+  },
+  quickTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter_700Bold',
+    color: colors.textPrimary,
+  },
+  quickLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+    color: colors.textMuted,
+    marginTop: 14,
+    marginBottom: 10,
+  },
+  quickChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  quickChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  quickChipIcon: {
+    fontSize: 14,
+    marginRight: 4,
+  },
+  quickChipText: {
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+    color: colors.textSecond,
   },
   sectionHeaderText: {
     fontSize: 13,

@@ -24,7 +24,7 @@ import {
 } from "@/components/home/MonthStartChecklist";
 import { usePlaybookStore } from "@/store/playbook";
 import { useTransactionsStore, INCOME_BUCKET_ID, SALARY_BUCKET_ID } from "@/store/transactions";
-import { isSalaryTxn } from "@/lib/txn-kind";
+import { isSalaryTxn, withdrawnFromBuckets } from "@/lib/txn-kind";
 import { useBucketsStore } from "@/store/buckets";
 import { useGoalsStore } from "@/store/goals";
 import { useAccountsStore } from "@/store/accounts";
@@ -356,7 +356,8 @@ export default function HomeScreen() {
         .filter(
           (t) => t.bucketId === bucketId && t.type === "expense",
         )
-        .reduce((s, t) => s + t.amount, 0);
+        .reduce((s, t) => s + t.amount, 0) -
+      withdrawnFromBuckets([bucketId], allTransactions);
 
     const map: Record<string, { current: number; target: number }> = {};
     for (const group of goalGroups) {
