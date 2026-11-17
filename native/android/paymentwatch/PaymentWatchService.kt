@@ -67,8 +67,9 @@ class PaymentWatchService : Service() {
       shutdown()
       return START_NOT_STICKY
     }
+    // Every start arrives via startForegroundService, so each one needs its own startForeground.
+    foregroundComplianceMet = false
     if (intent?.getBooleanExtra(EXTRA_SYNC_FOREGROUND, false) == true) {
-      foregroundComplianceMet = false
       eventCursor = 0L
       foregroundPkg = null
     }
