@@ -55,8 +55,9 @@ Monthly take-home (playbook)
 | Concept | Meaning |
 |---------|---------|
 | **Your money** (collapsed) | Bank leftover pile (carry + this period’s bank flow) plus eSewa and Cash. Cash is its own wallet — it is not subtracted from Bank, and income or spending logged on eSewa / Cash never moves Bank (moves between wallets do). Confirming a save moves that amount to net worth. |
-| **Safe to spend** (ring) | Living/Personal plan remaining + unallocated salary − fees/lending; **capped** at cash on you minus carry and unconfirmed Future (`stillInBank`). Confirmed Future lowers **Your money**, not the plan line (Future was never in `spendingPlan`). |
-| **Net worth** (Your money, expanded) | Confirmed EF + goals + SIP + shares only |
+| **Safe to spend** (ring) | min(plan left, cash available). Plan left = Living/Personal plan remaining + unallocated salary − fees. Cash available = Your money − set aside (unconfirmed Future + borrow repayments due this month). The rest is **Free** (carry, windfalls): lending, repayments and unplanned spending come out of Free first. |
+| **Net worth** (Your money, expanded) | Savings (EF + goals + SIP + shares) + Your money − what you owe. Money lent out is not counted until it comes back. |
+| **No-salary month** | One toggle (Settings, checklist, late-salary banner). Plan = kept buckets only (default Core Living), paid from Free; other buckets pause. Runway card, gentle paused-bucket nudge, optional one-tap Emergency Fund move. |
 
 ---
 
@@ -96,8 +97,8 @@ Parked. User picks a bucket on each expense. Keyword mappings and sure-shot merc
 
 Separate from buckets and the transaction ledger's income/expense flow:
 
-- **Lend** — cash left you; reduces safe-to-spend for the month; purple ring slice
-- **Borrow** — cash received; temporarily increases available balance
+- **Lend** — cash left you; comes out of Free first, lowers safe to spend only once Free is empty (purple ring slice shows that part)
+- **Borrow** — cash received; raises Your money, not the plan. Optional **pay back per month** plan (per person): what's due is set aside, shows in the month checklist and on the Lent & borrowed row
 - **Settle** — partial or full repayment; not income or expense
 - Entries and people can be edited/deleted; deleting a person removes their lending history. Cash that already moved stays in Your money.
 - Paying a settlement leaves Your money; receiving one adds to it, without touching Living buckets

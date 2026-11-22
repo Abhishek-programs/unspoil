@@ -12,8 +12,15 @@ import {
   type NudgeFiredMap,
   type NudgeToggles,
 } from '@/lib/nudge-prefs'
+import {
+  defaultNoSalary,
+  parseNoSalary,
+  serializeNoSalary,
+  type NoSalaryPrefs,
+} from '@/lib/no-salary'
 
 export type { AutoBackupPrefs, NudgeToggles } from '@/lib/nudge-prefs'
+export type { NoSalaryPrefs } from '@/lib/no-salary'
 
 interface PlaybookState {
   userName: string | null
@@ -38,6 +45,7 @@ interface PlaybookState {
   lastNotificationDate: string | null
   nudgeFired: NudgeFiredMap
   autoBackup: AutoBackupPrefs
+  noSalary: NoSalaryPrefs
   isLoaded: boolean
   loadPlaybook: () => Promise<void>
   updatePlaybook: (patch: Partial<Omit<PlaybookState, 'isLoaded' | 'loadPlaybook' | 'updatePlaybook' | 'setOnboarded' | 'startPersonalRecovery' | 'resetPersonalRecovery'>>) => Promise<void>
@@ -91,6 +99,7 @@ export const usePlaybookStore = create<PlaybookState>((set, get) => ({
   lastNotificationDate: null,
   nudgeFired: {},
   autoBackup: defaultAutoBackupPrefs(),
+  noSalary: defaultNoSalary(),
   isLoaded: false,
 
   loadPlaybook: async () => {
@@ -121,6 +130,7 @@ export const usePlaybookStore = create<PlaybookState>((set, get) => ({
         lastNotificationDate: nudgePrefs.lastNotificationDate,
         nudgeFired: nudgePrefs.fired,
         autoBackup: nudgePrefs.autoBackup,
+        noSalary: parseNoSalary(row.noSalaryJson),
         isLoaded: true,
       })
       setActiveCurrency(row.currency || 'NPR')
@@ -156,6 +166,7 @@ export const usePlaybookStore = create<PlaybookState>((set, get) => ({
         lastPersonalRebalancePromptMonth: state.lastPersonalRebalancePromptMonth,
         personalRecoveryDebt: state.personalRecoveryDebt,
         personalNormalTopUp: state.personalNormalTopUp,
+        noSalaryJson: serializeNoSalary(state.noSalary),
       })
       return
     }
@@ -180,6 +191,9 @@ export const usePlaybookStore = create<PlaybookState>((set, get) => ({
           nudgeFired: state.nudgeFired,
           autoBackup: state.autoBackup,
         })
+      }
+      if ('noSalary' in patch) {
+        values.noSalaryJson = serializeNoSalary(state.noSalary)
       }
       if (Object.keys(values).length === 0) return
       await db.update(playbook).set(values).where(eq(playbook.id, rows[0].id))
@@ -217,6 +231,7 @@ export const usePlaybookStore = create<PlaybookState>((set, get) => ({
           lastNotificationDate: prev.lastNotificationDate,
           nudgeFired: prev.nudgeFired,
           autoBackup: prev.autoBackup,
+          noSalary: prev.noSalary,
         })
         setActiveCurrency(prev.currency)
         throw retryError

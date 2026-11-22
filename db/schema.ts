@@ -21,6 +21,7 @@ export const playbook = sqliteTable('playbook', {
   personalRecoveryDebt: real('personal_recovery_debt').default(0),
   personalNormalTopUp: real('personal_normal_top_up'),
   nudgePrefsJson: text('nudge_prefs_json'),
+  noSalaryJson: text('no_salary_json'),
 })
 
 export const buckets = sqliteTable('buckets', {
@@ -137,6 +138,8 @@ export const contacts = sqliteTable('contacts', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   createdAt: text('created_at').notNull(),
+  /** Borrow repayment plan: amount to pay this person back each month. */
+  repayMonthly: real('repay_monthly'),
 })
 
 export const lendBorrowEntries = sqliteTable('lend_borrow_entries', {

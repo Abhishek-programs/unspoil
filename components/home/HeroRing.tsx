@@ -15,6 +15,8 @@ import { colors } from "@/constants/colors";
 import { formatMoney, formatNPRShort } from "@/lib/format";
 
 interface HeroRingProps {
+  /** No-salary month: the ring is funded by the survival plan, not salary. */
+  noSalary?: boolean;
   effectiveIncome: number;
   safeToSpend: number;
   lifestyleSpent: number;
@@ -238,6 +240,7 @@ function MetricChip({
 }
 
 export function HeroRing({
+  noSalary = false,
   effectiveIncome,
   safeToSpend,
   lifestyleSpent,
@@ -313,7 +316,9 @@ export function HeroRing({
       ? "Overspending"
       : flaggedAmount > 0
         ? "Needs review"
-        : "On track";
+        : noSalary
+          ? "No-salary month"
+          : "On track";
 
   const cx = CENTER;
   const cy = CENTER;

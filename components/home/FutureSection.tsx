@@ -18,6 +18,8 @@ export interface FutureSectionProps {
   goalGroups: FutureGoalGroup[]
   standaloneBuckets: Bucket[]
   confirmedBucketIds: Set<string>
+  /** No-salary month: contributions on hold for these buckets. */
+  pausedBucketIds?: Set<string>
   progressByBucket?: Record<string, BucketProgress>
   chunksByBucket?: Record<string, number[]>
   efBucketId?: string
@@ -39,7 +41,9 @@ function ConfirmRow({
   icon,
   accent,
   chunks,
+  paused,
 }: {
+  paused?: boolean
   label: string
   hint?: string
   amount: number
@@ -60,9 +64,9 @@ function ConfirmRow({
   return (
     <TouchableOpacity
       style={[styles.row, confirmed && styles.rowConfirmed, indented && styles.rowIndented]}
-      onPress={() => !confirmed && onPress()}
-      activeOpacity={confirmed ? 1 : 0.7}
-      disabled={confirmed}
+      onPress={() => !confirmed && !paused && onPress()}
+      activeOpacity={confirmed || paused ? 1 : 0.7}
+      disabled={confirmed || paused}
     >
       <View style={[styles.checkbox, confirmed && styles.checkboxConfirmed]}>
         {confirmed && (
@@ -91,7 +95,9 @@ function ConfirmRow({
           </View>
         )}
       </View>
-      {chunks && chunks.length > 0 && !confirmed ? (
+      {paused && !confirmed ? (
+        <Text style={styles.paused}>Paused</Text>
+      ) : chunks && chunks.length > 0 && !confirmed ? (
         <View style={styles.chunks}>
           {chunks.map((chunk, index) => (
             <Text key={`${chunk}-${index}`} style={styles.chunk}>
@@ -112,6 +118,7 @@ export function FutureSection({
   goalGroups,
   standaloneBuckets,
   confirmedBucketIds,
+  pausedBucketIds,
   progressByBucket = {},
   chunksByBucket = {},
   efBucketId,
@@ -140,6 +147,7 @@ export function FutureSection({
                 })}
                 amount={group.buckets[0].monthlyAmount}
                 confirmed={confirmedBucketIds.has(group.buckets[0].id)}
+                paused={pausedBucketIds?.has(group.buckets[0].id)}
                 progress={progressByBucket[group.buckets[0].id]}
                 chunks={chunksByBucket[group.buckets[0].id]}
                 onPress={() => onConfirm(group.buckets[0].id)}
@@ -169,6 +177,7 @@ export function FutureSection({
                         hint={hint}
                         amount={bucket.monthlyAmount}
                         confirmed={confirmedBucketIds.has(bucket.id)}
+                        paused={pausedBucketIds?.has(bucket.id)}
                         progress={progressByBucket[bucket.id]}
                         chunks={chunksByBucket[bucket.id]}
                         onPress={() => onConfirm(bucket.id)}
@@ -195,6 +204,7 @@ export function FutureSection({
                 label={bucket.name}
                 amount={bucket.monthlyAmount}
                 confirmed={confirmedBucketIds.has(bucket.id)}
+                paused={pausedBucketIds?.has(bucket.id)}
                 progress={progressByBucket[bucket.id]}
                 chunks={chunksByBucket[bucket.id]}
                 accent={isEF ? EF_ACCENT : undefined}
@@ -226,6 +236,11 @@ export function FutureSection({
 }
 
 const styles = StyleSheet.create({
+  paused: {
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+    color: colors.textMuted,
+  },
   section: {
     marginBottom: 16,
   },

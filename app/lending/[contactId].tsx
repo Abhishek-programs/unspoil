@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Modal,
   Alert,
+  TextInput,
 } from 'react-native'
 import { router, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -41,7 +42,10 @@ export default function PersonDetailScreen() {
     updateEntry,
     deleteEntry,
     deleteContact,
+    setRepayPlan,
   } = useLendingStore()
+  const [planEditing, setPlanEditing] = useState(false)
+  const [planDraft, setPlanDraft] = useState('')
   const [settleVisible, setSettleVisible] = useState(false)
   const [addVisible, setAddVisible] = useState(false)
   const [selectedEntry, setSelectedEntry] = useState<LendBorrowEntry | null>(null)
@@ -119,6 +123,56 @@ export default function PersonDetailScreen() {
           <Ionicons name="checkmark-circle-outline" size={20} color="#FFFFFF" />
           <Text style={styles.settleBtnText}>Settle up</Text>
         </TouchableOpacity>
+      )}
+
+      {balance < 0 && (
+        <View style={styles.planCard}>
+          {planEditing ? (
+            <View style={styles.planEditRow}>
+              <TextInput
+                style={styles.planInput}
+                value={planDraft}
+                onChangeText={setPlanDraft}
+                placeholder="Per month"
+                placeholderTextColor={colors.textMuted}
+                keyboardType="decimal-pad"
+                autoFocus
+              />
+              <TouchableOpacity
+                onPress={async () => {
+                  const v = parseFloat(planDraft.replace(/,/g, '')) || 0
+                  await setRepayPlan(contact.id, v > 0 ? v : null)
+                  setPlanEditing(false)
+                }}
+                hitSlop={8}
+              >
+                <Text style={styles.planAction}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.planEditRow}
+              onPress={() => {
+                setPlanDraft(contact.repayMonthly ? String(contact.repayMonthly) : '')
+                setPlanEditing(true)
+              }}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.planTitle}>
+                  {contact.repayMonthly
+                    ? `Paying back ${formatMoney(contact.repayMonthly)}/month`
+                    : 'No repayment plan'}
+                </Text>
+                <Text style={styles.planSub}>
+                  {contact.repayMonthly
+                    ? `Paid off in ~${Math.ceil(Math.abs(balance) / contact.repayMonthly)} month(s). Set aside each month.`
+                    : 'Set a monthly amount so it is planned, not a surprise.'}
+                </Text>
+              </View>
+              <Text style={styles.planAction}>{contact.repayMonthly ? 'Edit' : 'Set'}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       )}
 
       <Text style={styles.sectionTitle}>History</Text>
@@ -205,6 +259,47 @@ export default function PersonDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  planCard: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 12,
+  },
+  planEditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  planTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: colors.textPrimary,
+  },
+  planSub: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: colors.textSecond,
+    marginTop: 2,
+  },
+  planAction: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: colors.purple,
+  },
+  planInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 15,
+    fontFamily: 'Inter_400Regular',
+    color: colors.textPrimary,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.pageBg,

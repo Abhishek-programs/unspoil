@@ -5,10 +5,12 @@ import { formatMoneyShort } from '@/lib/format'
 
 interface LentBorrowRowProps {
   totalNet: number
+  /** Borrow repayments still due this month under the plan. */
+  dueThisMonth?: number
   onPress: () => void
 }
 
-export function LentBorrowRow({ totalNet, onPress }: LentBorrowRowProps) {
+export function LentBorrowRow({ totalNet, dueThisMonth = 0, onPress }: LentBorrowRowProps) {
   const accent =
     totalNet > 0 ? colors.green : totalNet < 0 ? colors.red : colors.textMuted
   const sign = totalNet > 0 ? '+' : totalNet < 0 ? '−' : ''
@@ -20,6 +22,9 @@ export function LentBorrowRow({ totalNet, onPress }: LentBorrowRowProps) {
       <Text style={styles.dot}>·</Text>
       <Text style={[styles.net, { color: accent }]}>
         {sign}{formatMoneyShort(Math.abs(totalNet))} net
+        {dueThisMonth > 0 ? (
+          <Text style={styles.due}>{`  ·  ${formatMoneyShort(dueThisMonth)} due`}</Text>
+        ) : null}
       </Text>
       <Ionicons name="chevron-forward" size={16} color={colors.textMuted} style={styles.chevron} />
     </TouchableOpacity>
@@ -55,6 +60,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter_700Bold',
     fontVariant: ['tabular-nums'],
+  },
+  due: {
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+    color: colors.textSecond,
   },
   chevron: {
     marginLeft: 4,

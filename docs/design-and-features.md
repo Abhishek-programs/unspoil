@@ -24,12 +24,12 @@ Headers use safe-area inset (`insets.top + 12`) on all tabs.
 | Collapsed | Expanded |
 |-----------|----------|
 | **Your money** — cash on you now | Carry + this period’s cash flow · wallets (Bank / eSewa / Cash) |
-| | **Net worth** — confirmed EF, goals, SIP, shares |
+| | **Net worth** — savings + Your money − what you owe (lent money not counted) |
 
 Net worth accordion: **Lent out** (asset) · **You owe** (liability).
 
 ### Hero ring
-- **Center:** Safe to spend (locked until salary confirmed this month)
+- **Center:** Safe to spend (locked until salary confirmed this month, or No-salary month on)
 - **Paid early? pill:** visible during the 7 days before the configured month start when the current salary is already confirmed. Confirmation closes the old period and starts the new plan today without changing the configured day.
 - **Arcs:** green available · red spent · purple lent out (this month) · teal savings (confirmed + unconfirmed)
 - **Stroke:** uniform width on all arcs; unconfirmed savings use lower opacity (not a thicker stroke)

@@ -7,10 +7,15 @@ import { Ionicons } from '@expo/vector-icons'
 import { colors } from '@/constants/colors'
 
 import { formatMoney, formatNPR, formatNPRShort, formatMoneyShort } from '@/lib/format'
+import { formatRunway } from '@/lib/no-salary'
 
 
 
 interface YourMoneyCardProps {
+  /** Savings + Your money − what you owe. Lent money isn't counted. */
+  netWorth: number
+  /** Months Your money lasts on Core Living alone; undefined hides the line. */
+  runwayMonths?: number | null
   availableBalance: number
   stillInBank?: number
   intentionalSavings: number
@@ -24,6 +29,8 @@ interface YourMoneyCardProps {
 }
 
 export function NetWorthCard({
+  netWorth,
+  runwayMonths,
   availableBalance,
   stillInBank = 0,
   intentionalSavings,
@@ -172,9 +179,11 @@ export function NetWorthCard({
 
           <Text style={styles.sectionTitle}>Net worth</Text>
 
-          <Text style={styles.netWorthValue}>{formatNPRShort(intentionalSavings)}</Text>
+          <Text style={styles.netWorthValue}>{formatNPRShort(netWorth)}</Text>
 
-          <Text style={styles.netWorthSub}>Intentional savings — EF, goals, SIP, shares</Text>
+          <Text style={styles.netWorthSub}>
+            Savings + Your money − what you owe. Lent money counts once it's back.
+          </Text>
 
 
 
@@ -208,48 +217,44 @@ export function NetWorthCard({
 
 
 
-          {(lentOutAsset > 0 || youOweLiability > 0) && (
+          <View style={styles.breakdownRow}>
+            <Text style={styles.breakdownLabel}>Your money</Text>
+            <Text style={styles.breakdownValue}>{formatNPRShort(availableBalance)}</Text>
+          </View>
 
-            <>
-
-              <View style={styles.divider} />
-
-              {lentOutAsset > 0 && (
-
-                <View style={styles.breakdownRow}>
-
-                  <Text style={styles.breakdownLabel}>Lent out</Text>
-
-                  <Text style={[styles.breakdownValue, { color: colors.savingsSetAside }]}>
-
-                    {formatNPRShort(lentOutAsset)}
-
-                  </Text>
-
-                </View>
-
-              )}
-
-              {youOweLiability > 0 && (
-
-                <View style={styles.breakdownRow}>
-
-                  <Text style={styles.breakdownLabel}>You owe</Text>
-
-                  <Text style={[styles.breakdownValue, { color: colors.red }]}>
-
-                    {formatNPRShort(youOweLiability)}
-
-                  </Text>
-
-                </View>
-
-              )}
-
-            </>
-
+          {youOweLiability > 0 && (
+            <View style={styles.breakdownRow}>
+              <Text style={styles.breakdownLabel}>You owe</Text>
+              <Text style={[styles.breakdownValue, { color: colors.red }]}>
+                −{formatNPRShort(youOweLiability)}
+              </Text>
+            </View>
           )}
 
+          {lentOutAsset > 0 && (
+            <View style={styles.breakdownRow}>
+              <View>
+                <Text style={styles.breakdownLabel}>Owed to you</Text>
+                <Text style={styles.rolloverNote}>Not counted until it's back</Text>
+              </View>
+              <Text style={[styles.breakdownValue, { color: colors.textMuted }]}>
+                {formatNPRShort(lentOutAsset)}
+              </Text>
+            </View>
+          )}
+
+          {runwayMonths !== undefined && (
+            <>
+              <View style={styles.divider} />
+              <View style={styles.breakdownRow}>
+                <View style={{ flex: 1, paddingRight: 12 }}>
+                  <Text style={styles.breakdownLabel}>If income stopped</Text>
+                  <Text style={styles.rolloverNote}>Your money on Core Living alone</Text>
+                </View>
+                <Text style={styles.breakdownValue}>{formatRunway(runwayMonths)}</Text>
+              </View>
+            </>
+          )}
         </View>
 
       )}

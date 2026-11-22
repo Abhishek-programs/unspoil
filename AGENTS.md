@@ -100,7 +100,7 @@ Home  |  Transactions  |  [+]  |  Goals  |  Settings
 
 **Month boundaries:** user `month_start_day` from playbook — not calendar month (`lib/month.ts`).
 
-**Safe to spend:** unlocks only after salary is confirmed this month (income on `_salary`). Ring and safe-to-spend exclude carried-forward balance (`hooks/usePulseData.ts`).
+**Safe to spend:** unlocks after salary is confirmed this month (income on `_salary`) or while **No-salary month** is on. Safe to spend = min(plan left, Your money − set aside). Lend/borrow/settle and carry sit in Free, so they only lower it once Free is empty (`lib/no-salary.ts`, `hooks/usePulseData.ts`). See `docs/superpowers/specs/2026-11-21-no-salary-month-design.md`.
 
 **EF target:** `EF_MULTIPLIER` × Core Living monthly amount (`constants/defaults.ts`, onboarding Foundations).
 

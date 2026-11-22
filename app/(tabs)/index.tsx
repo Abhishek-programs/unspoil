@@ -24,7 +24,9 @@ import {
 } from "@/components/home/MonthStartChecklist";
 import { usePlaybookStore } from "@/store/playbook";
 import { useTransactionsStore, INCOME_BUCKET_ID, SALARY_BUCKET_ID } from "@/store/transactions";
-import { isSalaryTxn, withdrawnFromBuckets } from "@/lib/txn-kind";
+import { GOAL_RETURN_BUCKET_ID, isSalaryTxn, withdrawnFromBuckets } from "@/lib/txn-kind";
+import { NoSalarySheet } from "@/components/home/NoSalarySheet";
+import { NoSalaryCard } from "@/components/home/NoSalaryCard";
 import { useBucketsStore } from "@/store/buckets";
 import { useGoalsStore } from "@/store/goals";
 import { useAccountsStore } from "@/store/accounts";
@@ -80,12 +82,13 @@ export default function HomeScreen() {
     lastChecklistPromptMonth,
     efFloor,
     personalRecoveryDebt,
+    noSalary,
     lastBalanceRolloverMonth,
     lastSurplusRolloverMonth,
     loadPlaybook,
     updatePlaybook,
   } = usePlaybookStore();
-  const { loadEntries } = useLendingStore();
+  const { loadEntries, addEntry: addLendingEntry } = useLendingStore();
   const {
     totalIncome,
     effectiveIncome,
@@ -118,6 +121,20 @@ export default function HomeScreen() {
     hasAnyData,
     efValue,
     moneyAccounts,
+    netWorth,
+    noSalaryOn,
+    pausedBucketIds,
+    cashAvailable,
+    freeMoney,
+    lendingCutIntoPlan,
+    repayRows,
+    repayDueThisMonth,
+    survivalCost,
+    runway,
+    runwayWithEf,
+    efTopUpSuggested,
+    pausedSpendBuckets,
+    pausedSpendThisMonth,
   } = usePulseData();
 
   const { seedFromYourMoney, syncBankToPile } = useAccountsStore();
@@ -138,6 +155,7 @@ export default function HomeScreen() {
   );
   const [capPromptVisible, setCapPromptVisible] = useState(false);
   const [startingMonthEarly, setStartingMonthEarly] = useState(false);
+  const [noSalarySheetVisible, setNoSalarySheetVisible] = useState(false);
 
   const flagged = transactions.filter((t) => t.isFlagged);
 
@@ -171,16 +189,30 @@ export default function HomeScreen() {
   }, [sipRemaining]);
 
   const checklistItems: ChecklistItem[] = useMemo(() => {
-    const items: ChecklistItem[] = [
-      {
-        id: "income",
-        label: "Confirm Salary Received",
-        amount: monthlyIncome,
-        bucketId: INCOME_BUCKET_ID,
-        completed: hasSalaryThisMonth,
-      },
-    ];
-    savingsBuckets.forEach((b) => {
+    // No-salary month: no salary to confirm, and paused Future buckets drop out.
+    const items: ChecklistItem[] = noSalaryOn
+      ? []
+      : [
+          {
+            id: "income",
+            label: "Confirm Salary Received",
+            amount: monthlyIncome,
+            bucketId: INCOME_BUCKET_ID,
+            completed: hasSalaryThisMonth,
+          },
+        ];
+    repayRows.forEach((r) => {
+      items.push({
+        id: `repay:${r.contactId}`,
+        label: `Pay back ${r.name}`,
+        amount: r.due > 0 ? r.due : Math.min(r.monthly, r.owedAtStart),
+        bucketId: "",
+        completed: r.due <= 0,
+      });
+    });
+    savingsBuckets
+      .filter((b) => !pausedBucketIds.has(b.id))
+      .forEach((b) => {
       items.push({
         id: b.id,
         label: checklistLabel(b, goals),
@@ -194,6 +226,9 @@ export default function HomeScreen() {
   }, [
     monthlyIncome,
     savingsBuckets,
+    noSalaryOn,
+    pausedBucketIds,
+    repayRows,
     hasSalaryThisMonth,
     confirmedSavingIds,
     goals,
@@ -245,6 +280,26 @@ export default function HomeScreen() {
 
   const handleToggleChecklistItem = async (id: string) => {
     const txnDate = monthStart.toISOString();
+
+    if (id.startsWith("repay:")) {
+      const row = repayRows.find((r) => `repay:${r.contactId}` === id);
+      if (!row || row.due <= 0) return;
+      try {
+        await addLendingEntry({
+          contactId: row.contactId,
+          type: "settle",
+          amount: row.due,
+          note: "Monthly repayment",
+          date: new Date().toISOString(),
+        });
+      } catch (error) {
+        Alert.alert(
+          "Could not log repayment",
+          error instanceof Error ? error.message : "Please try again.",
+        );
+      }
+      return;
+    }
 
     if (id === "income") {
       await addTransaction({
@@ -427,6 +482,22 @@ export default function HomeScreen() {
   }, [allTransactions, goals]);
 
   const handleUndoChecklistItem = (id: string) => {
+    if (id.startsWith("repay:")) {
+      // Deleting a settle keeps its cash moved, so undo lives on the person's page.
+      Alert.alert(
+        "Repayment logged",
+        "To change it, open Lent & Borrowed and edit the entry.",
+        [
+          { text: "OK", style: "cancel" },
+          {
+            text: "Open",
+            onPress: () =>
+              router.push(`/lending/${id.slice("repay:".length)}`),
+          },
+        ],
+      );
+      return;
+    }
     Alert.alert(
       "Undo confirmation?",
       "This will remove the logged transaction for this item.",
@@ -447,6 +518,70 @@ export default function HomeScreen() {
               );
               if (txn) await deleteTransaction(txn.id);
             }
+          },
+        },
+      ],
+    );
+  };
+
+  // Salary 3+ days late with no-salary month off: offer it, gently.
+  const daysIntoMonth = Math.floor(
+    (Date.now() - monthStart.getTime()) / 86_400_000,
+  );
+  const salaryLate = !noSalaryOn && !hasSalaryThisMonth && daysIntoMonth >= 3;
+
+  const keptNames = buckets
+    .filter((b) => noSalary.keep.includes(b.id))
+    .map((b) => b.name);
+  const keptLabel =
+    keptNames.length === 0
+      ? "your plan"
+      : keptNames.length <= 2
+        ? keptNames.join(" & ")
+        : `${keptNames[0]} & ${keptNames.length - 1} more`;
+
+  const nudgeSeenAmount =
+    noSalary.nudgeSeen?.month === monthKey ? noSalary.nudgeSeen.amount : 0;
+  const pausedNudge =
+    noSalaryOn && pausedSpendThisMonth > nudgeSeenAmount
+      ? {
+          names: pausedSpendBuckets.slice(0, 2).map((b) => b.name),
+          total: pausedSpendThisMonth,
+        }
+      : null;
+
+  const dismissPausedNudge = () => {
+    void updatePlaybook({
+      noSalary: {
+        ...noSalary,
+        nudgeSeen: { month: monthKey, amount: pausedSpendThisMonth },
+      },
+    });
+  };
+
+  const handleMoveFromEf = () => {
+    if (efTopUpSuggested <= 0) return;
+    Alert.alert(
+      "Move from Emergency Fund?",
+      `Moves ${formatMoney(efTopUpSuggested)} from your Emergency Fund into Your money. This is what the fund is for.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Move",
+          onPress: async () => {
+            await addTransaction({
+              type: "income",
+              amount: efTopUpSuggested,
+              description: "Moved from Emergency Fund",
+              merchant: "Emergency Fund",
+              bucketId: GOAL_RETURN_BUCKET_ID,
+              date: new Date().toISOString(),
+              source: "manual",
+              fundedFromBucketId: EF_BUCKET_ID,
+              parsedTxnId: null,
+              isFlagged: false,
+              isRecurringDraft: false,
+            });
           },
         },
       ],
@@ -630,6 +765,25 @@ export default function HomeScreen() {
           </TouchableOpacity>
         )}
 
+        {salaryLate && (
+          <TouchableOpacity
+            style={styles.checklistBanner}
+            onPress={() => setNoSalarySheetVisible(true)}
+            activeOpacity={0.8}
+          >
+            <View style={styles.checklistBannerIcon}>
+              <Ionicons name="time-outline" size={18} color={colors.textSecond} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.checklistBannerTitle}>Salary not in yet?</Text>
+              <Text style={styles.checklistBannerSub}>
+                Late is fine. If it's not coming, plan a no-salary month
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+          </TouchableOpacity>
+        )}
+
         {/* Flagged Banner */}
         {flagged.length > 0 && (
           <TouchableOpacity
@@ -659,6 +813,14 @@ export default function HomeScreen() {
 
         {/* Net Worth Card */}
         <NetWorthCard
+          netWorth={netWorth}
+          runwayMonths={
+            noSalaryOn
+              ? undefined
+              : survivalCost > 0
+                ? runway
+                : null
+          }
           availableBalance={yourMoney}
           stillInBank={stillInBank}
           intentionalSavings={intentionalSavings}
@@ -682,14 +844,30 @@ export default function HomeScreen() {
           }
         />
 
+        {noSalaryOn && (
+          <NoSalaryCard
+            runway={runway}
+            runwayWithEf={runwayWithEf}
+            efValue={efValue}
+            shortNextMonth={survivalCost > 0 && freeMoney < survivalCost}
+            efTopUpSuggested={efTopUpSuggested}
+            nudge={pausedNudge}
+            keptLabel={keptLabel}
+            onEdit={() => setNoSalarySheetVisible(true)}
+            onMoveFromEf={handleMoveFromEf}
+            onDismissNudge={dismissPausedNudge}
+          />
+        )}
+
         <HeroRing
+          noSalary={noSalaryOn}
           effectiveIncome={effectiveIncome}
           safeToSpend={safeToSpend}
           lifestyleSpent={lifestyleSpent}
           personalDraws={personalDraws}
           confirmedSavedInvested={confirmedSavedInvested}
           unconfirmedSavingsThisMonth={unconfirmedSavingsThisMonth}
-          lentOutstandingThisMonth={lentOutstandingThisMonth}
+          lentOutstandingThisMonth={lendingCutIntoPlan}
           daysRemaining={daysRemaining}
           weeklyRate={weeklyRate}
           flaggedAmount={flaggedAmount}
@@ -701,6 +879,7 @@ export default function HomeScreen() {
 
         <LentBorrowRow
           totalNet={totalNetLending}
+          dueThisMonth={repayDueThisMonth}
           onPress={() => router.push("/lending")}
         />
 
@@ -709,6 +888,7 @@ export default function HomeScreen() {
           spentByBucket={spentByBucket}
           bucketBalances={bucketBalances}
           personalRecoveryDebt={personalRecoveryDebt}
+          pausedBucketIds={pausedBucketIds}
         />
 
         {/* Future — Savings checklist */}
@@ -716,6 +896,7 @@ export default function HomeScreen() {
           goalGroups={goalGroups}
           standaloneBuckets={standaloneBuckets}
           confirmedBucketIds={confirmedSavingIds}
+          pausedBucketIds={pausedBucketIds}
           progressByBucket={progressByBucket}
           chunksByBucket={{ [SIP_BUCKET_ID]: sipChunks }}
           efBucketId={EF_BUCKET_ID}
@@ -755,6 +936,28 @@ export default function HomeScreen() {
         onToggleItem={handleToggleChecklistItem}
         onUndoItem={handleUndoChecklistItem}
         onDismiss={() => setChecklistVisible(false)}
+        footerLink={
+          !noSalaryOn && !hasSalaryThisMonth
+            ? {
+                label: "No salary this month?",
+                onPress: () => {
+                  setChecklistVisible(false);
+                  setNoSalarySheetVisible(true);
+                },
+              }
+            : undefined
+        }
+      />
+
+      <NoSalarySheet
+        visible={noSalarySheetVisible}
+        onClose={() => setNoSalarySheetVisible(false)}
+        cashAvailable={cashAvailable}
+        efValue={efValue}
+        repayMonthly={repayRows.reduce(
+          (s, r) => s + Math.min(r.monthly, r.owedAtStart),
+          0,
+        )}
       />
 
       {personalBucket && (

@@ -26,6 +26,8 @@ interface LivingSectionProps {
   spentByBucket: Record<string, number>
   bucketBalances: Record<string, number>
   personalRecoveryDebt?: number
+  /** No-salary month: buckets not kept show as paused instead of a ceiling. */
+  pausedBucketIds?: Set<string>
 }
 
 export function LivingSection({
@@ -33,14 +35,16 @@ export function LivingSection({
   spentByBucket,
   bucketBalances,
   personalRecoveryDebt = 0,
+  pausedBucketIds,
 }: LivingSectionProps) {
   const regularBuckets = buckets.filter(b => !b.accumulates)
   const fundBuckets = buckets.filter(b => b.accumulates)
 
   const renderRegularRow = (bucket: Bucket, i: number) => {
     const spent = spentByBucket[bucket.id] ?? 0
+    const paused = pausedBucketIds?.has(bucket.id) ?? false
     const ceiling = bucket.monthlyAmount
-    const over = Math.max(0, spent - ceiling)
+    const over = paused ? 0 : Math.max(0, spent - ceiling)
     let segments: { green: number; red: number; darkRed?: number }
     if (over > 0 && spent > 0) {
       segments = {
@@ -74,11 +78,19 @@ export function LivingSection({
           </Text>
         </View>
         <View style={styles.barWrap}>
-          <ProgressBar value={0} height={4} segments={segments} />
+          <ProgressBar
+            value={0}
+            height={4}
+            segments={paused ? { green: 0, red: 0, grey: 1 } : segments}
+          />
           <Text style={[styles.ceilingHint, over > 0 && { color: colors.redDark }]}>
-            {over > 0
-              ? `${formatMoney(over)} over · ceiling ${formatMoney(ceiling)}`
-              : `ceiling ${formatMoney(ceiling)}`}
+            {paused
+              ? spent > 0
+                ? 'paused this month · comes out of your kept plan'
+                : 'paused this month'
+              : over > 0
+                ? `${formatMoney(over)} over · ceiling ${formatMoney(ceiling)}`
+                : `ceiling ${formatMoney(ceiling)}`}
           </Text>
         </View>
       </Animated.View>
@@ -89,7 +101,8 @@ export function LivingSection({
     const spent = spentByBucket[bucket.id] ?? 0
     const balance = Math.max(0, bucketBalances[bucket.id] ?? 0)
     const cap = Math.max(effectiveCap(bucket) ?? bucket.monthlyAmount * 4, 1)
-    const topUp = bucket.monthlyAmount
+    const fundPaused = pausedBucketIds?.has(bucket.id) ?? false
+    const topUp = fundPaused ? 0 : bucket.monthlyAmount
     const green = Math.min(1, balance / cap)
     const red = Math.min(1, spent / cap)
     const grey = Math.max(0, 1 - green - red)
@@ -119,7 +132,9 @@ export function LivingSection({
           <Text style={[styles.fundHint, emptyAndSpent && { color: colors.redDark }]}>
             {emptyAndSpent
               ? `Fund empty · draws from Your money`
-              : `Fund ${formatMoney(balance)} / ${formatMoney(cap)} · +${formatMoney(topUp)}/mo · rolls over`}
+              : fundPaused
+                ? `Fund ${formatMoney(balance)} / ${formatMoney(cap)} · top-up paused`
+                : `Fund ${formatMoney(balance)} / ${formatMoney(cap)} · +${formatMoney(topUp)}/mo · rolls over`}
             {personalRecoveryDebt > 0
               ? ` · recovering ${formatMoney(personalRecoveryDebt)}`
               : ''}

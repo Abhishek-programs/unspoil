@@ -14,6 +14,7 @@ What's shipped and what's next. For stack and rules see [AGENTS.md](./AGENTS.md)
 | Home — Your money → ring → lent/borrow → Living → Future | Done |
 | Lent & borrowed — contacts, person ledger, settle up | Done |
 | Salary-gated safe to spend | Done |
+| No-salary month, Free pile, borrow repayment plans, real net worth | Built 2026-11-21, not yet run on device |
 | Personal accumulating fund + cap prompts | Done |
 | Goals / Vault | Done |
 | Month start checklist | Done |

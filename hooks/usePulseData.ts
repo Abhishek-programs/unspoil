@@ -21,6 +21,9 @@ import {
 import { PERSONAL_RECOVERY_TOP_UP } from '@/lib/bucket-balance'
 import { BANK_ACCOUNT_ID } from '@/constants/accounts'
 import { isSalaryTxn, isSavingsConfirmTxn, withdrawnFromBuckets } from '@/lib/txn-kind'
+import { computeRepayDue } from '@/lib/lending/repay'
+import { computeSafeToSpend, runwayMonths, survivalMonthly } from '@/lib/no-salary'
+import { CORE_LIVING_BUCKET_ID } from '@/constants/defaults'
 
 export function usePulseData() {
   const {
@@ -30,7 +33,12 @@ export function usePulseData() {
     efStartBalance,
     carriedForwardBalance,
     personalRecoveryDebt,
+    noSalary,
   } = usePlaybookStore()
+  const noSalaryOn = noSalary.on
+  const keptIds = new Set(noSalary.keep)
+  /** In a no-salary month only kept buckets are funded. */
+  const isFunded = (id: string) => !noSalaryOn || keptIds.has(id)
   const { buckets, bucketBalances } = useBucketsStore()
   const {
     flaggedTransactions,
@@ -66,12 +74,16 @@ export function usePulseData() {
   const personalDraws = accumulatingBuckets.reduce((s, b) => s + (spentByBucket[b.id] ?? 0), 0)
 
   const personalTopUps = accumulatingBuckets.reduce((s, b) => {
+    if (!isFunded(b.id)) return s
     if (b.id === PERSONAL_BUCKET_ID && personalRecoveryDebt > 0) {
       return s + PERSONAL_RECOVERY_TOP_UP
     }
     return s + b.monthlyAmount
   }, 0)
-  const lifestyleBudget = regularSpendingBuckets.reduce((s, b) => s + b.monthlyAmount, 0)
+  const lifestyleBudget = regularSpendingBuckets.reduce(
+    (s, b) => s + (isFunded(b.id) ? b.monthlyAmount : 0),
+    0,
+  )
 
   const totalIncome = getTotalIncome()
   const lifestyleSpent = regularSpendingBuckets.reduce(
@@ -85,11 +97,21 @@ export function usePulseData() {
 
   const totalAllocations = activeBuckets.reduce((s, b) => s + b.monthlyAmount, 0)
   const plannedSavings = allSavingsBuckets
-    .filter(b => b.isActive)
+    .filter(b => b.isActive && isFunded(b.id))
     .reduce((s, b) => s + b.monthlyAmount, 0)
+  /** Future buckets on hold this month (no-salary month, not kept). */
+  const pausedBucketIds = new Set(
+    noSalaryOn
+      ? buckets.filter(b => b.isActive && !keptIds.has(b.id)).map(b => b.id)
+      : [],
+  )
 
-  const savingsOnlyBuckets = allSavingsBuckets.filter(b => b.isActive && b.type === 'savings')
-  const investmentBuckets = allSavingsBuckets.filter(b => b.isActive && b.type === 'investment')
+  const savingsOnlyBuckets = allSavingsBuckets.filter(
+    b => b.isActive && b.type === 'savings' && isFunded(b.id),
+  )
+  const investmentBuckets = allSavingsBuckets.filter(
+    b => b.isActive && b.type === 'investment' && isFunded(b.id),
+  )
 
   const plannedSavingsOnly = savingsOnlyBuckets.reduce((s, b) => s + b.monthlyAmount, 0)
   const plannedInvestment = investmentBuckets.reduce((s, b) => s + b.monthlyAmount, 0)
@@ -100,7 +122,13 @@ export function usePulseData() {
   const salaryAmount = transactions
     .filter(t => isSalaryTxn(t) && !t.isRecurringDraft)
     .reduce((sum, t) => sum + t.amount, 0)
-  const effectiveIncome = hasSalaryThisMonth ? salaryAmount || monthlyIncome : 0
+  // A no-salary month is funded from Free: the "income" is the survival plan itself.
+  const monthFunded = hasSalaryThisMonth || noSalaryOn
+  const effectiveIncome = noSalaryOn
+    ? lifestyleBudget + personalTopUps + plannedSavings
+    : hasSalaryThisMonth
+      ? salaryAmount || monthlyIncome
+      : 0
 
   const confirmedSavedInvested = transactions
     .filter(t => isSavingsConfirmTxn(t, buckets))
@@ -125,14 +153,16 @@ export function usePulseData() {
   const stillToInvest = Math.max(0, plannedInvestment - confirmedInvestment)
   const unconfirmedSavings = Math.max(0, plannedSavings - confirmedSavings)
 
-  const unallocatedAtStart = Math.max(0, effectiveIncome - totalAllocations)
+  const unallocatedAtStart = noSalaryOn ? 0 : Math.max(0, effectiveIncome - totalAllocations)
 
   const unconfirmedSavingsThisMonth = Math.max(0, plannedSavings - confirmedSavedInvested)
-  const stillInBank = hasSalaryThisMonth ? unconfirmedSavingsThisMonth : 0
+  const stillInBank = monthFunded ? unconfirmedSavingsThisMonth : 0
 
   const lendBorrowMonth = computeMonthMetrics(allEntries, start, end)
   const lendBorrowCashAdjust = lendBorrowMonth.lendBorrowCashAdjust
   const lentOutstandingThisMonth = lendBorrowMonth.lentOutstandingThisMonth
+  const repay = computeRepayDue(contacts, allEntries, start, end)
+  const repayDueThisMonth = repay.totalDue
 
   const { foundMoneyTotal, accounts: moneyAccounts, adjustments, transfers } = useAccountsStore()
   const periodCash = periodCashFromTransactions(transactions)
@@ -152,20 +182,23 @@ export function usePulseData() {
 
   // Living/Personal plan remaining + unallocated salary (Future is not in spendingPlan)
   const spendingPlan = lifestyleBudget + personalTopUps
-  const planSafeToSpend = hasSalaryThisMonth
+  const planSafeToSpend = monthFunded
     ? spendingPlan - lifestyleSpent - personalDraws + unallocatedAtStart
     : 0
 
-  const planAdjustedSafe =
-    planSafeToSpend + lendBorrowCashAdjust - feesThisMonth
-  const cashSpendableCeiling = Math.max(
-    0,
-    yourMoney - carriedForwardBalance - stillInBank,
-  )
-  const adjustedSafeToSpend = hasSalaryThisMonth
-    ? Math.min(planAdjustedSafe, cashSpendableCeiling)
-    : 0
+  // Lend/borrow/settle move Your money only; they come out of Free before the plan.
+  const setAside = stillInBank + repayDueThisMonth
+  const { safe: adjustedSafeToSpend, cashAvailable, free: freeMoney } = computeSafeToSpend({
+    funded: monthFunded,
+    planRemaining: planSafeToSpend - feesThisMonth,
+    yourMoney,
+    setAside,
+  })
   const safeToSpend = adjustedSafeToSpend
+  /** Part of this month's lending that actually cut into the plan (ring slice). */
+  const lendingCutIntoPlan = monthFunded
+    ? Math.max(0, Math.min(lentOutstandingThisMonth, planSafeToSpend - feesThisMonth - adjustedSafeToSpend))
+    : 0
 
   const availableBalance = Math.max(0, adjustedSafeToSpend + carriedForwardBalance)
   const monthRemainingBalance = adjustedSafeToSpend
@@ -178,6 +211,10 @@ export function usePulseData() {
   const totalNetLending = getTotalNetBalance()
   const lentOutAsset = getLentOutTotal()
   const youOweLiability = getYouOweTotal()
+
+  // Runway: how long cash lasts on the kept plan (no-salary) or on Core Living alone.
+  const survivalKeep = noSalaryOn ? noSalary.keep : [CORE_LIVING_BUCKET_ID]
+  const survivalCost = survivalMonthly(buckets, survivalKeep, repay.totalMonthly)
 
   const totalSpent = lifestyleSpent
   const monthlySpendAllowance = lifestyleBudget + personalTopUps
@@ -232,9 +269,29 @@ export function usePulseData() {
   ]
 
   const intentionalSavings = assetBreakdown.reduce((sum, g) => sum + g.value, 0)
-  const totalAssets = intentionalSavings
-  const totalLiabilities = 0
-  const netWorth = intentionalSavings
+  // Lent money isn't counted until it comes back; debts are.
+  const totalAssets = intentionalSavings + yourMoney
+  const totalLiabilities = youOweLiability
+  const netWorth = totalAssets - totalLiabilities
+
+  const efAvailable = Math.max(0, efValue)
+  const runway = runwayMonths(cashAvailable, survivalCost)
+  const runwayWithEf = runwayMonths(cashAvailable + efAvailable, survivalCost)
+  // Free can't cover next month's survival plan → offer one month from EF.
+  const efTopUpSuggested =
+    noSalaryOn && noSalary.useEf && efAvailable > 0 && survivalCost > 0 && freeMoney < survivalCost
+      ? Math.min(efAvailable, Math.ceil(survivalCost / 1000) * 1000)
+      : 0
+  const pausedSpendThisMonth = noSalaryOn
+    ? allSpendingBuckets
+        .filter(b => !keptIds.has(b.id))
+        .reduce((s, b) => s + (spentByBucket[b.id] ?? 0), 0)
+    : 0
+  const pausedSpendBuckets = noSalaryOn
+    ? allSpendingBuckets
+        .filter(b => !keptIds.has(b.id) && (spentByBucket[b.id] ?? 0) > 0)
+        .map(b => ({ id: b.id, name: b.name, spent: spentByBucket[b.id] ?? 0 }))
+    : []
   const monthGrowth = confirmedSavedInvested
   const savingsRate = totalIncome > 0 ? (confirmedSavedInvested / totalIncome) * 100 : 0
   const hasAnyData = intentionalSavings > 0 || transactions.length > 0
@@ -306,5 +363,20 @@ export function usePulseData() {
     sharesInvested: sharesLifetime,
     moneyAccounts,
     foundMoneyTotal,
+    noSalaryOn,
+    monthFunded,
+    pausedBucketIds,
+    setAside,
+    cashAvailable,
+    freeMoney,
+    lendingCutIntoPlan,
+    repayRows: repay.rows,
+    repayDueThisMonth,
+    survivalCost,
+    runway,
+    runwayWithEf,
+    efTopUpSuggested,
+    pausedSpendThisMonth,
+    pausedSpendBuckets,
   }
 }

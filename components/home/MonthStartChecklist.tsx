@@ -19,6 +19,8 @@ interface MonthStartChecklistProps {
   onToggleItem: (id: string) => void
   onUndoItem?: (id: string) => void
   onDismiss: () => void
+  /** Optional quiet link under the list, e.g. "No salary this month?". */
+  footerLink?: { label: string; onPress: () => void }
 }
 
 export function MonthStartChecklist({
@@ -27,6 +29,7 @@ export function MonthStartChecklist({
   onToggleItem,
   onUndoItem,
   onDismiss,
+  footerLink,
 }: MonthStartChecklistProps) {
   const allDone = items.every(i => i.completed)
   const doneCount = items.filter(i => i.completed).length
@@ -54,7 +57,7 @@ export function MonthStartChecklist({
             <View style={styles.progressRow}>
               <Text style={styles.progressText}>{doneCount} of {items.length} confirmed</Text>
               <View style={styles.progressTrack}>
-                <View style={[styles.progressFill, { width: `${(doneCount / items.length) * 100}%` }]} />
+                <View style={[styles.progressFill, { width: `${items.length > 0 ? (doneCount / items.length) * 100 : 100}%` }]} />
               </View>
             </View>
           </View>
@@ -104,6 +107,12 @@ export function MonthStartChecklist({
             ))}
           </ScrollView>
 
+          {footerLink && (
+            <TouchableOpacity onPress={footerLink.onPress} style={styles.footerLink} hitSlop={8}>
+              <Text style={styles.footerLinkText}>{footerLink.label}</Text>
+            </TouchableOpacity>
+          )}
+
           <View style={styles.footer}>
             {allDone ? (
               <TouchableOpacity style={styles.doneButton} onPress={onDismiss} activeOpacity={0.8}>
@@ -122,6 +131,16 @@ export function MonthStartChecklist({
 }
 
 const styles = StyleSheet.create({
+  footerLink: {
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  footerLinkText: {
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+    color: colors.textSecond,
+    textDecorationLine: 'underline',
+  },
   overlay: {
     flex: 1,
     backgroundColor: '#00000080',

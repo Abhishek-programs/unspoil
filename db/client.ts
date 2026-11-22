@@ -145,6 +145,13 @@ export function applySchemaPatches() {
       `ALTER TABLE \`playbook\` ADD COLUMN \`nudge_prefs_json\` text`,
     )
   }
+  if (playbookExists) {
+    ensureColumn(
+      'playbook',
+      'no_salary_json',
+      `ALTER TABLE \`playbook\` ADD COLUMN \`no_salary_json\` text`,
+    )
+  }
 
   const bucketsExists = sqlite.getFirstSync(
     `SELECT name FROM sqlite_master WHERE type='table' AND name='buckets'`
@@ -432,6 +439,7 @@ export function applySchemaPatches() {
       `CREATE UNIQUE INDEX IF NOT EXISTS \`contacts_name_unique\` ON \`contacts\` (lower(trim(\`name\`)))`,
     )
   }
+  ensureColumn('contacts', 'repay_monthly', `ALTER TABLE \`contacts\` ADD COLUMN \`repay_monthly\` real`)
 
   const lendTable = sqlite.getFirstSync(
     `SELECT name FROM sqlite_master WHERE type='table' AND name='lend_borrow_entries'`,

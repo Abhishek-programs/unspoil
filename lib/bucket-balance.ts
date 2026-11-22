@@ -4,6 +4,7 @@ import { bucketBalances, buckets, playbook } from '@/db/schema'
 import { PERSONAL_BUCKET_ID } from '@/constants/defaults'
 import { getMonthRange, toLocalDateKey } from '@/lib/month'
 import type { Bucket } from '@/store/buckets'
+import { parseNoSalary } from '@/lib/no-salary'
 
 export const PERSONAL_RECOVERY_TOP_UP = 1000
 
@@ -141,6 +142,7 @@ export async function runMonthRollover(
   const pb = pbRows[0]
   let recoveryDebt = pb?.personalRecoveryDebt ?? 0
   const normalTopUp = pb?.personalNormalTopUp ?? null
+  const noSalary = parseNoSalary(pb?.noSalaryJson)
 
   const allBuckets = await db.select().from(buckets)
   for (const bucket of allBuckets) {
@@ -158,6 +160,9 @@ export async function runMonthRollover(
     }
 
     await ensureBalanceRow(bucket.id)
+
+    // No-salary month: a fund that isn't kept gets no top-up (its balance still rolls over).
+    if (noSalary.on && !noSalary.keep.includes(bucket.id)) continue
 
     const inRecovery =
       bucket.id === PERSONAL_BUCKET_ID && recoveryDebt > 0

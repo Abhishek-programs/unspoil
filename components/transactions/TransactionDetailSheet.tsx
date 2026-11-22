@@ -239,7 +239,9 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
               <View style={[styles.typeBadge, { backgroundColor: isIncome ? colors.greenFill : '#FEE2E2' }]}>
                 <Text style={[styles.typeBadgeText, { color: isIncome ? colors.green : colors.red }]}>
                   {transaction.bucketId === GOAL_RETURN_BUCKET_ID
-                    ? 'Goal return'
+                    ? transaction.fundedFromBucketId === 'ef'
+                      ? 'From Emergency Fund'
+                      : 'Goal return'
                     : isIncome
                       ? 'Income'
                       : 'Expense'}

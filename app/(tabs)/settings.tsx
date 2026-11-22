@@ -63,6 +63,8 @@ import {
   type BackupFolder,
 } from '@/lib/backup-folder'
 import { BackupPickerSheet } from '@/components/settings/BackupPickerSheet'
+import { NoSalarySheet } from '@/components/home/NoSalarySheet'
+import { usePulseData } from '@/hooks/usePulseData'
 import DateTimePicker from '@react-native-community/datetimepicker'
 import {
   AUTO_BACKUP_MAX_FILES,
@@ -469,6 +471,8 @@ function MoneyLocationsCard() {
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets()
   const pb = usePlaybookStore()
+  const pulse = usePulseData()
+  const [noSalaryVisible, setNoSalaryVisible] = useState(false)
   const bs = useBucketsStore()
   const txnStore = useTransactionsStore()
   const goalsStore = useGoalsStore()
@@ -954,6 +958,11 @@ export default function SettingsScreen() {
             onSaved={saved.show}
           />
           <View style={styles.divider} />
+          <TouchableOpacity style={styles.editableRow} onPress={() => setNoSalaryVisible(true)}>
+            <Text style={styles.editableLabel}>No-salary month</Text>
+            <Text style={styles.editableValue}>{pb.noSalary.on ? 'On' : 'Off'}</Text>
+          </TouchableOpacity>
+          <View style={styles.divider} />
           <EditableRow
             label="Month start day"
             value={pb.monthStartDay}
@@ -1286,6 +1295,13 @@ export default function SettingsScreen() {
         </Card>
       </ScrollView>
       <BackupPickerSheet visible={importVisible} onClose={() => setImportVisible(false)} />
+      <NoSalarySheet
+        visible={noSalaryVisible}
+        onClose={() => setNoSalaryVisible(false)}
+        cashAvailable={pulse.cashAvailable}
+        efValue={pulse.efValue}
+        repayMonthly={pulse.repayRows.reduce((s, r) => s + Math.min(r.monthly, r.owedAtStart), 0)}
+      />
     </View>
   )
 }

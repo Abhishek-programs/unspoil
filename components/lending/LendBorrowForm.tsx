@@ -11,7 +11,8 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker'
 import { Ionicons } from '@expo/vector-icons'
 import { colors } from '@/constants/colors'
-import { formatDate } from '@/lib/format'
+import { formatDate, formatMoney } from '@/lib/format'
+import { useLendingStore } from '@/store/lending'
 import { PersonPicker } from '@/components/lending/PersonPicker'
 
 export type LendDirection = 'lend' | 'borrow'
@@ -40,12 +41,23 @@ export function LendBorrowForm({
   const [date, setDate] = useState(new Date())
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [repay, setRepay] = useState('')
+  const { setRepayPlan } = useLendingStore()
 
   useEffect(() => {
     if (initialContactId) setContactId(initialContactId)
   }, [initialContactId])
 
   const parsedAmount = parseFloat(amount.replace(/,/g, '')) || 0
+  const parsedRepay = parseFloat(repay.replace(/,/g, '')) || 0
+  const repayOptions =
+    parsedAmount > 0
+      ? [
+          { label: 'All next month', value: parsedAmount },
+          { label: 'Over 3 months', value: Math.ceil(parsedAmount / 3 / 100) * 100 },
+          { label: 'Over 6 months', value: Math.ceil(parsedAmount / 6 / 100) * 100 },
+        ]
+      : []
   const canSave = parsedAmount > 0 && contactId !== null
 
   const handleSave = async () => {
@@ -59,7 +71,12 @@ export function LendBorrowForm({
         note: note.trim() || null,
         date: date.toISOString(),
       })
+      // Repayment plans are per person: settlements are tracked per person too.
+      if (direction === 'borrow' && parsedRepay > 0) {
+        await setRepayPlan(contactId, parsedRepay)
+      }
       setAmount('')
+      setRepay('')
       setNote('')
       setDate(new Date())
       if (!initialContactId) setContactId(null)
@@ -101,6 +118,35 @@ export function LendBorrowForm({
         <View style={styles.section}>
           <Text style={styles.label}>Person</Text>
           <PersonPicker selectedContactId={contactId} onSelect={setContactId} />
+        </View>
+      )}
+
+      {direction === 'borrow' && (
+        <View style={styles.section}>
+          <Text style={styles.label}>Pay back per month (optional)</Text>
+          <TextInput
+            style={styles.textInput}
+            value={repay}
+            onChangeText={setRepay}
+            placeholder="Set aside each month until it's paid"
+            placeholderTextColor={colors.textMuted}
+            keyboardType="decimal-pad"
+          />
+          {repayOptions.length > 0 && (
+            <View style={styles.repayChips}>
+              {repayOptions.map(o => (
+                <TouchableOpacity
+                  key={o.label}
+                  style={[styles.repayChip, parsedRepay === o.value && styles.repayChipOn]}
+                  onPress={() => setRepay(String(o.value))}
+                >
+                  <Text style={styles.repayChipText}>
+                    {o.label} · {formatMoney(o.value)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
       )}
 
@@ -147,6 +193,29 @@ export function LendBorrowForm({
 }
 
 const styles = StyleSheet.create({
+  repayChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  repayChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  repayChipOn: {
+    backgroundColor: colors.amberFill,
+    borderColor: colors.amber,
+  },
+  repayChipText: {
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+    color: colors.textSecond,
+  },
   amountContainer: {
     alignItems: 'center',
     paddingVertical: 16,

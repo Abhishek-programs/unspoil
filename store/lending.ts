@@ -44,6 +44,7 @@ interface LendingState {
     patch: Partial<Pick<LendBorrowEntry, 'type' | 'amount' | 'note' | 'date'>>,
   ) => Promise<void>
   deleteEntry: (id: string) => Promise<void>
+  setRepayPlan: (contactId: string, monthly: number | null) => Promise<void>
   deleteContact: (id: string) => Promise<void>
   getPersonBalance: (contactId: string) => number
   getTotalNetBalance: () => number
@@ -65,6 +66,7 @@ export const useLendingStore = create<LendingState>((set, get) => ({
         id: r.id,
         name: r.name,
         createdAt: r.createdAt,
+        repayMonthly: r.repayMonthly ?? null,
       })),
     })
   },
@@ -175,6 +177,14 @@ export const useLendingStore = create<LendingState>((set, get) => ({
     if (cachedMonthRange) {
       await get().loadEntries(cachedMonthRange.start, cachedMonthRange.end)
     }
+  },
+
+  setRepayPlan: async (contactId, monthly) => {
+    const value = monthly != null && monthly > 0 ? monthly : null
+    await db.update(contacts).set({ repayMonthly: value }).where(eq(contacts.id, contactId))
+    set({
+      contacts: get().contacts.map(c => (c.id === contactId ? { ...c, repayMonthly: value } : c)),
+    })
   },
 
   deleteContact: async (id: string) => {

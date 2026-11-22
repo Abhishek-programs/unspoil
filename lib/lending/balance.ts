@@ -14,6 +14,8 @@ export interface Contact {
   id: string
   name: string
   createdAt: string
+  /** Borrow repayment plan per month; null when there's no plan. */
+  repayMonthly?: number | null
 }
 
 function entrySort(a: LendBorrowEntry, b: LendBorrowEntry) {
