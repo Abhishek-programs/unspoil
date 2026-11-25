@@ -29,6 +29,9 @@ const Native = NativeModules.PaymentWatch as
       cancelBackupAlarm: () => Promise<boolean>
       getKeepBackgroundNotification: () => Promise<boolean>
       setKeepBackgroundNotification: (keep: boolean) => Promise<boolean>
+      getQueuedPayments: () => Promise<string>
+      ackQueuedPayments: (opIds: string[]) => Promise<boolean>
+      setHelperSnapshot: (json: string) => Promise<boolean>
       getBackupState: () => Promise<{
         enabled: boolean
         logDelayMs: number
@@ -144,6 +147,23 @@ export async function getPaymentWatchLaunchableApps(): Promise<PaymentWatchApp[]
 export async function startPaymentWatchIfEnabled(): Promise<boolean> {
   if (!Native) return false
   return Native.startIfEnabled()
+}
+
+/** JSON array of payments the helper saved while the app was not looking. */
+export async function getQueuedPaymentsJson(): Promise<string> {
+  if (!Native?.getQueuedPayments) return '[]'
+  return Native.getQueuedPayments()
+}
+
+export async function ackQueuedPayments(opIds: string[]): Promise<void> {
+  if (!Native?.ackQueuedPayments) return
+  await Native.ackQueuedPayments(opIds)
+}
+
+/** Buckets and currency the helper shows; it cannot read the database itself. */
+export async function setHelperSnapshot(json: string): Promise<void> {
+  if (!Native?.setHelperSnapshot) return
+  await Native.setHelperSnapshot(json)
 }
 
 export type PaymentWatchBackupState = {

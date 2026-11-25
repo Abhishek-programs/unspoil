@@ -196,6 +196,31 @@ class PaymentWatchModule(private val ctx: ReactApplicationContext) :
   }
 
   @ReactMethod
+  fun getQueuedPayments(promise: Promise) {
+    try {
+      promise.resolve(PaymentWatchQueue.opsJson(ctx))
+    } catch (e: Exception) {
+      promise.reject("queue_error", e)
+    }
+  }
+
+  @ReactMethod
+  fun ackQueuedPayments(opIds: ReadableArray, promise: Promise) {
+    try {
+      val ids = (0 until opIds.size()).mapNotNull { opIds.getString(it) }.toSet()
+      promise.resolve(PaymentWatchQueue.ack(ctx, ids))
+    } catch (e: Exception) {
+      promise.reject("queue_error", e)
+    }
+  }
+
+  @ReactMethod
+  fun setHelperSnapshot(json: String, promise: Promise) {
+    PaymentWatchQueue.setSnapshot(ctx, json)
+    promise.resolve(true)
+  }
+
+  @ReactMethod
   fun getBackupState(promise: Promise) {
     val map = Arguments.createMap()
     map.putBoolean("enabled", PaymentWatchPrefs.isEnabled(ctx))

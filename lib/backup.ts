@@ -16,6 +16,7 @@ import {
   transactions,
 } from '@/db/schema'
 import { getMonthRange } from '@/lib/month'
+import { syncQueuedPayments } from '@/lib/payment-queue'
 import { setActiveCurrency } from '@/lib/format'
 import {
   getPaymentWatchBackupState,
@@ -128,6 +129,7 @@ function exportTableRaw(sqlName: (typeof USER_DATA_TABLES)[number]): Record<stri
 
 export async function exportBackup(): Promise<string> {
   applySchemaPatches()
+  await syncQueuedPayments()
   const tables = {} as BackupPayload['tables']
   const tableCounts: Record<string, number> = {}
 

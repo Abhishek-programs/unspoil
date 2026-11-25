@@ -25,6 +25,7 @@ import {
 import { runMonthRollover } from '@/lib/bucket-balance'
 import { runSurplusRollover } from '@/lib/month-surplus'
 import { startPaymentWatchIfEnabled } from '@/lib/payment-watch'
+import { mirrorHelperSnapshot, syncQueuedPayments } from '@/lib/payment-queue'
 import { runAutoBackupJob } from '@/lib/auto-backup'
 import { syncAutoBackupSchedule } from '@/lib/auto-backup-schedule'
 
@@ -50,9 +51,12 @@ export default function RootLayout() {
     setStatusBarStyle('dark', true)
   }, [])
 
+  useEffect(() => mirrorHelperSnapshot(), [])
+
   useEffect(() => {
     runMigrations()
       .then(() => seedDefaults())
+      .then(() => syncQueuedPayments())
       .then(() => loadPlaybook())
       .catch((e) => {
         console.error('DB setup failed:', e)
@@ -119,8 +123,9 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (!playbookLoaded || !isOnboarded) return
-    const sub = AppState.addEventListener('change', (state) => {
+    const sub = AppState.addEventListener('change', async (state) => {
       if (state !== 'active') return
+      await syncQueuedPayments()
       const pb = usePlaybookStore.getState()
       const { start, end } = getMonthRange(pb.monthStartDay, pb.earlyMonthStartDate)
       loadTransactions(start, end)

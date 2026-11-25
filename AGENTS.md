@@ -111,7 +111,7 @@ Home  |  Transactions  |  [+]  |  Goals  |  Settings
 
 **Nudges:** max 1/day, quiet 10pm–8am (`lib/notifications.ts`).
 
-**Payment helper:** Optional. Usage access + amount notification while eSewa / nBank is in the foreground; after Log, a second notification with spending-bucket chips for that txn. No screenshot, overlay, or Accessibility. See `docs/superpowers/specs/2026-08-19-payment-watch-notification-design.md`.
+**Payment helper:** Optional. Usage access + amount notification while eSewa / nBank is in the foreground; after Log, a second notification with spending-bucket chips for that txn. No screenshot, overlay, or Accessibility. Native code must never open `spendsense.db` (it loses data); it queues and `lib/payment-queue.ts` applies. See `docs/superpowers/specs/2026-08-19-payment-watch-notification-design.md`.
 
 **Goal savings spent:** A transaction on wallet `_goal_savings` (`lib/txn-kind.ts`) is paid from the goal bucket in `fundedFromBucketId`: it lowers that goal's saved amount and must stay out of Your money, ceilings, safe to spend and monthly savings confirms. Flow lives in `lib/goals/spend-savings.ts`.
 

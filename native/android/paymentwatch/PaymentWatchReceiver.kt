@@ -17,7 +17,7 @@ class PaymentWatchReceiver : BroadcastReceiver() {
   private fun onLog(context: Context, intent: Intent) {
     val results = RemoteInput.getResultsFromIntent(intent) ?: return
     val raw = results.getCharSequence(PaymentWatchService.KEY_AMOUNT)?.toString().orEmpty()
-    val parsed = PaymentWatchDb.parseLogInput(raw)
+    val parsed = PaymentWatchQueue.parseLogInput(raw)
     if (parsed == null) {
       Toast.makeText(context, "Try 400 momo — amount then a name", Toast.LENGTH_SHORT).show()
       PaymentWatchService.start(context)
@@ -25,21 +25,20 @@ class PaymentWatchReceiver : BroadcastReceiver() {
     }
     val pkg = intent.getStringExtra(PaymentWatchService.EXTRA_PACKAGE).orEmpty()
     val appName = PaymentWatchPrefs.merchantLabel(context, pkg)
-    val accountId = PaymentWatchDb.accountIdForPackage(pkg)
-    val id = PaymentWatchDb.insertFlaggedExpense(context, parsed.amount, appName, parsed.label, accountId)
+    val accountId = PaymentWatchQueue.accountIdForPackage(pkg)
+    val id = PaymentWatchQueue.logExpense(context, parsed.amount, appName, parsed.label, accountId)
     if (id == null) {
-      Toast.makeText(context, "Could not save. Open UnSpoil once, then try again.", Toast.LENGTH_SHORT).show()
+      Toast.makeText(context, "Could not save. Try again.", Toast.LENGTH_SHORT).show()
       PaymentWatchService.start(context)
       return
     }
-    val chips = PaymentWatchDb.spendingBucketNames(context)
-    if (chips.isNotEmpty()) {
+    if (PaymentWatchQueue.spendingBuckets(context).isNotEmpty()) {
       PaymentWatchPrefs.setPendingTxn(context, id, parsed.amount, parsed.label ?: "Payment")
     } else {
       PaymentWatchPrefs.setDoneThisVisit(context, true)
       PaymentWatchService.clearLogUi(context)
     }
-    Toast.makeText(context, "Logged ${PaymentWatchDb.currencyCode(context)} ${parsed.amount.toInt()} — pick a bucket", Toast.LENGTH_SHORT).show()
+    Toast.makeText(context, "Logged ${PaymentWatchQueue.currencyCode(context)} ${parsed.amount.toInt()} — pick a bucket", Toast.LENGTH_SHORT).show()
     PaymentWatchService.start(context)
   }
 
@@ -50,15 +49,15 @@ class PaymentWatchReceiver : BroadcastReceiver() {
       ?.toString()
       .orEmpty()
     if (txnId.isEmpty() || hint.isBlank()) return
-    val name = PaymentWatchDb.assignSpendingBucket(context, txnId, hint)
-    if (name == null) {
+    val bucket = PaymentWatchQueue.findBucket(context, hint)
+    if (bucket == null || !PaymentWatchQueue.assignBucket(context, txnId, bucket)) {
       Toast.makeText(context, "Could not set bucket", Toast.LENGTH_SHORT).show()
       return
     }
     PaymentWatchPrefs.setPendingTxn(context, null)
     PaymentWatchPrefs.setDoneThisVisit(context, true)
     PaymentWatchService.clearLogUi(context)
-    Toast.makeText(context, "Saved to $name", Toast.LENGTH_SHORT).show()
+    Toast.makeText(context, "Saved to ${bucket.name}", Toast.LENGTH_SHORT).show()
     PaymentWatchService.start(context)
   }
 }

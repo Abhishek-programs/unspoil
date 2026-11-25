@@ -325,7 +325,7 @@ class PaymentWatchService : Service() {
 
   private fun categoryNotification(pending: PaymentWatchPrefs.PendingTxn): Notification {
     val npr = pending.amount.toInt()
-    val title = "${PaymentWatchDb.currencyCode(this)} $npr · ${pending.merchant}"
+    val title = "${PaymentWatchQueue.currencyCode(this)} $npr · ${pending.merchant}"
     val pickIntent = Intent(this, PaymentWatchPickActivity::class.java).apply {
       putExtra(PaymentWatchPickActivity.EXTRA_TXN_ID, pending.id)
       putExtra(PaymentWatchPickActivity.EXTRA_AMOUNT, pending.amount)

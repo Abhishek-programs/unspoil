@@ -34,7 +34,7 @@ class PaymentWatchPickActivity : Activity() {
 
     root.addView(
       TextView(this).apply {
-        text = if (amount > 0) "${PaymentWatchDb.currencyCode(this@PaymentWatchPickActivity)} ${amount.toInt()} · $merchant" else "Pick a Living bucket"
+        text = if (amount > 0) "${PaymentWatchQueue.currencyCode(this@PaymentWatchPickActivity)} ${amount.toInt()} · $merchant" else "Pick a Living bucket"
         setTextColor(Color.parseColor("#1A1C1E"))
         setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
         typeface = Typeface.DEFAULT_BOLD
@@ -50,7 +50,7 @@ class PaymentWatchPickActivity : Activity() {
       },
     )
 
-    val buckets = PaymentWatchDb.spendingBuckets(this)
+    val buckets = PaymentWatchQueue.spendingBuckets(this)
     if (buckets.isEmpty()) {
       root.addView(
         TextView(this).apply {
@@ -69,8 +69,7 @@ class PaymentWatchPickActivity : Activity() {
           isClickable = true
           isFocusable = true
           setOnClickListener {
-            val name = PaymentWatchDb.assignSpendingBucket(this@PaymentWatchPickActivity, txnId, bucket.name)
-            if (name == null) {
+            if (!PaymentWatchQueue.assignBucket(this@PaymentWatchPickActivity, txnId, bucket)) {
               Toast.makeText(this@PaymentWatchPickActivity, "Could not set bucket", Toast.LENGTH_SHORT).show()
               return@setOnClickListener
             }
@@ -78,7 +77,7 @@ class PaymentWatchPickActivity : Activity() {
             PaymentWatchPrefs.setDoneThisVisit(this@PaymentWatchPickActivity, true)
             getSystemService(NotificationManager::class.java)
               ?.cancel(PaymentWatchService.LOG_NOTIF_ID)
-            Toast.makeText(this@PaymentWatchPickActivity, "Saved to $name", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this@PaymentWatchPickActivity, "Saved to ${bucket.name}", Toast.LENGTH_SHORT).show()
             PaymentWatchService.start(this@PaymentWatchPickActivity)
             finish()
           }

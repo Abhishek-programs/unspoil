@@ -108,6 +108,8 @@ Separate from buckets and the transaction ledger's income/expense flow:
 
 Settings → **Payment helper**. Usage access (`UsageStatsManager`) detects selected apps (defaults: eSewa / nBank) in the foreground. A notification appears after the chosen delay; amount is flagged until you assign a Living bucket. No screenshot, overlay, or Accessibility.
 
+The helper never opens `spendsense.db`: Android's SQLite and expo-sqlite's copy do not see each other's locks in one process, and closing the native connection deleted the live WAL and lost app writes. Native code queues each Log and bucket pick in SharedPreferences (`PaymentWatchQueue.kt`); `lib/payment-queue.ts` applies them on launch, when the app comes to the front and before every backup. JS mirrors the Living buckets and currency back for the notification.
+
 ### Scan bubble (removed)
 
 Screenshot overlay / MediaProjection is out of scope.
