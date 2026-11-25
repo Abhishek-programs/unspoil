@@ -318,7 +318,9 @@ Grouped sections on `#F7F8FA` background. Each section has an uppercase tertiary
 
 ## 8. Onboarding Flow (6 Steps, First Launch Only)
 
-**Step 1 — Welcome:** Name capture → Money
+**Step 1 — Welcome:** Name capture → Permissions → Banking apps (Android only) → Money
+
+**Banking apps:** Searchable list of installed apps, likely payment apps first, installed defaults (eSewa / nBank) pre-selected. Picking one shows a Usage access row; Next turns the Payment helper on only if usage access and notifications are granted. No pick = **Skip for now**, helper stays off.
 
 **Step 2 — Money:** Monthly take-home + month start day
 

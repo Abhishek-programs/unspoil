@@ -105,7 +105,7 @@ Home  |  Transactions  |  [+]  |  Goals  |  Settings
 
 **EF target:** `EF_MULTIPLIER` × Core Living monthly amount (`constants/defaults.ts`, onboarding Foundations).
 
-**Onboarding order:** Foundations → Bucket Builder (includes **Saving towards goal** pool) → Goals (split that pool) → Balances.
+**Onboarding order:** Permissions → Banking apps (Android; Payment helper) → Money → Foundations → Bucket Builder (includes **Saving towards goal** pool) → Goals (split that pool) → Balances.
 
 **Spending buckets:** green &lt;80%, amber 80–99%, red ≥100%.
 

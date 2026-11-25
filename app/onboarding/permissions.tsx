@@ -109,7 +109,12 @@ export default function OnboardingPermissionsScreen() {
       </View>
 
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 24) }]}>
-        <TouchableOpacity style={styles.button} onPress={() => router.push('/onboarding/money')}>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() =>
+            router.push(isPaymentWatchAvailable() ? '/onboarding/payment-apps' : '/onboarding/money')
+          }
+        >
           <Text style={styles.buttonText}>Next</Text>
           <Ionicons name="arrow-forward" size={20} color="#fff" />
         </TouchableOpacity>

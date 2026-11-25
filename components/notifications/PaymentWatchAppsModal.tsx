@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import {
   ActivityIndicator,
-  Image,
   Modal,
   ScrollView,
   StyleSheet,
@@ -10,8 +9,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { PaymentWatchAppRow } from '@/components/notifications/PaymentWatchAppRow'
 import { colors } from '@/constants/colors'
 import type { PaymentWatchApp } from '@/lib/payment-watch'
 
@@ -96,24 +95,7 @@ export function PaymentWatchAppsModal({
                 return (
                   <View key={app.packageName}>
                     {index > 0 && <View style={styles.divider} />}
-                    <TouchableOpacity
-                      style={styles.row}
-                      onPress={() => onToggle(app.packageName)}
-                      accessibilityRole="checkbox"
-                      accessibilityState={{ checked: selected }}
-                    >
-                      {app.iconPath ? (
-                        <Image source={{ uri: `file://${app.iconPath}` }} style={styles.icon} />
-                      ) : (
-                        <View style={styles.iconPlaceholder} />
-                      )}
-                      <Text style={styles.label}>{app.label}</Text>
-                      <Ionicons
-                        name={selected ? 'checkmark-circle' : 'ellipse-outline'}
-                        size={23}
-                        color={selected ? colors.green : colors.textMuted}
-                      />
-                    </TouchableOpacity>
+                    <PaymentWatchAppRow app={app} selected={selected} onToggle={onToggle} />
                   </View>
                 )
               })
@@ -171,26 +153,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     color: colors.textSecond,
     marginTop: 24,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: 56,
-    paddingVertical: 4,
-  },
-  icon: { width: 34, height: 34, borderRadius: 8, marginRight: 12 },
-  iconPlaceholder: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
-    marginRight: 12,
-    backgroundColor: colors.border,
-  },
-  label: {
-    flex: 1,
-    fontSize: 15,
-    fontFamily: 'Inter_600SemiBold',
-    color: colors.textPrimary,
   },
   divider: { height: 1, backgroundColor: colors.divider },
 })

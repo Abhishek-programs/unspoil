@@ -103,7 +103,7 @@ Playbook (income, month start, EF floor, age) · buckets (Living / Future header
 
 ## Onboarding (6 steps)
 
-1. Name  
+1. Name, then permissions and **Banking apps** (Android; optional — picks the Payment helper's watched apps and turns it on once usage access and notifications are granted)  
 2. Money — take-home, **cash on hand**, month start, age (optional)  
 3. Foundations — **Core Living** → EF target = 6× that, current EF balance  
 4. Bucket builder — income meter, spending + Personal + EF + **Saving towards goal** pool + SIP/Shares  
