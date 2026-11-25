@@ -12,6 +12,7 @@ import {
 import { router, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
+import { KeyboardForm } from '@/components/ui/KeyboardForm'
 import { colors } from '@/constants/colors'
 import { formatDate, formatMoney } from '@/lib/format'
 import { useLendingStore } from '@/store/lending'
@@ -227,7 +228,7 @@ export default function PersonDetailScreen() {
             <Text style={styles.modalTitle}>Add with {contact.name}</Text>
             <View style={{ width: 24 }} />
           </View>
-          <ScrollView contentContainerStyle={styles.modalBody}>
+          <KeyboardForm contentContainerStyle={styles.modalBody}>
             <LendBorrowForm
               initialContactId={contact.id}
               submitLabel="Add entry"
@@ -242,7 +243,7 @@ export default function PersonDetailScreen() {
                 setAddVisible(false)
               }}
             />
-          </ScrollView>
+          </KeyboardForm>
         </SafeAreaView>
       </Modal>
 

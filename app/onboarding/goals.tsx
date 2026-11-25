@@ -19,7 +19,7 @@ import { useBucketsStore } from '@/store/buckets'
 import { formatMoney } from '@/lib/format'
 import { DEFAULT_MACBOOK_GOAL, GOAL_POOL_BUCKET_ID } from '@/constants/defaults'
 import { OnboardingBack } from '@/components/onboarding/OnboardingBack'
-import { OnboardingShell, useOnboardingFieldScroll } from '@/components/onboarding/OnboardingShell'
+import { OnboardingShell } from '@/components/onboarding/OnboardingShell'
 import { clearAllGoalsForOnboarding } from '@/lib/goals/actions'
 import {
   type PaymentMode,
@@ -76,11 +76,6 @@ function GoalDraftCard({
   onRemove: () => void
   canRemove: boolean
 }) {
-  const { bindField } = useOnboardingFieldScroll()
-  const nameField = bindField(`${draft.id}-name`)
-  const targetField = bindField(`${draft.id}-target`)
-  const savedField = bindField(`${draft.id}-saved`)
-
   const target = parseFloat(draft.targetAmount) || 0
   const saved = parseFloat(draft.alreadySaved) || 0
   const share = parseInt(draft.shareMonthly, 10) || 0
@@ -145,7 +140,6 @@ function GoalDraftCard({
           onChangeText={v => onChange({ name: v })}
           placeholder="MacBook"
           placeholderTextColor={colors.textMuted}
-          onFocus={nameField.onFocus}
         />
       </View>
 
@@ -158,7 +152,6 @@ function GoalDraftCard({
             value={draft.targetAmount}
             onChangeText={v => onChange({ targetAmount: v })}
             keyboardType="numeric"
-            onFocus={targetField.onFocus}
           />
         </View>
       </View>
@@ -187,7 +180,6 @@ function GoalDraftCard({
             keyboardType="numeric"
             placeholder="0"
             placeholderTextColor={colors.textMuted}
-            onFocus={savedField.onFocus}
           />
         </View>
       </View>

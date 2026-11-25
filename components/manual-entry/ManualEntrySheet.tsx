@@ -10,10 +10,10 @@ import {
   Platform,
   StyleSheet,
   Keyboard,
-  KeyboardAvoidingView,
   Alert,
   BackHandler,
 } from 'react-native'
+import { KeyboardForm } from '@/components/ui/KeyboardForm'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import DateTimePicker from '@react-native-community/datetimepicker'
@@ -327,16 +327,68 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
           <View style={{ width: 24 }} />
         </View>
 
-        <KeyboardAvoidingView
-          style={styles.body}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          <ScrollView
+        <View style={styles.body}>
+          <KeyboardForm
             style={styles.scroll}
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
             showsVerticalScrollIndicator={false}
+            footerKeyboardTuck={insets.bottom}
+            footer={
+              !isLendBorrow && (
+                <View style={[styles.footer, { paddingBottom: footerBottomPad }]}>
+                  {!isIncome && selectedBucketId === MY_MONEY_BUCKET_ID && !savingsBucket && (
+                    <View style={styles.myMoneyWarning}>
+                      <Ionicons name="alert-circle-outline" size={16} color={colors.amber} />
+                      <Text style={styles.myMoneyWarningText}>
+                        Outside your buckets. Better to pick one so your ceilings stay true.
+                      </Text>
+                    </View>
+                  )}
+                  {isSavingsSpend && (
+                    <View style={styles.myMoneyWarning}>
+                      <Ionicons name="alert-circle-outline" size={16} color={colors.amber} />
+                      <Text style={styles.myMoneyWarningText}>
+                        Spending from {savingsBucket!.name} savings ({formatMoney(savedIn(savingsBucket!))}{' '}
+                        saved). It lowers that saving, not Your money.
+                        {savingsSpendGoal ? ' Bought the goal? ' : ''}
+                        {savingsSpendGoal && (
+                          <Text
+                            style={styles.myMoneyWarningLink}
+                            onPress={() => {
+                              Keyboard.dismiss()
+                              onClose()
+                              setGoalSpend({ goal: savingsSpendGoal, price: parsedAmount })
+                            }}
+                          >
+                            Complete it instead
+                          </Text>
+                        )}
+                      </Text>
+                    </View>
+                  )}
+                  <TouchableOpacity
+                    style={[styles.saveButton, !canSave && styles.saveButtonDisabled]}
+                    onPress={handleSave}
+                    disabled={!canSave || saving}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.saveButtonText}>
+                      {saving
+                        ? 'Saving...'
+                        : isIncome
+                          ? 'Add income'
+                          : isContribution
+                            ? `Contribute to ${savingsBucket!.name}`
+                            : isSavingsSpend
+                              ? `Spend from ${savingsBucket!.name}`
+                              : 'Add expense'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )
+            }
           >
             <View style={styles.typeToggle}>
               <TouchableOpacity
@@ -670,61 +722,8 @@ export function ManualEntrySheet({ visible, onClose }: ManualEntrySheetProps) {
                 )}
               </>
             )}
-          </ScrollView>
-
-          {!isLendBorrow && (
-            <View style={[styles.footer, { paddingBottom: footerBottomPad }]}>
-              {!isIncome && selectedBucketId === MY_MONEY_BUCKET_ID && !savingsBucket && (
-                <View style={styles.myMoneyWarning}>
-                  <Ionicons name="alert-circle-outline" size={16} color={colors.amber} />
-                  <Text style={styles.myMoneyWarningText}>
-                    Outside your buckets. Better to pick one so your ceilings stay true.
-                  </Text>
-                </View>
-              )}
-              {isSavingsSpend && (
-                <View style={styles.myMoneyWarning}>
-                  <Ionicons name="alert-circle-outline" size={16} color={colors.amber} />
-                  <Text style={styles.myMoneyWarningText}>
-                    Spending from {savingsBucket!.name} savings ({formatMoney(savedIn(savingsBucket!))}{' '}
-                    saved). It lowers that saving, not Your money.
-                    {savingsSpendGoal ? ' Bought the goal? ' : ''}
-                    {savingsSpendGoal && (
-                      <Text
-                        style={styles.myMoneyWarningLink}
-                        onPress={() => {
-                          Keyboard.dismiss()
-                          onClose()
-                          setGoalSpend({ goal: savingsSpendGoal, price: parsedAmount })
-                        }}
-                      >
-                        Complete it instead
-                      </Text>
-                    )}
-                  </Text>
-                </View>
-              )}
-              <TouchableOpacity
-                style={[styles.saveButton, !canSave && styles.saveButtonDisabled]}
-                onPress={handleSave}
-                disabled={!canSave || saving}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.saveButtonText}>
-                  {saving
-                    ? 'Saving...'
-                    : isIncome
-                      ? 'Add income'
-                      : isContribution
-                        ? `Contribute to ${savingsBucket!.name}`
-                        : isSavingsSpend
-                          ? `Spend from ${savingsBucket!.name}`
-                          : 'Add expense'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </KeyboardAvoidingView>
+          </KeyboardForm>
+        </View>
       </SafeAreaView>
     </Modal>
     </>

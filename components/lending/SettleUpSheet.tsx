@@ -7,15 +7,13 @@ import {
   TouchableOpacity,
   StyleSheet,
   BackHandler,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
 } from 'react-native'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { colors } from '@/constants/colors'
 import { formatMoney, formatMoneyShort } from '@/lib/format'
-import { useKeyboardHeight } from '@/hooks/useKeyboardHeight'
+import { KeyboardAvoidingSheet } from '@/components/ui/KeyboardForm'
 
 interface SettleUpSheetProps {
   visible: boolean
@@ -32,8 +30,6 @@ export function SettleUpSheet({
   onConfirm,
   onClose,
 }: SettleUpSheetProps) {
-  const insets = useSafeAreaInsets()
-  const keyboardHeight = useKeyboardHeight(visible)
   const [amount, setAmount] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -68,17 +64,13 @@ export function SettleUpSheet({
   }
 
   const receiving = balance > 0
-  const sheetLift = keyboardHeight > 0 ? Math.max(0, keyboardHeight - insets.bottom) : 0
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <Pressable style={styles.overlay} onPress={onClose}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.keyboard}
-        >
+        <KeyboardAvoidingSheet style={styles.keyboard}>
           <Pressable
-            style={[styles.sheet, { marginBottom: sheetLift }]}
+            style={styles.sheet}
             onPress={e => e.stopPropagation()}
           >
             <SafeAreaView edges={['bottom']}>
@@ -120,7 +112,7 @@ export function SettleUpSheet({
               </TouchableOpacity>
             </SafeAreaView>
           </Pressable>
-        </KeyboardAvoidingView>
+        </KeyboardAvoidingSheet>
       </Pressable>
     </Modal>
   )

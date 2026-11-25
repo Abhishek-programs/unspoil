@@ -10,7 +10,7 @@ import { useBucketsStore } from '@/store/buckets'
 import { formatMoney } from '@/lib/format'
 import { EF_MULTIPLIER, CORE_LIVING_BUCKET_ID } from '@/constants/defaults'
 import { OnboardingBack } from '@/components/onboarding/OnboardingBack'
-import { OnboardingShell, useOnboardingFieldScroll } from '@/components/onboarding/OnboardingShell'
+import { OnboardingShell } from '@/components/onboarding/OnboardingShell'
 
 function FoundationsFields({
   coreLiving,
@@ -31,11 +31,6 @@ function FoundationsFields({
   defaultCore: number
   suggestedFloor: number
 }) {
-  const { bindField } = useOnboardingFieldScroll()
-  const coreField = bindField('core')
-  const efFloorField = bindField('efFloor')
-  const efBalanceField = bindField('efBalance')
-
   return (
     <>
       <OnboardingBack />
@@ -63,7 +58,6 @@ function FoundationsFields({
               keyboardType="numeric"
               placeholder={String(defaultCore)}
               placeholderTextColor={colors.textMuted}
-              onFocus={coreField.onFocus}
             />
           </View>
           <Text style={styles.hint}>Rent, groceries, utilities, regular household costs</Text>
@@ -87,7 +81,6 @@ function FoundationsFields({
               keyboardType="numeric"
               placeholder={String(suggestedFloor)}
               placeholderTextColor={colors.textMuted}
-              onFocus={efFloorField.onFocus}
             />
           </View>
         </View>
@@ -103,7 +96,6 @@ function FoundationsFields({
               keyboardType="numeric"
               placeholder="0"
               placeholderTextColor={colors.textMuted}
-              onFocus={efBalanceField.onFocus}
             />
           </View>
           <Text style={styles.hint}>What you already have saved for emergencies</Text>

@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react'
 import {
   View,
   Text,
-  ScrollView,
   TextInput,
   TouchableOpacity,
   Switch,
@@ -15,6 +14,7 @@ import {
 import { router } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
+import { KeyboardForm } from '@/components/ui/KeyboardForm'
 import { colors } from '@/constants/colors'
 import { Card } from '@/components/ui/Card'
 import { usePlaybookStore } from '@/store/playbook'
@@ -926,9 +926,9 @@ export default function SettingsScreen() {
         </Animated.Text>
       </View>
 
-      <ScrollView 
-        style={{ flex: 1 }} 
+      <KeyboardForm
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 100 }}
+        keyboardShouldPersistTaps="never"
       >
 
         {/* Section 1: Playbook */}
@@ -1293,7 +1293,7 @@ export default function SettingsScreen() {
             <Text style={styles.dangerButtonText}>Clear all data</Text>
           </TouchableOpacity>
         </Card>
-      </ScrollView>
+      </KeyboardForm>
       <BackupPickerSheet visible={importVisible} onClose={() => setImportVisible(false)} />
       <NoSalarySheet
         visible={noSalaryVisible}

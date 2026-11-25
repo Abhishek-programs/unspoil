@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   AppState,
-  ScrollView,
   StyleSheet,
   Switch,
   Text,
@@ -16,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Card } from '@/components/ui/Card'
 import { PaymentWatchAppsModal } from '@/components/notifications/PaymentWatchAppsModal'
+import { KeyboardForm } from '@/components/ui/KeyboardForm'
 import { colors } from '@/constants/colors'
 import { requestPermissions } from '@/lib/notifications'
 import type { NudgeToggles } from '@/lib/nudge-prefs'
@@ -225,7 +225,7 @@ export default function NotificationSettingsScreen() {
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <KeyboardForm contentContainerStyle={styles.content} keyboardShouldPersistTaps="never">
         <Text style={styles.lead}>
           Manage notifications and select apps. At most one plan nudge a day; each alert once per
           month while it still applies. Quiet 10pm–8am.
@@ -376,7 +376,7 @@ export default function NotificationSettingsScreen() {
             </Card>
           </>
         )}
-      </ScrollView>
+      </KeyboardForm>
 
       <PaymentWatchAppsModal
         visible={appsModalVisible}

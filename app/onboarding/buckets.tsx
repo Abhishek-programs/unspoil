@@ -6,10 +6,7 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   Switch,
-  Platform,
-  KeyboardAvoidingView,
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -29,7 +26,7 @@ import {
   GOAL_POOL_BUCKET_ID,
 } from '@/constants/defaults'
 import { OnboardingBack } from '@/components/onboarding/OnboardingBack'
-import { useScrollFocusedToTop } from '@/hooks/useKeyboardHeight'
+import { KeyboardForm } from '@/components/ui/KeyboardForm'
 
 interface BucketDraft {
   id: string
@@ -48,8 +45,6 @@ export default function OnboardingBucketsScreen() {
   const { buckets, updateBucket, loadBuckets, ensureGoalPoolBucket } = useBucketsStore()
   const { monthlyIncome } = usePlaybookStore()
   const insets = useSafeAreaInsets()
-  const { keyboardHeight, scrollRef, scrollHostRef, onInputFocus, onScroll } =
-    useScrollFocusedToTop()
 
   const [drafts, setDrafts] = useState<BucketDraft[]>(() =>
     buckets.map(b => ({
@@ -235,7 +230,6 @@ export default function OnboardingBucketsScreen() {
             onChangeText={v => updateDraft(draft.id, { monthlyAmount: v })}
             keyboardType="numeric"
             editable={draft.isActive}
-            onFocus={onInputFocus}
           />
         </View>
       </View>
@@ -249,7 +243,6 @@ export default function OnboardingBucketsScreen() {
             onChangeText={v => updateDraft(draft.id, { accumulationCap: v })}
             keyboardType="numeric"
             editable={draft.isActive}
-            onFocus={onInputFocus}
           />
         </View>
         <Text style={styles.fundFieldSub}>Stop adding when balance reaches this</Text>
@@ -278,7 +271,6 @@ export default function OnboardingBucketsScreen() {
             onChangeText={v => updateDraft(draft.id, { monthlyAmount: v })}
             keyboardType="numeric"
             editable={draft.isActive}
-            onFocus={onInputFocus}
           />
         </View>
       </View>
@@ -298,10 +290,7 @@ export default function OnboardingBucketsScreen() {
   )
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <View style={styles.container}>
       <View style={[styles.meter, { paddingTop: Math.max(insets.top, 12) + 8 }]}>
         <View style={styles.meterTop}>
           <OnboardingBack />
@@ -325,15 +314,22 @@ export default function OnboardingBucketsScreen() {
         </View>
       </View>
 
-      <View ref={scrollHostRef} style={{ flex: 1 }} collapsable={false}>
-      <ScrollView
-        ref={scrollRef}
-        style={{ flex: 1 }}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: 24 + keyboardHeight }]}
-        keyboardShouldPersistTaps="handled"
+      <KeyboardForm
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: 24 }]}
         keyboardDismissMode="on-drag"
-        onScroll={onScroll}
-        scrollEventThrottle={16}
+        footerKeyboardTuck={insets.bottom}
+        footer={
+          <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+            <TouchableOpacity
+              style={[styles.button, overAllocated && styles.buttonDisabled]}
+              onPress={handleNext}
+              disabled={overAllocated}
+            >
+              <Text style={styles.buttonText}>Next</Text>
+              <Ionicons name="arrow-forward" size={20} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        }
       >
         <Text style={styles.subtitle}>
           Allocate your take-home across spending and savings. Core Living and EF are locked.
@@ -348,20 +344,8 @@ export default function OnboardingBucketsScreen() {
 
           {systemFutureDrafts.map(draft => renderBucketRow(draft))}
         </Animated.View>
-      </ScrollView>
-      </View>
-
-      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-        <TouchableOpacity
-          style={[styles.button, overAllocated && styles.buttonDisabled]}
-          onPress={handleNext}
-          disabled={overAllocated}
-        >
-          <Text style={styles.buttonText}>Next</Text>
-          <Ionicons name="arrow-forward" size={20} color="#fff" />
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+      </KeyboardForm>
+    </View>
   )
 }
 

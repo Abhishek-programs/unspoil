@@ -5,6 +5,7 @@ import { Stack, router } from 'expo-router'
 import { StatusBar, setStatusBarStyle } from 'expo-status-bar'
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter'
 import * as SplashScreen from 'expo-splash-screen'
+import { KeyboardProvider } from 'react-native-keyboard-controller'
 import { runMigrations } from '@/db/client'
 import { seedDefaults } from '@/db/seed'
 import { usePlaybookStore } from '@/store/playbook'
@@ -207,7 +208,7 @@ export default function RootLayout() {
   const ready = (fontsLoaded || fontError) && dbReady
 
   return (
-    <>
+    <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
       <StatusBar style="dark" />
       {ready && (
         <Stack screenOptions={{ headerShown: false }}>
@@ -217,6 +218,6 @@ export default function RootLayout() {
           <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
         </Stack>
       )}
-    </>
+    </KeyboardProvider>
   )
 }

@@ -5,12 +5,9 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   Alert,
   TextInput,
   BackHandler,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
@@ -23,7 +20,7 @@ import { useBucketsStore } from '@/store/buckets'
 import { projectGoal } from '@/lib/projection'
 import { GOAL_BUCKET_LABELS } from '@/lib/goals/plan'
 import { PieChart } from 'react-native-gifted-charts'
-import { useKeyboardHeight } from '@/hooks/useKeyboardHeight'
+import { KeyboardForm } from '@/components/ui/KeyboardForm'
 import { UseGoalSavingsSheet, canUseGoalSavings } from '@/components/goals/UseGoalSavingsSheet'
 
 interface GoalDetailSheetProps {
@@ -40,7 +37,6 @@ export function GoalDetailSheet({ goal, visible, onClose, onEdit }: GoalDetailSh
   const [editingMonthly, setEditingMonthly] = useState(false)
   const [monthlyDraft, setMonthlyDraft] = useState('')
   const [useSavingsVisible, setUseSavingsVisible] = useState(false)
-  const keyboardHeight = useKeyboardHeight(visible && editingMonthly)
 
   useEffect(() => {
     if (!visible) return
@@ -119,17 +115,8 @@ export function GoalDetailSheet({ goal, visible, onClose, onEdit }: GoalDetailSh
           )}
         </View>
 
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1 }}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
-        >
-        <ScrollView
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingBottom: Math.max(40, keyboardHeight > 0 ? keyboardHeight + 24 : 0) },
-          ]}
-          keyboardShouldPersistTaps="handled"
+        <KeyboardForm
+          contentContainerStyle={styles.scrollContent}
           keyboardDismissMode="none"
         >
           {/* Main Chart */}
@@ -283,8 +270,7 @@ export function GoalDetailSheet({ goal, visible, onClose, onEdit }: GoalDetailSh
               <Text style={styles.deleteText}>Delete Goal</Text>
             </TouchableOpacity>
           </View>
-        </ScrollView>
-        </KeyboardAvoidingView>
+        </KeyboardForm>
         <UseGoalSavingsSheet
           goal={useSavingsVisible ? viewGoal : null}
           visible={useSavingsVisible}

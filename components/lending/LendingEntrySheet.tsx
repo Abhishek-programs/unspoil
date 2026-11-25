@@ -4,7 +4,6 @@ import {
   Alert,
   Modal,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -12,8 +11,9 @@ import {
   View,
 } from 'react-native'
 import DateTimePicker from '@react-native-community/datetimepicker'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
+import { KeyboardForm } from '@/components/ui/KeyboardForm'
 import { colors } from '@/constants/colors'
 import { formatDate } from '@/lib/format'
 import type { LendBorrowEntry, LendBorrowType } from '@/store/lending'
@@ -44,6 +44,7 @@ export function LendingEntrySheet({
   onDelete,
   onClose,
 }: LendingEntrySheetProps) {
+  const insets = useSafeAreaInsets()
   const [type, setType] = useState<LendBorrowType>('lend')
   const [amount, setAmount] = useState('')
   const [note, setNote] = useState('')
@@ -114,7 +115,21 @@ export function LendingEntrySheet({
           <Text style={styles.title}>Entry with {personName}</Text>
           <View style={{ width: 24 }} />
         </View>
-        <ScrollView contentContainerStyle={styles.body}>
+        <KeyboardForm
+          contentContainerStyle={styles.body}
+          footerKeyboardTuck={insets.bottom}
+          footer={
+            <View style={styles.footer}>
+              <TouchableOpacity
+                style={[styles.saveButton, parsedAmount <= 0 && styles.disabled]}
+                onPress={save}
+                disabled={parsedAmount <= 0 || saving}
+              >
+                <Text style={styles.saveText}>{saving ? 'Saving…' : 'Save changes'}</Text>
+              </TouchableOpacity>
+            </View>
+          }
+        >
           <View style={styles.amountRow}>
             <CurrencyPrefix style={styles.prefix} />
             <TextInput
@@ -171,16 +186,7 @@ export function LendingEntrySheet({
             <Ionicons name="trash-outline" size={18} color={colors.red} />
             <Text style={styles.deleteText}>Delete entry</Text>
           </TouchableOpacity>
-        </ScrollView>
-        <View style={styles.footer}>
-          <TouchableOpacity
-            style={[styles.saveButton, parsedAmount <= 0 && styles.disabled]}
-            onPress={save}
-            disabled={parsedAmount <= 0 || saving}
-          >
-            <Text style={styles.saveText}>{saving ? 'Saving…' : 'Save changes'}</Text>
-          </TouchableOpacity>
-        </View>
+        </KeyboardForm>
       </SafeAreaView>
     </Modal>
   )
@@ -257,7 +263,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEE2E2',
   },
   deleteText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: colors.red },
-  footer: { padding: 16, borderTopWidth: 1, borderTopColor: colors.divider },
+  footer: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+    backgroundColor: colors.pageBg,
+  },
   saveButton: {
     backgroundColor: colors.purple,
     borderRadius: 14,

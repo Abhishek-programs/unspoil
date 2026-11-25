@@ -8,7 +8,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated'
 import { colors } from '@/constants/colors'
 import { usePlaybookStore } from '@/store/playbook'
 import { OnboardingBack } from '@/components/onboarding/OnboardingBack'
-import { OnboardingShell, useOnboardingFieldScroll } from '@/components/onboarding/OnboardingShell'
+import { OnboardingShell } from '@/components/onboarding/OnboardingShell'
 
 interface MoneyFieldsProps {
   income: string
@@ -31,12 +31,6 @@ function MoneyFields({
   age,
   setAge,
 }: MoneyFieldsProps) {
-  const { bindField } = useOnboardingFieldScroll()
-  const incomeField = bindField('income')
-  const cashField = bindField('cash')
-  const startDayField = bindField('startDay')
-  const ageField = bindField('age')
-
   return (
     <>
       <OnboardingBack />
@@ -62,7 +56,6 @@ function MoneyFields({
               value={income}
               onChangeText={setIncome}
               keyboardType="numeric"
-              onFocus={incomeField.onFocus}
             />
           </View>
         </View>
@@ -78,7 +71,6 @@ function MoneyFields({
               value={cashOnHand}
               onChangeText={setCashOnHand}
               keyboardType="numeric"
-              onFocus={cashField.onFocus}
             />
           </View>
           <Text style={styles.hint}>Money in your account now — adds to Your money on Home</Text>
@@ -96,7 +88,6 @@ function MoneyFields({
               onChangeText={setStartDay}
               keyboardType="numeric"
               maxLength={2}
-              onFocus={startDayField.onFocus}
             />
             <Text style={styles.suffix}>of the month</Text>
           </View>
@@ -113,7 +104,6 @@ function MoneyFields({
               onChangeText={setAge}
               keyboardType="numeric"
               maxLength={3}
-              onFocus={ageField.onFocus}
             />
             <Text style={styles.suffix}>years</Text>
           </View>

@@ -7,13 +7,12 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
-  KeyboardAvoidingView,
   Platform,
   StyleSheet,
   Alert,
   BackHandler,
 } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import DateTimePicker from '@react-native-community/datetimepicker'
 import { getMonthRange } from '@/lib/month'
@@ -30,7 +29,7 @@ import { reopenGoalIfUnderTarget } from '@/lib/goals/completion'
 import type { Transaction } from '@/store/transactions'
 import { useAccountsStore } from '@/store/accounts'
 import { BANK_ACCOUNT_ID, defaultAccountId } from '@/constants/accounts'
-import { useKeyboardHeight } from '@/hooks/useKeyboardHeight'
+import { KeyboardForm } from '@/components/ui/KeyboardForm'
 
 interface TransactionDetailSheetProps {
   transaction: Transaction | null
@@ -56,7 +55,7 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
   const [saving, setSaving] = useState(false)
   const [date, setDate] = useState(new Date())
   const [showDatePicker, setShowDatePicker] = useState(false)
-  const keyboardHeight = useKeyboardHeight(visible)
+  const insets = useSafeAreaInsets()
 
   useEffect(() => {
     if (transaction && visible) {
@@ -184,22 +183,24 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
           <View style={{ width: 24 }} />
         </View>
 
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={{ flex: 1 }}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
-          enabled={Platform.OS === 'ios'}
-        >
-          <ScrollView
-            contentContainerStyle={[
-              styles.scrollContent,
-              Platform.OS === 'ios' && keyboardHeight > 0
-                ? { paddingBottom: keyboardHeight + 24 }
-                : null,
-            ]}
-            keyboardShouldPersistTaps="handled"
+          <KeyboardForm
+            contentContainerStyle={styles.scrollContent}
             keyboardDismissMode="on-drag"
-            automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+            footerKeyboardTuck={insets.bottom}
+            footer={
+              <View style={styles.footer}>
+                <TouchableOpacity
+                  style={styles.saveButton}
+                  onPress={handleSave}
+                  disabled={saving}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.saveButtonText}>
+                    {saving ? 'Saving...' : 'Save changes'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            }
           >
             {/* Amount */}
             <View style={styles.amountContainer}>
@@ -427,22 +428,7 @@ export function TransactionDetailSheet({ transaction, visible, onClose }: Transa
               <Ionicons name="trash-outline" size={18} color={colors.red} />
               <Text style={styles.deleteButtonText}>Delete transaction</Text>
             </TouchableOpacity>
-          </ScrollView>
-
-          {/* Save button */}
-          <View style={styles.footer}>
-            <TouchableOpacity
-              style={styles.saveButton}
-              onPress={handleSave}
-              disabled={saving}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.saveButtonText}>
-                {saving ? 'Saving...' : 'Save changes'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
+          </KeyboardForm>
       </SafeAreaView>
     </Modal>
   )
@@ -653,6 +639,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: colors.divider,
+    backgroundColor: colors.pageBg,
   },
   saveButton: {
     backgroundColor: colors.green,

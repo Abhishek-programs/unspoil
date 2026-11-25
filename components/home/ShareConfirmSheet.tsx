@@ -8,14 +8,12 @@ import {
   TouchableOpacity,
   TextInput,
   Pressable,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { colors } from '@/constants/colors'
 import { formatMoney } from '@/lib/format'
-import { useKeyboardHeight } from '@/hooks/useKeyboardHeight'
+import { KeyboardAvoidingSheet } from '@/components/ui/KeyboardForm'
 
 interface ShareConfirmSheetProps {
   visible: boolean
@@ -36,8 +34,6 @@ export function ShareConfirmSheet({
   onConfirm,
   onClose,
 }: ShareConfirmSheetProps) {
-  const insets = useSafeAreaInsets()
-  const keyboardHeight = useKeyboardHeight(visible)
   const [amount, setAmount] = useState(String(defaultAmount))
   const [feeAmount, setFeeAmount] = useState('')
   const [showFee, setShowFee] = useState(showFeeByDefault)
@@ -60,18 +56,12 @@ export function ShareConfirmSheet({
     onClose()
   }
 
-  const sheetLift = keyboardHeight > 0 ? Math.max(0, keyboardHeight - insets.bottom) : 0
-
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.keyboard}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? insets.bottom : 0}
-        >
+        <KeyboardAvoidingSheet style={styles.keyboard}>
           <Pressable
-            style={[styles.sheet, { marginBottom: sheetLift }]}
+            style={styles.sheet}
             onPress={e => e.stopPropagation()}
           >
             <SafeAreaView edges={['bottom']}>
@@ -133,7 +123,7 @@ export function ShareConfirmSheet({
               </TouchableOpacity>
             </SafeAreaView>
           </Pressable>
-        </KeyboardAvoidingView>
+        </KeyboardAvoidingSheet>
       </Pressable>
     </Modal>
   )

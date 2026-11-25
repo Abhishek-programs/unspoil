@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import { KeyboardAvoidingSheet } from '@/components/ui/KeyboardForm'
 import { colors } from '@/constants/colors'
 import { formatMoney, formatMoneyShort } from '@/lib/format'
 import { raisePersonalCap } from '@/lib/personal-cap'
@@ -50,42 +51,44 @@ export function PersonalCapPrompt({
   return (
     <Modal visible={visible} animationType="slide" transparent>
       <View style={styles.overlay}>
-        <View style={styles.card}>
-          <View style={styles.header}>
-            <Ionicons
-              name="alert-circle"
-              size={22}
-              color={colors.amber}
-            />
-            <Text style={styles.title}>Personal fund at cap</Text>
-          </View>
+        <KeyboardAvoidingSheet>
+          <View style={styles.card}>
+            <View style={styles.header}>
+              <Ionicons
+                name="alert-circle"
+                size={22}
+                color={colors.amber}
+              />
+              <Text style={styles.title}>Personal fund at cap</Text>
+            </View>
 
-          <Text style={styles.body}>
-            Cap reached at {formatMoneyShort(balance)}. Raise the cap temporarily
-            or for a specific purchase?
-          </Text>
+            <Text style={styles.body}>
+              Cap reached at {formatMoneyShort(balance)}. Raise the cap temporarily
+              or for a specific purchase?
+            </Text>
 
-          <TouchableOpacity style={styles.option} onPress={handleRaiseGeneral}>
-            <Text style={styles.optionText}>Raise cap one-time (+{formatMoney(5000)})</Text>
-          </TouchableOpacity>
-          <View style={styles.purchaseRow}>
-            <TextInput
-              style={styles.input}
-              placeholder="Purchase amount"
-              keyboardType="numeric"
-              value={purchaseAmount}
-              onChangeText={setPurchaseAmount}
-              placeholderTextColor={colors.textMuted}
-            />
-            <TouchableOpacity style={styles.raiseBtn} onPress={handleRaisePurchase}>
-              <Text style={styles.raiseBtnText}>Raise for purchase</Text>
+            <TouchableOpacity style={styles.option} onPress={handleRaiseGeneral}>
+              <Text style={styles.optionText}>Raise cap one-time (+{formatMoney(5000)})</Text>
+            </TouchableOpacity>
+            <View style={styles.purchaseRow}>
+              <TextInput
+                style={styles.input}
+                placeholder="Purchase amount"
+                keyboardType="numeric"
+                value={purchaseAmount}
+                onChangeText={setPurchaseAmount}
+                placeholderTextColor={colors.textMuted}
+              />
+              <TouchableOpacity style={styles.raiseBtn} onPress={handleRaisePurchase}>
+                <Text style={styles.raiseBtnText}>Raise for purchase</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity style={styles.dismiss} onPress={onClose}>
+              <Text style={styles.dismissText}>Not now</Text>
             </TouchableOpacity>
           </View>
-
-          <TouchableOpacity style={styles.dismiss} onPress={onClose}>
-            <Text style={styles.dismissText}>Not now</Text>
-          </TouchableOpacity>
-        </View>
+        </KeyboardAvoidingSheet>
       </View>
     </Modal>
   )

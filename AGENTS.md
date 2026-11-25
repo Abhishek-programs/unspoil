@@ -58,7 +58,7 @@ app/
   lending/              Person list + per-contact ledger
 
 components/
-  ui/                   Card, Chip, ProgressBar
+  ui/                   Card, Chip, ProgressBar, KeyboardForm
   home/                 HeroRing, LivingSection, FutureSection, NetWorthCard, LentBorrowRow, …
   transactions/         TransactionRow, ChartsView, LendingRow, detail sheet
   goals/                GoalCard, AddGoalSheet, GoalDetailSheet
@@ -91,6 +91,7 @@ Home  |  Transactions  |  [+]  |  Goals  |  Settings
 - `[+]` opens `ManualEntrySheet` — **not a tab**, no route change. Manual entry only (expense / income / lend-borrow).
 - Transaction/goal details: bottom sheets inside their tab.
 - Design tokens: `constants/colors.ts`. Light theme only. Inter. NPR amounts use tabular nums.
+- Text inputs: wrap scrolling forms in `KeyboardForm` and short bottom sheets in `KeyboardAvoidingSheet` (`components/ui/KeyboardForm.tsx`, built on `react-native-keyboard-controller`). Edge-to-edge Android does not resize the window for the keyboard, so plain `ScrollView` / RN `KeyboardAvoidingView` leave fields hidden.
 
 ---
 

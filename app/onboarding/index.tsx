@@ -6,14 +6,13 @@ import {
   TouchableOpacity,
   StyleSheet,
   Keyboard,
-  KeyboardAvoidingView,
-  Platform,
   Alert,
 } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { KeyboardAvoidingSheet } from '@/components/ui/KeyboardForm'
 import { colors } from '@/constants/colors'
 import { usePlaybookStore } from '@/store/playbook'
 import { startImportBackupFlow } from '@/lib/import-backup-flow'
@@ -51,10 +50,7 @@ export default function OnboardingInfoScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <KeyboardAvoidingSheet style={styles.container}>
       <View style={[styles.content, { paddingTop: Math.max(insets.top, 24) + 56 }]}>
         <Animated.View entering={FadeInDown.duration(800).delay(200)}>
           <View style={styles.iconContainer}>
@@ -95,7 +91,7 @@ export default function OnboardingInfoScreen() {
           <Text style={styles.importLinkText}>Import a backup instead</Text>
         </TouchableOpacity>
       </Animated.View>
-    </KeyboardAvoidingView>
+    </KeyboardAvoidingSheet>
   )
 }
 

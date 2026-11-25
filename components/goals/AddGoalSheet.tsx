@@ -7,10 +7,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   TextInput,
-  ScrollView,
   Pressable,
-  KeyboardAvoidingView,
-  Platform,
   BackHandler,
 } from 'react-native'
 import Slider from '@react-native-community/slider'
@@ -26,7 +23,7 @@ import {
   monthsBetween,
   parseTargetDate,
 } from '@/lib/goals/plan'
-import { useKeyboardHeight } from '@/hooks/useKeyboardHeight'
+import { KeyboardForm } from '@/components/ui/KeyboardForm'
 
 type PaymentChoice = 'pay_in_full' | 'upfront_emi' | 'not_sure'
 
@@ -149,16 +146,9 @@ export function AddGoalSheet({ visible, onClose, editGoal }: AddGoalSheetProps) 
     target > 0 &&
     (parseFloat(monthlyContribution) > 0 || (plan?.totalMonthly ?? backCalc) > 0)
 
-  const keyboardHeight = useKeyboardHeight(visible)
-
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <SafeAreaView style={styles.container}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1 }}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
-        >
           <View style={styles.header}>
             <TouchableOpacity onPress={onClose} hitSlop={12}>
               <Ionicons name="close" size={24} color={colors.textPrimary} />
@@ -169,12 +159,8 @@ export function AddGoalSheet({ visible, onClose, editGoal }: AddGoalSheetProps) 
             </TouchableOpacity>
           </View>
 
-          <ScrollView
-            contentContainerStyle={[
-              styles.scrollContent,
-              { paddingBottom: Math.max(40, keyboardHeight > 0 ? keyboardHeight + 24 : 0) },
-            ]}
-            keyboardShouldPersistTaps="handled"
+          <KeyboardForm
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: 40 }]}
             keyboardDismissMode="none"
           >
             <View style={styles.field}>
@@ -288,8 +274,7 @@ export function AddGoalSheet({ visible, onClose, editGoal }: AddGoalSheetProps) 
                 <Text style={styles.hint}>Suggested: {formatMoney(plan.totalMonthly)}/mo</Text>
               )}
             </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
+          </KeyboardForm>
       </SafeAreaView>
     </Modal>
   )

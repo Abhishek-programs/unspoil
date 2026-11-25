@@ -11,7 +11,7 @@ import { useBucketsStore } from '@/store/buckets'
 import { SIP_BUCKET_ID, SHARES_BUCKET_ID } from '@/constants/defaults'
 import { suggestSipTarget } from '@/lib/sip-target'
 import { OnboardingBack } from '@/components/onboarding/OnboardingBack'
-import { OnboardingShell, useOnboardingFieldScroll } from '@/components/onboarding/OnboardingShell'
+import { OnboardingShell } from '@/components/onboarding/OnboardingShell'
 
 function BalancesFields({
   sipInvested,
@@ -24,10 +24,6 @@ function BalancesFields({
   sharesInvested: string
   setSharesInvested: (v: string) => void
 }) {
-  const { bindField } = useOnboardingFieldScroll()
-  const sipField = bindField('sip')
-  const sharesField = bindField('shares')
-
   return (
     <>
       <OnboardingBack />
@@ -54,7 +50,6 @@ function BalancesFields({
               value={sipInvested}
               onChangeText={setSipInvested}
               keyboardType="numeric"
-              onFocus={sipField.onFocus}
             />
           </View>
           <Text style={styles.hint}>Cumulative amount put into SIPs</Text>
@@ -71,7 +66,6 @@ function BalancesFields({
               value={sharesInvested}
               onChangeText={setSharesInvested}
               keyboardType="numeric"
-              onFocus={sharesField.onFocus}
             />
           </View>
           <Text style={styles.hint}>Cumulative capital deployed in direct shares</Text>

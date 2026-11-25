@@ -16,6 +16,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import DateTimePicker from '@react-native-community/datetimepicker'
 import { CurrencyPrefix } from '@/components/ui/CurrencyPrefix'
+import { KeyboardForm } from '@/components/ui/KeyboardForm'
 import { colors } from '@/constants/colors'
 import { formatDate, formatMoney } from '@/lib/format'
 import { useGoalsStore, type Goal } from '@/store/goals'
@@ -192,12 +193,23 @@ export function UseGoalSavingsSheet({
           <View style={{ width: 24 }} />
         </View>
 
-        <ScrollView
-          style={{ flex: 1 }}
+        <KeyboardForm
           contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
+          footerKeyboardTuck={insets.bottom}
+          footer={
+            <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+              <TouchableOpacity
+                style={[styles.saveButton, !canSave && styles.saveButtonDisabled]}
+                onPress={handleSave}
+                disabled={!canSave}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.saveButtonText}>{saveLabel}</Text>
+              </TouchableOpacity>
+            </View>
+          }
         >
           <Text style={styles.priceLabel}>What it cost</Text>
           <View style={styles.amountContainer}>
@@ -307,18 +319,7 @@ export function UseGoalSavingsSheet({
               />
             )}
           </View>
-        </ScrollView>
-
-        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-          <TouchableOpacity
-            style={[styles.saveButton, !canSave && styles.saveButtonDisabled]}
-            onPress={handleSave}
-            disabled={!canSave}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.saveButtonText}>{saveLabel}</Text>
-          </TouchableOpacity>
-        </View>
+        </KeyboardForm>
       </SafeAreaView>
     </Modal>
   )
